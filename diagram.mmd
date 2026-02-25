@@ -1,0 +1,26 @@
+flowchart TB
+  subgraph Parent["envs/dev (Root Parent - GovCloud)"]
+    P1[providers.tf\nS3 backend + DynamoDB lock\nGovCloud region]
+    P2[locals.tf\nnaming + tags]
+    P3[main.tf\ncalls child module]
+    P4[dev.tfvars\ninputs]
+  end
+
+  subgraph Child["modules/eks (Child Module)"]
+    VPC[VPC]
+    PUB[Public Subnets]
+    NAT[NAT Gateway]
+    PRIV[Private Subnets]
+    EKS[EKS Cluster]
+    MNG[Managed Node Group]
+    IAM[IAM Roles (partition-aware ARNs)]
+  end
+
+  Parent --> Child
+  VPC --> PUB
+  PUB --> NAT
+  NAT --> PRIV
+  PRIV --> EKS
+  EKS --> MNG
+  IAM --> EKS
+  IAM --> MNG
