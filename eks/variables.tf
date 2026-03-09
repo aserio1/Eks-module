@@ -42,3 +42,22 @@ variable "node_group" {
     disk_size      = number
   })
 }
+
+
+
+arn:aws-us-gov:iam::262763737219:role/ALFA-EKSCLUSTER
+"arn:aws-us-gov:iam::262763737219:role/ALFA-Deploy-Role",
+arn:aws-us-gov:iam::262763737219:role/ALFA-EKS,
+ "arn:aws-us-gov:iam::262763737219:role/IADSDC"
+
+
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+      configuration_aliases = [
+        aws.ecs-role
+      ]
+      }
+    }
+}
