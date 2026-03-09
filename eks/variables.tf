@@ -311,94 +311,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "alb_access_log_lifecycle" {
     }
 }
 
-####### update SG group for EKS parents module sg and update port
-# Security Group for the Load Balancer
-resource "aws_security_group" "alb" {
-  name        = "${var.project_name}-alb-sg"
-  description = "Allow inbound traffic from ALB Security Group"
-  vpc_id      = var.vpc_id
 
-  dynamic "ingress" {
-    for_each = var.alb_ingress_rules
-    content {
-      description = "Allow rules defined by app owner"
-      from_port   = ingress.value.from_port
-      to_port     = ingress.value.to_port
-      protocol    = ingress.value.protocol
-      cidr_blocks = ingress.value.cidr_blocks
-    }
-  }
-
-  dynamic "egress" {
-    for_each = var.alb_egress_rules
-    content {
-      description = "Allow rules defined by app owner"
-      from_port   = egress.value.from_port
-      to_port     = egress.value.to_port
-      protocol    = egress.value.protocol
-      cidr_blocks = egress.value.cidr_blocks
-    }
-  }
-  tags = merge(
-    {
-      Name        = "${var.project_name}-alb_security-group"
-      Description = "ALB Security Group"
-    },
-    var.tags
-  )
-}
-
-# Security Group for the ECS Fargate Tasks
-resource "aws_security_group" "ecs_tasks" {
-#  provider = aws.ecs-role
-  name        = "${var.project_name}-tasks-sg"
-  description = "Allow inbound traffic for ECS Tasks Security Group"
-  vpc_id      = var.vpc_id
-  tags = merge(
-    {
-      Name        = "${var.project_name}-ecs_task_security_group"
-    },
-    var.tags
-  )
-}
-
-resource "aws_security_group_rule" "ecs_from_alb" {
-  description = "Allow rules defined by app owner"
-  type              = "ingress"
-  from_port         = var.container_port
-  to_port           = var.container_port
-  protocol          = "tcp"
-  source_security_group_id = aws_security_group.alb.id
-  security_group_id  = aws_security_group.ecs_tasks.id
-}
-
-resource "aws_security_group_rule" "ecs_egress" {
-  for_each    = {
-    for idx, rule in var.ecs_egress_rules :
-    idx => rule
-  }
-  
-  description = "Allow rules defined by app owner"
-  type        = "egress"
-  from_port   = each.value.from_port
-  to_port     = each.value.to_port
-  protocol    = each.value.protocol
-  cidr_blocks = each.value.cidr_blocks
-  security_group_id  = aws_security_group.ecs_tasks.id
-}
-
-# Separate Rule to allow ECS tasks to talk to EFS on Port 2049
-resource "aws_security_group_rule" "allow_efs_from_ecs" {
-  description = "Allow rules defined by app owner"
-  count             = var.enable_efs ? 1 : 0
-  type              = "ingress"
-  from_port         = 2049
-  to_port           = 2049
-  protocol          = "tcp"
-  # Links to the Security Group created above
-  security_group_id = aws_security_group.ecs_tasks.id
-    # Allows members of the ECS SG to talk to the EFS mount targets
-  source_security_group_id = aws_security_group.ecs_tasks.id
 
 }
 ### update KES parents for sns like this but eks
@@ -1016,4 +929,97 @@ provider "aws" {
 locals {
     branchid = (var.branch == "main" ? "main" : "${var.branch}")
     lower_id = lower("${var.project_name}-${local.branchid}")
+}
+
+
+########## SECURITY GROUP
+
+# Security Group for the Load Balancer
+resource "aws_security_group" "alb" {
+  name        = "${var.project_name}-alb-sg"
+  description = "Allow inbound traffic from ALB Security Group"
+  vpc_id      = var.vpc_id
+
+  dynamic "ingress" {
+    for_each = var.alb_ingress_rules
+    content {
+      description = "Allow rules defined by app owner"
+      from_port   = ingress.value.from_port
+      to_port     = ingress.value.to_port
+      protocol    = ingress.value.protocol
+      cidr_blocks = ingress.value.cidr_blocks
+    }
+  }
+
+  dynamic "egress" {
+    for_each = var.alb_egress_rules
+    content {
+      description = "Allow rules defined by app owner"
+      from_port   = egress.value.from_port
+      to_port     = egress.value.to_port
+      protocol    = egress.value.protocol
+      cidr_blocks = egress.value.cidr_blocks
+    }
+  }
+  tags = merge(
+    {
+      Name        = "${var.project_name}-alb_security-group"
+      Description = "ALB Security Group"
+    },
+    var.tags
+  )
+}
+
+# Security Group for the ECS Fargate Tasks
+resource "aws_security_group" "ecs_tasks" {
+#  provider = aws.ecs-role
+  name        = "${var.project_name}-tasks-sg"
+  description = "Allow inbound traffic for ECS Tasks Security Group"
+  vpc_id      = var.vpc_id
+  tags = merge(
+    {
+      Name        = "${var.project_name}-ecs_task_security_group"
+    },
+    var.tags
+  )
+}
+
+resource "aws_security_group_rule" "ecs_from_alb" {
+  description = "Allow rules defined by app owner"
+  type              = "ingress"
+  from_port         = var.container_port
+  to_port           = var.container_port
+  protocol          = "tcp"
+  source_security_group_id = aws_security_group.alb.id
+  security_group_id  = aws_security_group.ecs_tasks.id
+}
+
+resource "aws_security_group_rule" "ecs_egress" {
+  for_each    = {
+    for idx, rule in var.ecs_egress_rules :
+    idx => rule
+  }
+  
+  description = "Allow rules defined by app owner"
+  type        = "egress"
+  from_port   = each.value.from_port
+  to_port     = each.value.to_port
+  protocol    = each.value.protocol
+  cidr_blocks = each.value.cidr_blocks
+  security_group_id  = aws_security_group.ecs_tasks.id
+}
+
+# Separate Rule to allow ECS tasks to talk to EFS on Port 2049
+resource "aws_security_group_rule" "allow_efs_from_ecs" {
+  description = "Allow rules defined by app owner"
+  count             = var.enable_efs ? 1 : 0
+  type              = "ingress"
+  from_port         = 2049
+  to_port           = 2049
+  protocol          = "tcp"
+  # Links to the Security Group created above
+  security_group_id = aws_security_group.ecs_tasks.id
+    # Allows members of the ECS SG to talk to the EFS mount targets
+  source_security_group_id = aws_security_group.ecs_tasks.id
+
 }
