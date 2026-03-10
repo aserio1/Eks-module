@@ -1023,3 +1023,36 @@ resource "aws_security_group_rule" "allow_efs_from_ecs" {
   source_security_group_id = aws_security_group.ecs_tasks.id
 
 }
+
+###VARIABLE
+# --- Security Group Rules ---
+variable "alb_ingress_rules" {
+  description = "List of ingress rules for the ALB"
+  type = list(object({
+    from_port   = number
+    to_port     = number
+    protocol    = string
+    cidr_blocks = list(string)
+  }))
+}
+
+variable "alb_egress_rules" {
+  description = "List of egress rules for the ALB"
+  type = list(object({
+    from_port   = number
+    to_port     = number
+    protocol    = string
+    cidr_blocks = list(string)
+  }))
+}
+
+variable "ecs_egress_rules" {
+  description = "List of egress rules for the ECS tasks"
+  type = list(object({
+    from_port   = number
+    to_port     = number
+    protocol    = string
+    cidr_blocks = list(string)
+  }))
+  default = []
+}
