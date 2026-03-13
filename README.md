@@ -28,5 +28,16 @@ terraform apply -var-file=dev.tfvars
 
 
 
-on .terraform/modules/eks_cluster/eks/eks_cluser.tf line 5, in resource "aws_eks_cluster" "this":
-17:24:23  │    5:   version  = coalesce(var.cluster_version, data.aws_eks_cluster_versions.latest.version)
+18:24:57  │ Error: creating SNS Topic (eks_alb_log_notifications_alfa-eks): operation error SNS: CreateTopic, https response error StatusCode: 400, RequestID: 575abe4b-675c-5698-ac46-dc662dd2b62c, TagPolicy: TagPolicyException: The tag policy does not allow the specified value for the following tag key: 'FISMAID'.
+18:24:57  │ 
+18:24:57  │   with module.eks_cluster.aws_sns_topic.eks_alb_log_sns_topic,
+18:24:57  │   on .terraform/modules/eks_cluster/eks/eks_sns.tf line 1, in resource "aws_sns_topic" "eks_alb_log_sns_topic":
+18:24:57  │    1: resource "aws_sns_topic" "eks_alb_log_sns_topic" {
+18:24:57  │ 
+18:24:57  ╵
+18:24:57  ╷
+18:24:57  │ Error: waiting for KMS Key (00d090ab-7c73-47a2-8c70-d2a8f9a6bd6a) policy update: timeout while waiting for state to become 'TRUE' (last state: 'FALSE', timeout: 10m0s)
+18:24:57  │ 
+18:24:57  │   with module.eks_cluster.aws_kms_key.eks_iac_kms_key,
+18:24:57  │   on .terraform/modules/eks_cluster/eks/kms.tf line 1, in resource "aws_kms_key" "eks_iac_kms_key":
+18:24:57  │    1: resource "aws_kms_key" "eks_iac_kms_key" {
