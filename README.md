@@ -27,17 +27,13 @@ terraform apply -var-file=dev.tfvars
 
 
 
-
- [31m│[0m [0m[1m[31mError: [0m[0m[1mcreating SNS Topic (eks_alb_log_notifications_alfa-eks): operation error SNS: CreateTopic, https response error StatusCode: 403, RequestID: 28da1f63-8111-5e77-aa92-7d5366c516dc, AuthorizationError: User: arn:aws-us-gov:sts::262763737219:assumed-role/ALFA-Deploy-Role/aws-go-sdk-1773594003158194307 is not authorized to perform: SNS:CreateTopic on resource: arn:aws-us-gov:sns:us-gov-west-1:262763737219:eks_alb_log_notifications_alfa-eks with an explicit deny in a service control policy[0m
-12:10:08  [31m│[0m [0m
-12:10:08  [31m│[0m [0m[0m  with module.eks_cluster.aws_sns_topic.eks_alb_log_sns_topic,
-12:10:08  [31m│[0m [0m  on .terraform/modules/eks_cluster/eks/eks_sns.tf line 1, in resource "aws_sns_topic" "eks_alb_log_sns_topic":
-12:10:08  [31m│[0m [0m   1: resource "aws_sns_topic" "eks_alb_log_sns_topic" [4m{[0m[0m
-12:10:08  [31m│[0m [0m
-12:10:08  [31m╵[0m[0m
-12:10:08  [31m╷[0m[0m
-12:10:08  [31m│[0m [0m[1m[31mError: [0m[0m[1mwaiting for KMS Key (ca7f9c5c-3890-477e-988a-93ea9a52a65b) policy update: timeout while waiting for state to become 'TRUE' (last state: 'FALSE', timeout: 10m0s)[0m
-12:10:08  [31m│[0m [0m
-12:10:08  [31m│[0m [0m[0m  with module.eks_cluster.aws_kms_key.eks_iac_kms_key,
-12:10:08  [31m│[0m [0m  on .terraform/modules/eks_cluster/eks/kms.tf line 1, in resource "aws_kms_key" "eks_iac_kms_key":
-12:10:08  [31m│[0m [0m   1: resource "aws_kms_key" "eks_iac_kms_key" [4m{[0m[0m
+Error: Missing resource instance key
+12:42:44  │ 
+12:42:44  │   on .terraform/modules/eks_cluster/eks/outputs.tf line 63, in output "alb_sns_topic_arn":
+12:42:44  │   63:   value       = aws_sns_topic.eks_alb_log_sns_topic.arn
+12:42:44  │ 
+12:42:44  │ Because aws_sns_topic.eks_alb_log_sns_topic has "count" set, its attributes
+12:42:44  │ must be accessed on specific instances.
+12:42:44  │ 
+12:42:44  │ For example, to correlate with indices of a referring resource, use:
+12:42:44  │     aws_sns_topic.eks_alb_log_sns_topic[count.index]
