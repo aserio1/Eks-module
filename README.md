@@ -139,3 +139,36 @@ provider "aws" {
 
 eks_alb_access_log_audit_bucket = "sdo-alfa-access-log-audit"
 certificate_arn = "arn:aws-us-gov:acm:us-gov-west-1:262763737219:certificate/78c717f7-9127-496e-b0be-0a4d650c68a0"
+
+
+data "aws_region" "current" {}
+data "aws_partition" "current" {}
+data "aws_caller_identity" "current" {}
+
+locals {
+  eks_alb_log_bucket_name = "${var.project_name}-alb-access-log-${data.aws_region.current.name}"
+  cluster_name        = "${var.project_name}-eks"
+
+  common_tags = merge(
+    {
+      Name        = local.cluster_name
+      Project     = var.project_name
+      Application = var.project_name
+      ManagedBy   = "Terraform"
+    },
+    var.tags
+  )
+}
+
+
+locals {
+  branchid = var.branch == "main" ? "main" : var.branch
+  lower_id = lower("${var.project_name}-${local.branchid}")
+
+  provider_default_tags = {
+    Name        = "${var.project_name}-provider"
+    Environment = lookup(var.tags, "Environment", "unknown")
+    Application = lookup(var.tags, "Application", var.project_name)
+    Customer    = lookup(var.tags, "Customer", "unknown")
+  }
+}
