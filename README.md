@@ -1,174 +1,23 @@
-# Terraform EKS (Parent + Child Module) for AWS GovCloud
+# Terraform AWS EKS Parent Module
 
-This repo deploys AWS EKS in **GovCloud** using:
-- Child module: `modules/eks` (VPC + EKS + Managed Node Group)
-- Parent root module: `envs/dev` (locals + provider + remote state backend)
-- `dev.tfvars` for dev configuration
-- Jenkins pipeline to plan/apply/destroy
+This repository contains a reusable Terraform parent module for deploying EKS in AWS GovCloud.
 
-## GovCloud specifics
-- Use a GovCloud region: `us-gov-west-1` or `us-gov-east-1`
-- IAM managed policy ARNs use the **GovCloud partition**: `arn:aws-us-gov:...`
-  - This repo builds policy ARNs dynamically using `data.aws_partition.current`.
+## Files
 
-## Remote State (S3) + Locking (DynamoDB)
-Backend is configured directly in:
-- `envs/dev/providers.tf`
+- `provider.tf` - Terraform and provider requirements
+- `variables.tf` - Input variables with no default values
+- `locals.tf` - Region, partition, caller identity data sources and shared local values
+- `cluster.tf` - EKS cluster, managed node group, kube-proxy addon, IAM roles
+- `cloudwatch.tf` - CloudWatch log group
+- `alb.tf` - Application Load Balancer, target group, listeners
+- `sg.tf` - Security groups and rules
+- `s3.tf` - S3 bucket for ALB access logs
+- `sns.tf` - SNS topic and email subscription
+- `autoscale.tf` - Autoscaling policy
+- `output.tf` - Outputs
 
-⚠️ The S3 bucket and DynamoDB lock table must exist before you run `terraform init`.
+## Notes
 
-## Run (Dev)
-```bash
-cd envs/dev
-terraform init
-terraform plan  -var-file=dev.tfvars
-terraform apply -var-file=dev.tfvars
-
-
-PARENT
-#########
-terraform {
-  required_version = ">= 1.5.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-
-      configuration_aliases = [
-        aws.eks-role
-      ]
-    }
-  }
-}
-
-
-
-
-Child module
-#########
-EKS.tfvars
-aws_account_id = "262763737219"
-aws_region     = "us-gov-west-1"
-vpc_id                = "vpc-043fe361"
-public_subnets        = ["subnet-848ecae1", "subnet-af4729d8"]
-private_subnets       = ["subnet-848ecae1", "subnet-af4729d8"]
-iam_role       = "arn:aws-us-gov:iam::262763737219:role/ALFA-Deploy-Role"
-
-tags = {
-  Environment = "Dev"
-  Application = "alfa-eks"
-  Customer    = "ALFA"
-  App         = "Nginx"
-}
-
-alb_ingress_rules = [
-  {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  },
-  {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-]
-
-alb_egress_rules = [
-  {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-]
-
-
-############################################
-# EKS Worker Node Security Group Rules
-############################################
-
-eks_node_egress_rules = [
-  {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-]
-##provider
-terraform {
-     required_version = ">= 1.5.0"
-    required_providers {
-      aws = {
-        source = "hashicorp/aws"
-        version = "~> 5.0"
-
-      }
-    }
-    backend "s3" {
-        encrypt = "true"
-        bucket  = "alfa-eks-tfstate"
-        key     = "alfa-eks/terraform.tfstate"
-        region = "us-gov-west-1"
-    }
-}
-
-provider "aws" {
-  region = var.aws_region
-
-  default_tags {
-    tags = local.provider_default_tags
-  }
-}
-provider "aws" {
-  region = var.aws_region
-  alias  = "eks-role"
-
-  assume_role {
-    role_arn = "arn:aws-us-gov:iam::262763737219:role/ALFA-Deploy-Role"
-  }
-
-  default_tags {
-    tags = local.provider_default_tags
-  }
-}
-
-eks_alb_access_log_audit_bucket = "sdo-alfa-access-log-audit"
-certificate_arn = "arn:aws-us-gov:acm:us-gov-west-1:262763737219:certificate/78c717f7-9127-496e-b0be-0a4d650c68a0"
-
-
-data "aws_region" "current" {}
-data "aws_partition" "current" {}
-data "aws_caller_identity" "current" {}
-
-locals {
-  eks_alb_log_bucket_name = "${var.project_name}-alb-access-log-${data.aws_region.current.name}"
-  cluster_name        = "${var.project_name}-eks"
-
-  common_tags = merge(
-    {
-      Name        = local.cluster_name
-      Project     = var.project_name
-      Application = var.project_name
-      ManagedBy   = "Terraform"
-    },
-    var.tags
-  )
-}
-
-
-locals {
-  branchid = var.branch == "main" ? "main" : var.branch
-  lower_id = lower("${var.project_name}-${local.branchid}")
-
-  provider_default_tags = {
-    Name        = "${var.project_name}-provider"
-    Environment = lookup(var.tags, "Environment", "unknown")
-    Application = lookup(var.tags, "Application", var.project_name)
-    Customer    = lookup(var.tags, "Customer", "unknown")
-  }
-}
+- This parent module is designed to be called from a separate child repo.
+- No default values are defined in `variables.tf`.
+- Environment-specific values should be passed from the child repo through `eks.tfvars`.
