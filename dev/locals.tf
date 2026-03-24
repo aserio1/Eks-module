@@ -1,10 +1,11 @@
 locals {
-  env         = "dev"
-  name_prefix = "${var.project}-${local.env}"
+  branchid = var.branch == "main" ? "main" : var.branch
+  lower_id = lower("${var.project_name}-${local.branchid}")
 
-  common_tags = {
-    Project     = var.project
-    Environment = local.env
-    ManagedBy   = "Terraform"
+  provider_default_tags = {
+    Name        = "${var.project_name}-provider"
+    Environment = lookup(var.tags, "Environment", "unknown")
+    Application = lookup(var.tags, "Application", var.project_name)
+    Customer    = lookup(var.tags, "Customer", "unknown")
   }
 }
