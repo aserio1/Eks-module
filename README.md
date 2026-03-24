@@ -25,6 +25,26 @@ terraform plan  -var-file=dev.tfvars
 terraform apply -var-file=dev.tfvars
 
 
+PARENT
+#########
+terraform {
+  required_version = ">= 1.5.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+
+      configuration_aliases = [
+        aws.eks-role
+      ]
+    }
+  }
+}
+
+
+
+
 Child module
 #########
 EKS.tfvars
@@ -92,7 +112,7 @@ terraform {
     backend "s3" {
         encrypt = "true"
         bucket  = "alfa-eks-tfstate"
-        key     = "/alfa/eks/"
+        key     = "alfa-eks/terraform.tfstate"
         region = "us-gov-west-1"
     }
 }
@@ -116,3 +136,6 @@ provider "aws" {
     tags = local.provider_default_tags
   }
 }
+
+eks_alb_access_log_audit_bucket = "sdo-alfa-access-log-audit"
+
