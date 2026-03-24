@@ -1,25 +1,38 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  backend "s3" {
-    # IMPORTANT (GovCloud):
-    # - Bucket must exist in GovCloud
-    # - Region must be us-gov-west-1 or us-gov-east-1
-    bucket         = "my-gov-terraform-state-bucket"
-    key            = "terraform-eks/dev/terraform.tfstate"
-    region         = "us-gov-west-1"
-    dynamodb_table = "my-gov-terraform-locks"
-    encrypt        = true
-  }
-
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 5.0"
+      version = "~> 5.0"
     }
+  }
+
+  backend "s3" {
+    encrypt = "true"
+    bucket  = "alfa-eks-tfstate"
+    key     = "alfa-eks/terraform.tfstate"
+    region  = "us-gov-west-1"
   }
 }
 
 provider "aws" {
-  region = var.region
+  region = var.aws_region
+
+  default_tags {
+    tags = local.provider_default_tags
+  }
+}
+
+provider "aws" {
+  region = var.aws_region
+  alias  = "eks-role"
+
+  assume_role {
+    role_arn = "arn:aws-us-gov:iam::262763737219:role/ALFA-Deploy-Role"
+  }
+
+  default_tags {
+    tags = local.provider_default_tags
+  }
 }
