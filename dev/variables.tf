@@ -102,3 +102,7 @@ variable "tags" {
   description = "Resource tags"
   type        = map(string)
 }
+variable "eks_version" {
+  description = "EKS Kubernetes version"
+  type        = string
+}
