@@ -138,4 +138,4 @@ provider "aws" {
 }
 
 eks_alb_access_log_audit_bucket = "sdo-alfa-access-log-audit"
-
+certificate_arn = "arn:aws-us-gov:acm:us-gov-west-1:262763737219:certificate/78c717f7-9127-496e-b0be-0a4d650c68a0"
