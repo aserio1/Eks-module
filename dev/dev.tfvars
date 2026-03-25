@@ -13,6 +13,7 @@ eks_node_role_arn     = "arn:aws-us-gov:iam::262763737219:role/ALFA-EKSCLUSTER-n
 
 certificate_arn = "arn:aws-us-gov:acm:us-gov-west-1:262763737219:certificate/78c717f7-9127-496e-b0be-0a4d650c68a0"
 
+create_sns_topic = false
 eks_version         = "1.35"
 node_group_name     = "alfa-eks-ng"
 node_instance_types = ["t3.medium"]
