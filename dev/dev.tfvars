@@ -49,3 +49,11 @@ alb_egress_rules = [
     cidr_blocks = ["0.0.0.0/0"]
   }
 ]
+node_egress_rules = [
+  {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+]
