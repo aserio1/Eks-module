@@ -29,8 +29,8 @@ provider "aws" {
   alias  = "eks-role"
 
   assume_role {
-    role_arn = "arn:aws-us-gov:iam::262763737219:role/ALFA-Deploy-Role"
-  }
+  role_arn = var.deploy_role_arn
+}
 
   default_tags {
     tags = local.provider_default_tags
