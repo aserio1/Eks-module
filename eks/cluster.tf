@@ -64,7 +64,7 @@ resource "aws_iam_role_policy_attachment" "ecr_readonly" {
 
 resource "aws_eks_cluster" "this" {
   name     = local.cluster_name
-  role_arn = aws_iam_role.eks_cluster_role.arn
+  role_arn = var.eks_cluster_role_arn
   version  = var.eks_version
 
   vpc_config {
@@ -83,7 +83,6 @@ resource "aws_eks_cluster" "this" {
   ]
 
   depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy,
     aws_cloudwatch_log_group.eks
   ]
 
