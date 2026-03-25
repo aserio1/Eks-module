@@ -54,10 +54,14 @@ resource "aws_security_group_rule" "nodes_from_alb" {
 }
 
 resource "aws_security_group_rule" "nodes_egress_all" {
+  for_each = {
+    for idx, rule in var.node_egress_rules : idx => rule
+  }
+
   type              = "egress"
   security_group_id = aws_security_group.eks_nodes.id
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  cidr_blocks       = ["0.0.0.0/0"]
+  from_port         = each.value.from_port
+  to_port           = each.value.to_port
+  protocol          = each.value.protocol
+  cidr_blocks       = each.value.cidr_blocks
 }
