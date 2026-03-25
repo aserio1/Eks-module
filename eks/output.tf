@@ -35,5 +35,5 @@ output "alb_arn" {
 
 output "sns_topic_arn" {
   description = "SNS topic ARN"
-  value       = aws_sns_topic.eks_alerts.arn
+  value       = var.create_sns_topic ? aws_sns_topic.eks_alerts[0].arn : null
 }
