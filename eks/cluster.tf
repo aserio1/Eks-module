@@ -92,7 +92,7 @@ resource "aws_eks_cluster" "this" {
 resource "aws_eks_node_group" "managed" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = var.node_group_name
-  node_role_arn   = aws_iam_role.eks_node_role.arn
+  node_role_arn   = var.eks_node_role_arn
   subnet_ids      = var.private_subnets
 
   instance_types = var.node_instance_types
@@ -103,12 +103,6 @@ resource "aws_eks_node_group" "managed" {
     min_size     = var.node_min_size
     max_size     = var.node_max_size
   }
-
-  depends_on = [
-    aws_iam_role_policy_attachment.worker_node_policy,
-    aws_iam_role_policy_attachment.cni_policy,
-    aws_iam_role_policy_attachment.ecr_readonly
-  ]
 
   tags = merge(local.common_tags, {
     Name = var.node_group_name
