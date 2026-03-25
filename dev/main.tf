@@ -12,7 +12,9 @@ module "eks" {
   vpc_id              = var.vpc_id
   public_subnets      = var.public_subnets
   private_subnets     = var.private_subnets
-  iam_role            = var.iam_role
+  deploy_role_arn     = var.deploy_role_arn
+eks_cluster_role_arn = var.eks_cluster_role_arn
+eks_node_role_arn    = var.eks_node_role_arn
   certificate_arn     = var.certificate_arn
   eks_version         = var.eks_version
   node_group_name     = var.node_group_name
