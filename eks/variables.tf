@@ -101,3 +101,12 @@ variable "eks_version" {
   description = "EKS Kubernetes version"
   type        = string
 }
+variable "node_egress_rules" {
+  description = "Egress rules for EKS node security group"
+  type = list(object({
+    from_port   = number
+    to_port     = number
+    protocol    = string
+    cidr_blocks = list(string)
+  }))
+}
