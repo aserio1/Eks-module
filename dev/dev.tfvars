@@ -7,7 +7,10 @@ vpc_id          = "vpc-043fe361"
 public_subnets  = ["subnet-848ecae1", "subnet-af4729d8"]
 private_subnets = ["subnet-848ecae1", "subnet-af4729d8"]
 
-iam_role        = "arn:aws-us-gov:iam::262763737219:role/ALFA-Deploy-Role"
+deploy_role_arn       = "arn:aws-us-gov:iam::262763737219:role/ALFA-Deploy-Role"
+eks_cluster_role_arn  = "arn:aws-us-gov:iam::262763737219:role/ALFA-EKSCLUSTER"
+eks_node_role_arn     = "arn:aws-us-gov:iam::262763737219:role/ALFA-EKSCLUSTER-nodegroup"
+
 certificate_arn = "arn:aws-us-gov:acm:us-gov-west-1:262763737219:certificate/78c717f7-9127-496e-b0be-0a4d650c68a0"
 
 eks_version         = "1.35"
