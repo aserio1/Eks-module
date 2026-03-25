@@ -115,3 +115,17 @@ variable "node_egress_rules" {
     cidr_blocks = list(string)
   }))
 }
+variable "deploy_role_arn" {
+  description = "Role ARN used by provider assume_role"
+  type        = string
+}
+
+variable "eks_cluster_role_arn" {
+  description = "Optional existing EKS cluster role ARN"
+  type        = string
+}
+
+variable "eks_node_role_arn" {
+  description = "Optional existing EKS node group role ARN"
+  type        = string
+}
