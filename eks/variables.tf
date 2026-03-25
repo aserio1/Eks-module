@@ -124,3 +124,7 @@ variable "eks_node_role_arn" {
   description = "Optional existing EKS node group role ARN"
   type        = string
 }
+variable "create_sns_topic" {
+  description = "Whether to create SNS topic"
+  type        = bool
+}
