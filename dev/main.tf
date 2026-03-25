@@ -22,6 +22,7 @@ module "eks" {
   node_max_size       = var.node_max_size
   alb_ingress_rules   = var.alb_ingress_rules
   alb_egress_rules    = var.alb_egress_rules
+  node_egress_rules   = var.node_egress_rules
   alert_email         = var.alert_email
   tags                = var.tags
 }
