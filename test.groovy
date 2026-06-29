@@ -1,31 +1,43 @@
+disable_concurrent_builds()
+
+setup_team_params()
+git_checkout()
+
+def awsAccount = imacGitConfig()
+    .projects[params.TEAMID]
+    .environments["dev"]
+    .account
+    .account_number
+
+def instanceProfileArn = imacGitConfig()
+    .projects[params.TEAMID]
+    .cloud9_instance_profile
+
 node("imac") {
     ws("${env.WORKSPACE}/../Utility/Personal Cloud 9 Instance/PR-${env.CHANGE_ID}/${env.BUILD_NUMBER}") {
         dir("infrastructure/terraform") {
-            withEnv([
-                "AWS_PROFILE=${awsAccount}",
-                "AWS_REGION=us-east-1",
-                "AWS_DEFAULT_REGION=us-east-1"
-            ]) {
-                sh """
-                    set -e
+            sh """
+                set -e
 
-                    aws sts get-caller-identity
+                ls -la
+                test -f variables.tf || (echo "ERROR: Terraform files not found" && exit 1)
 
-                    terraform init -no-color \\
-                      -backend-config region=us-east-1 \\
-                      -backend-config bucket=imac-prod-${awsAccount}-tf-state-hhsoig \\
-                      -backend-config dynamodb_table=imac-prod-${awsAccount}-tf-lock-hhsoig \\
-                      -backend-config key='${params.USERID}' \\
-                      -upgrade \\
-                      -reconfigure
+                touch prod.tfvars
 
-                    terraform plan -destroy -no-color \\
-                      --var-file=prod.tfvars \\
-                      -var 'user_id=${params.USERID}' \\
-                      -var 'instance_profile_arn=${instanceProfileArn}' \\
-                      -out=${awsAccount}-destroy.tfplan
-                """
-            }
+                terraform init -no-color \\
+                  -backend-config region=us-east-1 \\
+                  -backend-config bucket=imac-prod-${awsAccount}-tf-state-hhsoig \\
+                  -backend-config dynamodb_table=imac-prod-${awsAccount}-tf-lock-hhsoig \\
+                  -backend-config key='${params.USERID}' \\
+                  -upgrade \\
+                  -reconfigure
+
+                terraform plan -destroy -no-color \\
+                  --var-file=prod.tfvars \\
+                  -var 'user_id=${params.USERID}' \\
+                  -var 'instance_profile_arn=${instanceProfileArn}' \\
+                  -out=${awsAccount}-destroy.tfplan
+            """
         }
     }
 }
