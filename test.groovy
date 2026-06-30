@@ -1,7 +1,2 @@
-aws-reserved/sso.amazonaws.com/AWSReservedSSO_hhs-oig-cloud-analytics-tier2
-
-profile 757265181315
-
-
-aws cloud9 list-environments \
-  --profile 757265181315
+terraform init -no-color -backend-config region=us-east-1 -backend-config bucket=imac-prod-757265181315-tf-state-hhsoig -backend-config dynamodb_table=imac-prod-757265181315-tf-lock-hhsoig --backend-config key=AWSReservedSSO_hhs-oig-cloud-analytics-tier2_ee08d5cc50a1f525/Scott.Hutchison@oig.hhs.gov -upgrade -reconfigure
+13:25:10  Initializing the backend...
