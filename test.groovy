@@ -107,7 +107,7 @@ echo "Done."
 #############################
 DRY RUN 
 ################################
-chmod +x destroy_cloud9_state.sh
+chmod +x destroy_cloud9_instance.sh
 
 ./destroy_cloud9_instance.sh \
   475117487119 \
