@@ -109,7 +109,7 @@ DRY RUN
 ################################
 chmod +x destroy_cloud9_state.sh
 
-./destroy_cloud9_state.sh \
+./destroy_cloud9_instance.sh \
   475117487119 \
   'GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov' \
   83fc63bd232345c5be4dd2e118291daa
@@ -118,7 +118,7 @@ chmod +x destroy_cloud9_state.sh
 ##################################
 Execute
 ##################################
-./destroy_cloud9_state.sh \
+./destroy_cloud9_instance.sh \
   475117487119 \
   'GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov' \
   83fc63bd232345c5be4dd2e118291daa \
