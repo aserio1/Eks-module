@@ -1,24 +1,25 @@
-aws cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue=CreateEnvironmentEC2 \
-  --profile 757265181315 \
-  --query 'Events[].Username'
-
-
-
-aws ec2 describe-instances \
-  --profile 757265181315 \
-  --filters "Name=tag-key,Values=aws:cloud9:environment" \
-  --query 'Reservations[].Instances[].{
-      InstanceId:InstanceId,
-      Name:Tags[?Key==`Name`]|[0].Value,
-      Cloud9Env:Tags[?Key==`aws:cloud9:environment`]|[0].Value,
-      State:State.Name,
-      PrivateIP:PrivateIpAddress
-  }' \
-  --output table
-
-
-
-aws ec2 describe-instances \
-  --profile 757265181315 \
-  --filters "Name=tag:aws:cloud9:environment,Values=<environment-id>"
+       "d39a934a6dcf44b3b21698d0a5cf9a48",
+        "b6943f45429b4c69836f51e6c0a7677c",
+        "116f5b3ae4114cb3829d1f0c170b26c2",
+        "8d01bd8101614fd68964b10c7b490c2e",
+        "0833e17b513b4365acd6b77bdff54b0d",
+        "20b1ea8175e548ef8740c3cc4dde987b",
+        "fdbaf96a60434b829250f931e796067d",
+        "4065c8e795134077b10cedb059c4d177",
+        "0d0e7e841ef34b829975573bd2ab2836",
+        "172a4e32a83542ecb6d6ab155ad0814a",
+        "9d8be49146a447bf8f636cce0d1d36ca",
+        "5a21126a55e54594a430d13ef1e82bfa",
+        "7690bae3eb0b4e91b75afdef3df0381b",
+        "ffe45f34b78846aebcde3cc4d8966b77",
+        "5bc2eb5f052f4e45a49e2ff11f717bff",
+        "3df2e9dc14a04f0c8397d7ff0e2cd292",
+        "daefdda2cbdf47f78365aded0e318b1f",
+        "1c0e3903f7ed419689c9f5faf1d2d54e",
+        "62fb081fd89a4d269c959676181c92d4",
+        "21d849ae3b1844aba1ee553cec716228",
+        "189762eefab84364bd5cbae4ec49050e",
+        "461ae0c3a4bd4ce8bc7f679af8df13af",
+        "d1ef5bd2848b4fa58904dcaaf6e91309",
+        "df8250d9c7e648a995ed587e6f970fcf",
+        "0673edf2d0bb4de49e997600724a2ef4"
