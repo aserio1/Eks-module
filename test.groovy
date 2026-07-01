@@ -274,15 +274,7 @@ Execute
 
 
 #######################
-PROFILE=213141505949
-USER_ID=ADFS-Tier2-TRI/Jaclyn.Hammond@oig.hhs.gov
-ENV_ID=a7e73a20df114b07985db39911b6acf7
-MODE=--execute
-
-Cloud9 environment exists: a7e73a20df114b07985db39911b6acf7
-Deleting Cloud9 environment: a7e73a20df114b07985db39911b6acf7
-Delete requested for Cloud9 environment: a7e73a20df114b07985db39911b6acf7
-
-Looking for Terraform state in bucket: imac-prod-213141505949-tf-state-hhsoig
-Terraform state does not exist for USER_ID: ADFS-Tier2-TRI/Jaclyn.Hammond@oig.hhs.gov
-Done.
+aws cloud9 describe-environments \
+  --profile 213141505949 \
+  --region us-east-1 \
+  --environment-ids a7e73a20df114b07985db39911b6acf7
