@@ -225,3 +225,16 @@ Execute
   'GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov' \
   83fc63bd232345c5be4dd2e118291daa \
   --execute
+
+
+#######################
+$ ./destroy_cloud9_instance.sh \
+  475117487119 \
+  'GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov' \
+  83fc63bd232345c5be4dd2e118291daa
+PROFILE=475117487119
+USER_ID=GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov
+ENV_ID=83fc63bd232345c5be4dd2e118291daa
+Cloud9 environment exists: 83fc63bd232345c5be4dd2e118291daa
+Terraform state does not exist for USER_ID: GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov
+bash-5.1$
