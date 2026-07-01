@@ -282,12 +282,18 @@ aws cloud9 describe-environments \
 
 
 ########STALE#######################
+#####################################
 #!/usr/bin/env bash
 set -euo pipefail
 
 INPUT_FILE="${1:-stale_cloud9.txt}"
 MODE="${2:-dry-run}"
 REGION="us-east-1"
+
+DELETED=0
+FAILED=0
+NOT_FOUND=0
+PROCESSED=0
 
 if [[ ! -f "$INPUT_FILE" ]]; then
   echo "File not found: $INPUT_FILE"
@@ -296,15 +302,18 @@ fi
 
 echo "INPUT_FILE=$INPUT_FILE"
 echo "MODE=$MODE"
+echo "REGION=$REGION"
 echo
 
 while read -r PROFILE USER_ID TEAM_ID ENV_ID DAYS_STALE; do
-  # Skip headers, separators, blank lines, comments
+  # Skip blank lines, comments, headers, separators
   [[ -z "${PROFILE:-}" ]] && continue
+  [[ "$PROFILE" == \#* ]] && continue
   [[ "$PROFILE" == "PROFILE" ]] && continue
   [[ "$PROFILE" == "------------" ]] && continue
-  [[ "$PROFILE" == \#* ]] && continue
   [[ ! "$PROFILE" =~ ^[0-9]{12}$ ]] && continue
+
+  PROCESSED=$((PROCESSED + 1))
 
   echo "============================================================"
   echo "PROFILE=$PROFILE"
@@ -324,40 +333,41 @@ while read -r PROFILE USER_ID TEAM_ID ENV_ID DAYS_STALE; do
     if [[ "$MODE" == "--execute" ]]; then
       echo "Deleting Cloud9 environment: $ENV_ID"
 
-      aws cloud9 delete-environment \
+      if aws cloud9 delete-environment \
         --profile "$PROFILE" \
         --region "$REGION" \
-        --environment-id "$ENV_ID"
+        --environment-id "$ENV_ID"; then
 
-      echo "Waiting for deletion..."
+        echo "✓ Delete request accepted."
+        DELETED=$((DELETED + 1))
 
-      for i in {1..30}; do
-        if aws cloud9 describe-environments \
-          --profile "$PROFILE" \
-          --region "$REGION" \
-          --environment-ids "$ENV_ID" \
-          --query 'environments[0].id' \
-          --output text 2>/dev/null | grep -q "$ENV_ID"; then
-          echo "Still deleting... attempt $i/30"
-          sleep 10
-        else
-          echo "Deleted: $ENV_ID"
-          break
-        fi
-      done
+      else
+        echo "✗ Delete failed."
+        FAILED=$((FAILED + 1))
+      fi
+
     else
       echo "Dry-run: would delete Cloud9 environment: $ENV_ID"
     fi
 
   else
     echo "Cloud9 environment does not exist: $ENV_ID"
+    NOT_FOUND=$((NOT_FOUND + 1))
   fi
 
   echo
 
 done < "$INPUT_FILE"
 
-echo "Done."
+echo "============================================================"
+echo "Cloud9 Cleanup Summary"
+echo "============================================================"
+echo "Processed               : $PROCESSED"
+echo "Delete requests accepted : $DELETED"
+echo "Already deleted/not found: $NOT_FOUND"
+echo "Failed                  : $FAILED"
+echo "Mode                    : $MODE"
+echo "============================================================"
 
 
 
@@ -372,84 +382,4 @@ chmod +x bulk_delete_cloud9.sh
 
 
 ============================================================
-PROFILE=475117487119
-USER_ID=GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov
-ENV_ID=83fc63bd232345c5be4dd2e118291daa
-DAYS_STALE=1537
-Cloud9 exists: 83fc63bd232345c5be4dd2e118291daa
-Deleting Cloud9 environment: 83fc63bd232345c5be4dd2e118291daa
-Waiting for deletion...
-Still deleting... attempt 1/30
-Still deleting... attempt 2/30
-Still deleting... attempt 3/30
-Still deleting... attempt 4/30
-Still deleting... attempt 5/30
-Still deleting... attempt 6/30
-Still deleting... attempt 7/30
-Still deleting... attempt 8/30
-Still deleting... attempt 9/30
-Still deleting... attempt 10/30
-Still deleting... attempt 11/30
-Terminated
-sh-5.2$ sudo docker exec -it jenkins bash
-[root@27c06bc250ca jenkins]# su jenkins
-bash-5.1$ ls
-Miniconda3-py310_24.7.1-0-Linux-x86_64.sh  bulk_delete_cloud9.sh  destroy_cloud9_instance.sh  python310.env.yml  register.sh       workspace
-agent.jar                                  caches                 jenkins-cli.jar             python312.env.yml  remoting
-agent_ssh.pem                              cred.xml               node.xml                    python313.env.yml  remoting.jar
-anaconda3                                  cred_replaced.xml      node_replaced.xml           python314.env.yml  stale_cloud9.txt
-bash-5.1$ ./bulk_delete_cloud9.sh stale_cloud9.txt --execute
-INPUT_FILE=stale_cloud9.txt
-MODE=--execute
 
-============================================================
-PROFILE=475117487119
-USER_ID=GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov
-ENV_ID=83fc63bd232345c5be4dd2e118291daa
-DAYS_STALE=1537
-Cloud9 exists: 83fc63bd232345c5be4dd2e118291daa
-Deleting Cloud9 environment: 83fc63bd232345c5be4dd2e118291daa
-Waiting for deletion...
-Still deleting... attempt 1/30
-Still deleting... attempt 2/30
-Still deleting... attempt 3/30
-Still deleting... attempt 4/30
-Still deleting... attempt 5/30
-Still deleting... attempt 6/30
-Still deleting... attempt 7/30
-Still deleting... attempt 8/30
-Still deleting... attempt 9/30
-Still deleting... attempt 10/30
-Still deleting... attempt 11/30
-Still deleting... attempt 12/30
-Still deleting... attempt 13/30
-Still deleting... attempt 14/30
-Still deleting... attempt 15/30
-Still deleting... attempt 16/30
-Still deleting... attempt 17/30
-Still deleting... attempt 18/30
-Still deleting... attempt 19/30
-Still deleting... attempt 20/30
-Still deleting... attempt 21/30
-Still deleting... attempt 22/30
-Still deleting... attempt 23/30
-Still deleting... attempt 24/30
-Still deleting... attempt 25/30
-Still deleting... attempt 26/30
-Still deleting... attempt 27/30
-Still deleting... attempt 28/30
-Still deleting... attempt 29/30
-Still deleting... attempt 30/30
-
-============================================================
-PROFILE=475117487119
-USER_ID=ADFS-Tier2/Suseendran.Natarajan@oig.hhs.gov
-ENV_ID=bb59cede79dd45508c3c6fa4c1d71446
-DAYS_STALE=1438
-Cloud9 exists: bb59cede79dd45508c3c6fa4c1d71446
-Deleting Cloud9 environment: bb59cede79dd45508c3c6fa4c1d71446
-Waiting for deletion...
-Still deleting... attempt 1/30
-Still deleting... attempt 2/30
-Still deleting... attempt 3/30
-Still deleting... attempt 4/30
