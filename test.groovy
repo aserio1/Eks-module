@@ -101,6 +101,108 @@ echo "Done."
 
 
 
+###############DELETE ###################
+########################################
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROFILE="$1"
+USER_ID="$2"
+ENV_ID="$3"
+EXECUTE="${4:-dry-run}"
+
+REGION="us-east-1"
+BUCKET="imac-prod-${PROFILE}-tf-state-hhsoig"
+LOCK_TABLE="imac-prod-${PROFILE}-tf-lock-hhsoig"
+
+echo "PROFILE=$PROFILE"
+echo "USER_ID=$USER_ID"
+echo "ENV_ID=$ENV_ID"
+
+# Check Cloud9 environment
+if aws cloud9 describe-environments \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --environment-ids "$ENV_ID" \
+  --query 'environments[0].id' \
+  --output text 2>/dev/null | grep -q "$ENV_ID"; then
+  EXISTS="yes"
+  echo "Cloud9 environment exists: $ENV_ID"
+else
+  EXISTS="no"
+  echo "Cloud9 environment does not exist: $ENV_ID"
+fi
+
+# Find Terraform state key
+STATE_KEY=$(aws s3api list-objects-v2 \
+  --bucket "$BUCKET" \
+  --profile "$PROFILE" \
+  --region "$REGION" \
+  --query "Contents[?contains(Key, \`${USER_ID}\`)].Key | [0]" \
+  --output text)
+
+if [[ -z "$STATE_KEY" || "$STATE_KEY" == "None" ]]; then
+  echo "Terraform state does not exist for USER_ID: $USER_ID"
+  exit 0
+fi
+
+echo "Terraform state key: $STATE_KEY"
+
+terraform init -reconfigure \
+  -backend-config="region=${REGION}" \
+  -backend-config="bucket=${BUCKET}" \
+  -backend-config="dynamodb_table=${LOCK_TABLE}" \
+  -backend-config="key=${STATE_KEY}"
+
+MATCHING_RESOURCES=$(terraform state list | while read -r addr; do
+  if terraform state show "$addr" 2>/dev/null | grep -q "$ENV_ID"; then
+    echo "$addr"
+  fi
+done)
+
+if [[ -z "$MATCHING_RESOURCES" ]]; then
+  echo "No Terraform state resources found for ENV_ID: $ENV_ID"
+  exit 0
+fi
+
+echo "Matching Terraform resources:"
+echo "$MATCHING_RESOURCES"
+
+if [[ "$EXECUTE" != "--execute" ]]; then
+  echo
+  echo "Dry-run only. To delete Cloud9 and clean state, run:"
+  echo "$0 '$PROFILE' '$USER_ID' '$ENV_ID' --execute"
+  exit 0
+fi
+
+# Delete Cloud9 environment if it exists
+if [[ "$EXISTS" == "yes" ]]; then
+  echo "Deleting Cloud9 environment directly: $ENV_ID"
+
+  aws cloud9 delete-environment \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --environment-id "$ENV_ID"
+
+  echo "Delete requested for Cloud9 environment: $ENV_ID"
+else
+  echo "Cloud9 environment does not exist. Skipping AWS delete."
+fi
+
+# Remove matching Terraform resources from state
+echo "Removing matching resources from Terraform state..."
+
+while read -r addr; do
+  if terraform state show "$addr" >/dev/null 2>&1; then
+    echo "Removing from state: $addr"
+    terraform state rm "$addr"
+  fi
+done <<< "$MATCHING_RESOURCES"
+
+echo "Done."
+
+
+
 
 
 
