@@ -383,3 +383,16 @@ chmod +x bulk_delete_cloud9.sh
 
 ============================================================
 
+
+
+####################################
+
+213141505949  ADFS-Tier2/Ben.Horton@oig.hhs.gov     cloud9-Ben.Horton@oig.hhs.gov    ec2   CREATED        unknown  never/unknown         unknown
+213141505949  ADFS-Tier1/Ben.Horton@oig.hhs.gov     cloud9-Ben.Horton@oig.hhs.gov    ec2   CREATED        unknown  never/unknown         unknown
+213141505949  ADFS-Tier2/Trevon.Encalade@oig.hhs.gov cloud9-Trevon.Encalade@oig.hhs.gov          ec2   CREATED        unknown  never/unknown         unknown
+213141505949  ADFS-Tier1/Graham.Kerster@oig.hhs.gov  dev-ADFS-Tier1/Graham.Kerster@oig.hhs.gov   ec2   CREATED        unknown  never/unknown         unknown
+213141505949  ADFS-Tier1/Parmjeet.Kaur@oig.hhs.gov   dev-ADFS-Tier1/Parmjeet.Kaur@oig.hhs.gov    ec2   CREATED        unknown  never/unknown         unknown
+213141505949  ADFS-Tier2/Ayo.Amusa@oig.hhs.gov       dev-ADFS-Tier2/Ayo.Amusa@oig.hhs.gov        ec2   CREATED        unknown  never/unknown         unknown
+757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_ee08d5cc50a1f525/David.Willson@oig.hhs.gov  cloud9-David.Willson@oig.hhs.gov  ec2   CREATED  unknown
+757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_42c1ddc1e750dac5/Maria.Asencio@oig.hhs.gov  cloud9-Maria.Asencio@oig.hhs.gov  ec2   CREATED  unknown 
+757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_ee08d5cc50a1f525/madhavi.maddineni@oig.hhs.gov  cloud9-madhavi.maddineni@oig.hhs.gov   ec2   CREATED  unknown
