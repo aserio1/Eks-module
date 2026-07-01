@@ -384,15 +384,121 @@ chmod +x bulk_delete_cloud9.sh
 ============================================================
 
 
+###########################################################
+PROFILE       USER_ID                                                                                               NAME                                              TYPE  STATUS   DAYS_STALE
+213141505949  ADFS-Tier2/Ben.Horton@oig.hhs.gov                                                                     cloud9-Ben.Horton@oig.hhs.gov                     ec2   CREATED  unknown
+213141505949  ADFS-Tier1/Ben.Horton@oig.hhs.gov                                                                     cloud9-Ben.Horton@oig.hhs.gov                     ec2   CREATED  unknown
+213141505949  ADFS-Tier2/Trevon.Encalade@oig.hhs.gov                                                                cloud9-Trevon.Encalade@oig.hhs.gov                ec2   CREATED  unknown
+213141505949  ADFS-Tier1/Graham.Kerster@oig.hhs.gov                                                                 dev-ADFS-Tier1/Graham.Kerster@oig.hhs.gov         ec2   CREATED  unknown
+213141505949  ADFS-Tier1/Parmjeet.Kaur@oig.hhs.gov                                                                  dev-ADFS-Tier1/Parmjeet.Kaur@oig.hhs.gov          ec2   CREATED  unknown
+213141505949  ADFS-Tier2/Ayo.Amusa@oig.hhs.gov                                                                      dev-ADFS-Tier2/Ayo.Amusa@oig.hhs.gov              ec2   CREATED  unknown
+757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_ee08d5cc50a1f525/David.Willson@oig.hhs.gov              cloud9-David.Willson@oig.hhs.gov                  ec2   CREATED  unknown
+757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_42c1ddc1e750dac5/Maria.Asencio@oig.hhs.gov              cloud9-Maria.Asencio@oig.hhs.gov                  ec2   CREATED  unknown
+757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_ee08d5cc50a1f525/madhavi.maddineni@oig.hhs.gov          cloud9-madhavi.maddineni@oig.hhs.gov              ec2   CREATED  unknown
 
-####################################
 
-213141505949  ADFS-Tier2/Ben.Horton@oig.hhs.gov     cloud9-Ben.Horton@oig.hhs.gov    ec2   CREATED        unknown  never/unknown         unknown
-213141505949  ADFS-Tier1/Ben.Horton@oig.hhs.gov     cloud9-Ben.Horton@oig.hhs.gov    ec2   CREATED        unknown  never/unknown         unknown
-213141505949  ADFS-Tier2/Trevon.Encalade@oig.hhs.gov cloud9-Trevon.Encalade@oig.hhs.gov          ec2   CREATED        unknown  never/unknown         unknown
-213141505949  ADFS-Tier1/Graham.Kerster@oig.hhs.gov  dev-ADFS-Tier1/Graham.Kerster@oig.hhs.gov   ec2   CREATED        unknown  never/unknown         unknown
-213141505949  ADFS-Tier1/Parmjeet.Kaur@oig.hhs.gov   dev-ADFS-Tier1/Parmjeet.Kaur@oig.hhs.gov    ec2   CREATED        unknown  never/unknown         unknown
-213141505949  ADFS-Tier2/Ayo.Amusa@oig.hhs.gov       dev-ADFS-Tier2/Ayo.Amusa@oig.hhs.gov        ec2   CREATED        unknown  never/unknown         unknown
-757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_ee08d5cc50a1f525/David.Willson@oig.hhs.gov  cloud9-David.Willson@oig.hhs.gov  ec2   CREATED  unknown
-757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_42c1ddc1e750dac5/Maria.Asencio@oig.hhs.gov  cloud9-Maria.Asencio@oig.hhs.gov  ec2   CREATED  unknown 
-757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_ee08d5cc50a1f525/madhavi.maddineni@oig.hhs.gov  cloud9-madhavi.maddineni@oig.hhs.gov   ec2   CREATED  unknown
+
+
+
+################################################################
+#!/usr/bin/env bash
+set -euo pipefail
+
+INPUT_FILE="${1:-unknown_cloud9.txt}"
+MODE="${2:-dry-run}"
+REGION="us-east-1"
+
+DELETED=0
+FAILED=0
+NOT_FOUND=0
+PROCESSED=0
+SKIPPED=0
+
+if [[ ! -f "$INPUT_FILE" ]]; then
+  echo "File not found: $INPUT_FILE"
+  exit 1
+fi
+
+echo "INPUT_FILE=$INPUT_FILE"
+echo "MODE=$MODE"
+echo "REGION=$REGION"
+echo
+
+while read -r PROFILE USER_ID NAME TYPE STATUS DAYS_STALE; do
+  # Skip blank lines, comments, and headers
+  [[ -z "${PROFILE:-}" ]] && continue
+  [[ "$PROFILE" == \#* ]] && continue
+  [[ "$PROFILE" == "PROFILE" ]] && continue
+  [[ ! "$PROFILE" =~ ^[0-9]{12}$ ]] && continue
+
+  PROCESSED=$((PROCESSED + 1))
+
+  echo "============================================================"
+  echo "PROFILE=$PROFILE"
+  echo "USER_ID=$USER_ID"
+  echo "NAME=$NAME"
+  echo "STATUS=$STATUS"
+  echo "DAYS_STALE=$DAYS_STALE"
+
+  ENV_IDS=$(aws cloud9 list-environments \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --query 'environmentIds' \
+    --output text 2>/dev/null || true)
+
+  if [[ -z "$ENV_IDS" || "$ENV_IDS" == "None" ]]; then
+    echo "No Cloud9 environments found in profile: $PROFILE"
+    NOT_FOUND=$((NOT_FOUND + 1))
+    echo
+    continue
+  fi
+
+  ENV_ID=$(aws cloud9 describe-environments \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --environment-ids $ENV_IDS \
+    --query "environments[?name==\`${NAME}\`].id | [0]" \
+    --output text 2>/dev/null || true)
+
+  if [[ -z "$ENV_ID" || "$ENV_ID" == "None" ]]; then
+    echo "Cloud9 environment not found by name: $NAME"
+    NOT_FOUND=$((NOT_FOUND + 1))
+    echo
+    continue
+  fi
+
+  echo "Found Cloud9 ENV_ID: $ENV_ID"
+
+  if [[ "$MODE" == "--execute" ]]; then
+    echo "Deleting Cloud9 environment: $ENV_ID"
+
+    if aws cloud9 delete-environment \
+      --profile "$PROFILE" \
+      --region "$REGION" \
+      --environment-id "$ENV_ID"; then
+
+      echo "✓ Delete request accepted."
+      DELETED=$((DELETED + 1))
+    else
+      echo "✗ Delete failed."
+      FAILED=$((FAILED + 1))
+    fi
+  else
+    echo "Dry-run: would delete Cloud9 environment: $ENV_ID"
+    SKIPPED=$((SKIPPED + 1))
+  fi
+
+  echo
+
+done < "$INPUT_FILE"
+
+echo "============================================================"
+echo "Cloud9 Unknown Cleanup Summary"
+echo "============================================================"
+echo "Processed               : $PROCESSED"
+echo "Delete requests accepted : $DELETED"
+echo "Dry-run skipped          : $SKIPPED"
+echo "Not found                : $NOT_FOUND"
+echo "Failed                  : $FAILED"
+echo "Mode                    : $MODE"
+echo "============================================================"
