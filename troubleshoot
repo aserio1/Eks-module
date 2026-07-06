@@ -1,1 +1,64 @@
-####test
+  #8 2.803 Complete!
+08:08:57  #8 3.196 WARNING: modularity is deprecated, and functionality will be removed in a future release of DNF5.
+08:08:57  #8 3.257 Last metadata expiration check: 0:00:02 ago on Mon Jul  6 13:08:55 2026.
+08:08:57  #8 3.278 Error: Problems in request:
+08:08:57  #8 3.278 missing groups or modules: nodejs:18/common
+08:08:57  #8 ERROR: process "/bin/sh -c dnf -y install procps jq &&   dnf -y module install nodejs:18/common &&   npm install --global yarn &&   yarn --version" did not complete successfully: exit code: 1
+08:08:57  ------
+08:08:57   > [ 4/30] RUN dnf -y install procps jq &&   dnf -y module install nodejs:18/common &&   npm install --global yarn &&   yarn --version:
+08:08:57  2.788 Installed products updated.
+08:08:57  2.803 
+08:08:57  2.803 Installed:
+08:08:57  2.803   procps-ng-4.0.4-11.el10.x86_64                                                
+08:08:57  2.803 
+08:08:57  2.803 Complete!
+08:08:57  3.196 WARNING: modularity is deprecated, and functionality will be removed in a future release of DNF5.
+08:08:57  3.257 Last metadata expiration check: 0:00:02 ago on Mon Jul  6 13:08:55 2026.
+08:08:57  3.278 Error: Problems in request:
+08:08:57  3.278 missing groups or modules: nodejs:18/common
+08:08:57  ------
+08:08:57  Dockerfile:41
+08:08:57  --------------------
+08:08:57    40 |     # Install OS Packages
+08:08:57    41 | >>> RUN dnf -y install procps jq && \
+08:08:57    42 | >>>   dnf -y module install nodejs:18/common && \
+08:08:57    43 | >>>   npm install --global yarn && \
+08:08:57    44 | >>>   yarn --version
+08:08:57    45 |     
+08:08:57  --------------------
+08:08:57  ERROR: failed to build: failed to solve: process "/bin/sh -c dnf -y install procps jq &&   dnf -y module install nodejs:18/common &&   npm install --global yarn &&   yarn --version" did not complete successfully: exit code: 1
+
+
+###############CODE##################################
+################################################################################
+# IMAC Docker Base Image
+#
+################################################################################
+
+FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
+
+LABEL   oig.imac.base.image.purpose="Apporved Docker base image" \
+        oig.imac.image.owner="Kate Rose" \
+        oig.imac.base.image.parent="IMAC base image for Iron Bank image from OIG" \
+        oig.imac.base.image.parent.registry="644651903635.dkr.ecr.us-east-1.amazonaws.com/ib-python314:3.10.5.31797" \
+        oig.imac.base.image.ontogeny.registry="registry1.dso.mil/ironbank" \
+        oig.imac.base.image.ontogeny.image="registry1.dso.mil/ironbank/opensource/python:v3.14.5@sha256:be4255a2642bcf619c9594ebb4cbd8ac046ce9ce8c6e69b338048f53164e4b9a"
+
+USER root
+
+RUN yum -y update
+
+RUN dnf -y install procps
+
+# RUN dnf -y module install nodejs:18
+RUN yum -y module install nodejs:18/common
+
+RUN npm install --global yarn
+
+RUN yarn --version
+
+COPY dependencies/docker-entrypoint.sh /usr/local/bin/
+
+ENTRYPOINT ["docker-entrypoint.sh"]
+
+CMD [ "node" ]
