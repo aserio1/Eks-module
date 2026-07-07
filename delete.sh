@@ -85,3 +85,10 @@ echo "Not found                : $NOT_FOUND"
 echo "Failed                   : $FAILED"
 echo "Mode                     : $MODE"
 echo "============================================================"
+
+
+
+#######DELETE 
+475117487119  GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov  475117487119  83fc63bd232345c5be4dd2e118291daa  1544
+475117487119  ADFS-Tier2/Suseendran.Natarajan@oig.hhs.gov       475117487119  bb59cede79dd45508c3c6fa4c1d71446  1445
+213141505949  ADFS-Tier2/Christopher.Arsenault@oig.hhs.gov      213141505949  5408803941a6403a9e5c7bddfe5f22b2  71
