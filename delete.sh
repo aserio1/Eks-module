@@ -89,6 +89,24 @@ echo "============================================================"
 
 
 #######DELETE 
-475117487119  GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov  475117487119  83fc63bd232345c5be4dd2e118291daa  1544
-475117487119  ADFS-Tier2/Suseendran.Natarajan@oig.hhs.gov       475117487119  bb59cede79dd45508c3c6fa4c1d71446  1445
-213141505949  ADFS-Tier2/Christopher.Arsenault@oig.hhs.gov      213141505949  5408803941a6403a9e5c7bddfe5f22b2  71
+aws cloud9 delete-environment \
+  --profile 475117487119 \
+  --region us-east-1 \
+  --environment-id 83fc63bd232345c5be4dd2e118291daa
+
+
+  aws cloud9 delete-environment \
+  --profile 475117487119 \
+  --region us-east-1 \
+  --environment-id bb59cede79dd45508c3c6fa4c1d71446
+
+  aws cloud9 delete-environment \
+  --profile 213141505949 \
+  --region us-east-1 \
+  --environment-id 5408803941a6403a9e5c7bddfe5f22b2
+
+  #########VERIFY
+  aws cloud9 describe-environments \
+  --profile 475117487119 \
+  --region us-east-1 \
+  --environment-ids 83fc63bd232345c5be4dd2e118291daa
