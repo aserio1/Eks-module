@@ -42,3 +42,7 @@ catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
 if (currentBuild.result == 'FAILURE') {
     email_via_sns()
 }
+
+if (currentBuild.result == 'FAILURE') {
+
+if u use try..catch block - then it will move in the catch I think
