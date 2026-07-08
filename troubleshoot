@@ -19,11 +19,12 @@ CMD ["node"]
 
 
 ############################################
-// INIT
-disable_concurrent_builds()
-git_checkout()
+try {
 
-catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+    // INIT
+    disable_concurrent_builds()
+    git_checkout()
+
     // CI
     build(dev)
     scan()
@@ -36,13 +37,13 @@ catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
     promote(dev, _340752827390) // viz-tools dev
     promote(dev, _779846803742) // gis-tools dev
     promote(dev, _302695037820) // data-pipeline dev
-    promote(dev, _306026246970) // data-aquisition dev
-}
+    promote(dev, _306026246970) // data-acquisition dev
 
-if (currentBuild.result == 'FAILURE') {
+} catch (err) {
+
+    currentBuild.result = 'FAILURE'
+
     email_via_sns()
+
+    throw err
 }
-
-if (currentBuild.result == 'FAILURE') {
-
-if u use try..catch block - then it will move in the catch I think
