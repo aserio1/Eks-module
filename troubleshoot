@@ -16,3 +16,27 @@ COPY dependencies/docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]
 
 CMD ["node"]
+
+
+############################################
+// INIT
+disable_concurrent_builds()
+git_checkout()
+
+// CI
+build(dev)
+scan()
+push(dev)
+email_via_sns()
+
+// CD
+promote(dev, _757265181315) // sie lza dev
+promote(dev, _475117487119) // ml-complaints dev
+promote(dev, _730335313798) // ml-complaints dev
+promote(dev, _340752827390) // viz-tools dev
+promote(dev, _779846803742) // gis-tools dev
+promote(dev, _302695037820) // data-pipeline dev
+promote(dev, _306026246970) // data-aquisition dev
+
+
+u can use conditional on currentBuild.result = 'FAILURE'
