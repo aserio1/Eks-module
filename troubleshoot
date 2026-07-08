@@ -19,11 +19,11 @@ CMD ["node"]
 
 
 ############################################
-try {
-    // INIT
-    disable_concurrent_builds()
-    git_checkout()
+// INIT
+disable_concurrent_builds()
+git_checkout()
 
+catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
     // CI
     build(dev)
     scan()
@@ -37,9 +37,8 @@ try {
     promote(dev, _779846803742) // gis-tools dev
     promote(dev, _302695037820) // data-pipeline dev
     promote(dev, _306026246970) // data-aquisition dev
+}
 
-} finally {
-    if (currentBuild.result == 'FAILURE') {
-        email_via_sns()
-    }
+if (currentBuild.result == 'FAILURE') {
+    email_via_sns()
 }
