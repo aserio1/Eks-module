@@ -47,3 +47,41 @@ try {
 
     throw err
 }
+
+
+
+#########################################
+1:04:03  + unset AWS_PROFILE
+11:04:03  + aws sns publish --topic-arn arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications --subject 'JENKINS(prod): Job IMAC/IMAC Jenkins Main and Jenkins Agent - Docker Builds/PR-127/5 build status is: FAILURE!' --message 'Please go to https://jenkins.aws.hhsoig.gov/job/IMAC/job/IMAC%20Jenkins%20Main%20and%20Jenkins%20Agent%20-%20Docker%20Builds/job/PR-127/5/ and verify the build' --message-attributes '{"department":{"DataType": "String","StringValue": "imac"}}'
+11:04:04  
+11:04:04  aws: [ERROR]: An error occurred (InvalidParameter) when calling the Publish operation: Invalid parameter: Subject
+
+try {
+
+// INIT
+disable_concurrent_builds()
+git_checkout()
+
+// CI
+build(dev)
+scan()
+push(dev)
+
+// CD
+promote(dev, _757265181315) // sie lza dev
+promote(dev, _475117487119) // ml-complaints dev
+promote(dev, _730335313798) // ml-complaints dev
+promote(dev, _340752827390) // viz-tools dev
+promote(dev, _779846803742) // gis-tools dev
+promote(dev, _302695037820) // data-pipeline dev
+promote(dev, _306026246970) // data-acquisition dev
+
+} catch (err) {
+
+    currentBuild.result = 'FAILURE'
+
+    email_via_sns()
+
+    throw err
+}
+
