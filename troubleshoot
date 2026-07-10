@@ -1,14 +1,8 @@
-def subject = "JENKINS($jenkins_env): ${env.JOB_BASE_NAME} #${env.BUILD_NUMBER} ${buildStatus}"
-
-
-########################################
-email_sns###########################
 void call() {
 
   stage("Publish to SNS") {
     node(jte.keywords.project) {
-      ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}") {
-
+      ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
         println "Publishing a message to Jenkins SNS topic."
 
         script {
@@ -20,50 +14,28 @@ void call() {
 
           def sns_arn = sh(
             returnStdout: true,
-            script: """
-              unset AWS_PROFILE
-
-              aws sns list-topics \
-                --region us-east-1 \
-                --query "Topics[?contains(TopicArn, '${jenkins_env}-jenkins-notifications')].TopicArn | [0]" \
-                --output text
-            """
+            script: "unset AWS_PROFILE && aws sns list-topics --region us-east-1 --output text | grep ${jenkins_env}-jenkins-notifications | cut -d 'S' -f 2 | tr -d '\\t'"
           ).trim()
 
-          if (!sns_arn || sns_arn == "None") {
-            error("SNS topic ${jenkins_env}-jenkins-notifications was not found.")
-          }
+          def buildStatus = currentBuild.result
 
-          def buildStatus = currentBuild.currentResult ?: "FAILURE"
+          // Use JOB_BASE_NAME instead of the full JOB_NAME.
           def subject = "JENKINS(${jenkins_env}): ${env.JOB_BASE_NAME} #${env.BUILD_NUMBER} ${buildStatus}"
+
           def message = "Please go to ${env.BUILD_URL} and verify the build"
-          def project = jte.keywords.project
-
-          // SNS subject must remain below 100 characters.
-          if (subject.length() >= 100) {
-            subject = subject.take(99)
-          }
-
-          echo "SNS ARN: ${sns_arn}"
-          echo "SNS subject: ${subject}"
-          echo "SNS subject length: ${subject.length()}"
 
           try {
             sh """
               unset AWS_PROFILE
 
               aws sns publish \
-                --region us-east-1 \
                 --topic-arn '${sns_arn}' \
                 --subject '${subject}' \
                 --message '${message}' \
-                --message-attributes '{"department":{"DataType":"String","StringValue":"${project}"}}'
+                --message-attributes '{"department":{"DataType":"String","StringValue":"${jte.keywords.project}"}}'
             """
-
-            echo "SNS message published successfully."
-
           } catch (Exception e) {
-            echo "ERROR: Cannot publish message to the ${jenkins_env}-jenkins-notifications SNS topic."
+            println "ERROR: Cannot publish message to the ${jenkins_env}-jenkins-notifications SNS topic..."
             throw e
           }
         }
