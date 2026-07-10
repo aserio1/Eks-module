@@ -71,7 +71,8 @@ try {
 
 
 #CODE###########
-bash-5.1$ aws sns publish --topic-arn '$sns_arn'  --subject '$subject' --message '$message' \
-              --message-attributes '{"department":{"DataType": "String","StringValue": "$jte.keywords.project"}}'
-
-aws: [ERROR]: An error occurred (InvalidParameter) when calling the Publish operation: Invalid parameter: TopicArn Reason: An ARN must have at least 6 elements, not 1
+aws sns publish \
+  --topic-arn "$sns_arn" \
+  --subject "$subject" \
+  --message "$message" \
+  --message-attributes "{\"department\":{\"DataType\":\"String\",\"StringValue\":\"$project\"}}"
