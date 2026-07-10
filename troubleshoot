@@ -94,3 +94,128 @@ aws sns publish \
     --message-attributes "{\"department\":{\"DataType\":\"String\",\"StringValue\":\"$project\"}}"
 
 
+
+##############
+bash-5.1$ sns_arn="arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications"
+
+subject="Test SNS"
+
+message="Hello from Jenkins"
+
+project="imac"
+bash-5.1$
+bash-5.1$
+bash-5.1$
+bash-5.1$
+bash-5.1$ aws sns publish \
+    --region us-east-1 \
+    --topic-arn "$sns_arn" \
+    --subject "$subject" \
+    --message "$message" \
+    --message-attributes "{\"department\":{\"DataType\":\"String\",\"StringValue\":\"$project\"}}"
+{
+    "MessageId": "848beb45-2e80-5d06-a51f-898e4d04d7c8"
+}
+
+#########################
+ unset AWS_PROFILE
+15:49:17  + aws sns publish --topic-arn arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications --subject 'JENKINS(prod): Job IMAC/IMAC Jenkins Main and Jenkins Agent - Docker Builds/PR-127/6 build status is: FAILURE!' --message 'Please go to https://jenkins.aws.hhsoig.gov/job/IMAC/job/IMAC%20Jenkins%20Main%20and%20Jenkins%20Agent%20-%20Docker%20Builds/job/PR-127/6/ and verify the build' --message-attributes '{"department":{"DataType": "String","StringValue": "imac"}}'
+15:49:18  
+15:49:18  aws: [ERROR]: An error occurred (InvalidParameter) when calling the Publish operation: Invalid parameter: Subject
+15:49:18  [Pipeline] echo
+15:49:18  ERROR: Cannot publish message to the prod-jenkins-notifications sns topic...
+
+############################
+###JENKINSFILE
+########################
+try {
+// INIT
+disable_concurrent_builds()
+git_checkout()
+// CI
+build(dev)
+scan()
+push(dev)
+// CD
+promote(dev, _757265181315) // sie lza dev
+promote(dev, _475117487119) // ml-complaints dev
+promote(dev, _730335313798) // ml-complaints dev
+promote(dev, _340752827390) // viz-tools dev
+promote(dev, _779846803742) // gis-tools dev
+promote(dev, _302695037820) // data-pipeline dev
+promote(dev, _306026246970) // data-aquisition dev
+promote(dev, _306026246970) // data-acquisition dev
+
+} catch (err) {
+
+    currentBuild.result = 'FAILURE'
+
+    email_via_sns()
+
+    throw err
+}
+####################
+###pipeline_config.groovy
+#################
+////////////////////////////////////////////////////////////////////////////////
+// imac-docker/pipeline_config.groovy
+////////////////////////////////////////////////////////////////////////////////
+@merge libraries {
+    docker
+    version_control
+    pipeline
+    sast
+    dast
+    utils
+}
+
+application_environments{
+  dev {
+    short_name = "dev"
+    deployment_branch = "main"
+    account_id = "213141505949" // nosem: detected-aws-account-id
+  }
+  _757265181315 { // sie lza dev
+    short_name = "757265181315"
+    deployment_branch = "main"
+    account_id = "757265181315" // nosem: detected-aws-account-id
+  }
+  _475117487119 { // ml-complaints dev
+    short_name = "475117487119"
+    deployment_branch = "main"
+    account_id = "475117487119" // nosem: detected-aws-account-id
+  }
+  _730335313798 { // ides dev
+    short_name = "730335313798"
+    deployment_branch = "main"
+    account_id = "730335313798" // nosem: detected-aws-account-id
+  }
+  _340752827390 { // viz-tools dev
+    short_name = "340752827390"
+    deployment_branch = "main"
+    account_id = "340752827390" // nosem: detected-aws-account-id
+  }
+  _779846803742 { // gis-tools dev
+    short_name = "779846803742"
+    deployment_branch = "main"
+    account_id = "779846803742" // nosem: detected-aws-account-id
+  }
+  _302695037820 { // data-pipelines dev
+    short_name = "302695037820"
+    deployment_branch = "main"
+    account_id = "302695037820" // nosem: detected-aws-account-id
+  }
+  _723265503409 { // data-infrastructure dev
+    short_name = "723265503409"
+    deployment_branch = "main"
+    account_id = "723265503409" // nosem: detected-aws-account-id
+  }
+  _306026246970 { // data-aquisition dev
+    short_name = "306026246970"
+    deployment_branch = "main"
+    account_id = "306026246970" // nosem: detected-aws-account-id
+  }
+}
+keywords{
+  project = "imac"
+}
