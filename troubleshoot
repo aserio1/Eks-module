@@ -1,221 +1,73 @@
-ARG NODE_VERSION=18.20.8
-
-RUN dnf -y update && \
-    dnf -y install procps curl ca-certificates tar xz && \
-    curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz -o /tmp/node.tar.xz && \
-    tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 && \
-    rm -f /tmp/node.tar.xz && \
-    node --version | grep '^v18\.' && \
-    npm --version && \
-    npm install --global yarn && \
-    yarn --version && \
-    dnf clean all
-
-COPY dependencies/docker-entrypoint.sh /usr/local/bin/
-
-ENTRYPOINT ["docker-entrypoint.sh"]
-
-CMD ["node"]
+def subject = "JENKINS($jenkins_env): ${env.JOB_BASE_NAME} #${env.BUILD_NUMBER} ${buildStatus}"
 
 
-############################################
-try {
+########################################
+email_sns###########################
+void call() {
 
-    // INIT
-    disable_concurrent_builds()
-    git_checkout()
+  stage("Publish to SNS") {
+    node(jte.keywords.project) {
+      ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}") {
 
-    // CI
-    build(dev)
-    scan()
-    push(dev)
+        println "Publishing a message to Jenkins SNS topic."
 
-    // CD
-    promote(dev, _757265181315) // sie lza dev
-    promote(dev, _475117487119) // ml-complaints dev
-    promote(dev, _730335313798) // ml-complaints dev
-    promote(dev, _340752827390) // viz-tools dev
-    promote(dev, _779846803742) // gis-tools dev
-    promote(dev, _302695037820) // data-pipeline dev
-    promote(dev, _306026246970) // data-acquisition dev
+        script {
+          def jenkins_env = "prod"
 
-} catch (err) {
+          if (env.JENKINS_URL.startsWith("https://dev")) {
+            jenkins_env = "dev"
+          }
 
-    currentBuild.result = 'FAILURE'
+          def sns_arn = sh(
+            returnStdout: true,
+            script: """
+              unset AWS_PROFILE
 
-    email_via_sns()
+              aws sns list-topics \
+                --region us-east-1 \
+                --query "Topics[?contains(TopicArn, '${jenkins_env}-jenkins-notifications')].TopicArn | [0]" \
+                --output text
+            """
+          ).trim()
 
-    throw err
-}
+          if (!sns_arn || sns_arn == "None") {
+            error("SNS topic ${jenkins_env}-jenkins-notifications was not found.")
+          }
 
+          def buildStatus = currentBuild.currentResult ?: "FAILURE"
+          def subject = "JENKINS(${jenkins_env}): ${env.JOB_BASE_NAME} #${env.BUILD_NUMBER} ${buildStatus}"
+          def message = "Please go to ${env.BUILD_URL} and verify the build"
+          def project = jte.keywords.project
 
+          // SNS subject must remain below 100 characters.
+          if (subject.length() >= 100) {
+            subject = subject.take(99)
+          }
 
-#########################################
-  Publishing a message to jenkins sns topic.
-15:49:15  [Pipeline] script
-15:49:15  [Pipeline] {
-15:49:15  [Pipeline] sh
-15:49:15  + unset AWS_PROFILE
-15:49:15  + cut -d S -f 2
-15:49:15  + grep prod-jenkins-notifications
-15:49:15  + aws sns list-topics --region us-east-1 --output text
-15:49:15  + tr -d '	'
-15:49:17  [Pipeline] sh
-15:49:17  + unset AWS_PROFILE
-15:49:17  + aws sns publish --topic-arn arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications --subject 'JENKINS(prod): Job IMAC/IMAC Jenkins Main and Jenkins Agent - Docker Builds/PR-127/6 build status is: FAILURE!' --message 'Please go to https://jenkins.aws.hhsoig.gov/job/IMAC/job/IMAC%20Jenkins%20Main%20and%20Jenkins%20Agent%20-%20Docker%20Builds/job/PR-127/6/ and verify the build' --message-attributes '{"department":{"DataType": "String","StringValue": "imac"}}'
-15:49:18  
-15:49:18  aws: [ERROR]: An error occurred (InvalidParameter) when calling the Publish operation: Invalid parameter: Subject
-15:49:18  [Pipeline] echo
-15:49:18  ERROR: Cannot publish message to the prod-jenkins-notifications sns topic...
+          echo "SNS ARN: ${sns_arn}"
+          echo "SNS subject: ${subject}"
+          echo "SNS subject length: ${subject.length()}"
 
+          try {
+            sh """
+              unset AWS_PROFILE
 
+              aws sns publish \
+                --region us-east-1 \
+                --topic-arn '${sns_arn}' \
+                --subject '${subject}' \
+                --message '${message}' \
+                --message-attributes '{"department":{"DataType":"String","StringValue":"${project}"}}'
+            """
 
-#CODE###########
-unset AWS_PROFILE
+            echo "SNS message published successfully."
 
-aws sns list-topics \
-    --region us-east-1 \
-    --output text
-#########
-sns_arn="arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications"
-
-subject="Test SNS"
-
-message="Hello from Jenkins"
-
-project="imac"
-
-##########
-aws sns publish \
-    --region us-east-1 \
-    --topic-arn "$sns_arn" \
-    --subject "$subject" \
-    --message "$message" \
-    --message-attributes "{\"department\":{\"DataType\":\"String\",\"StringValue\":\"$project\"}}"
-
-
-
-##############
-bash-5.1$ sns_arn="arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications"
-
-subject="Test SNS"
-
-message="Hello from Jenkins"
-
-project="imac"
-bash-5.1$
-bash-5.1$
-bash-5.1$
-bash-5.1$
-bash-5.1$ aws sns publish \
-    --region us-east-1 \
-    --topic-arn "$sns_arn" \
-    --subject "$subject" \
-    --message "$message" \
-    --message-attributes "{\"department\":{\"DataType\":\"String\",\"StringValue\":\"$project\"}}"
-{
-    "MessageId": "848beb45-2e80-5d06-a51f-898e4d04d7c8"
-}
-
-#########################
- unset AWS_PROFILE
-15:49:17  + aws sns publish --topic-arn arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications --subject 'JENKINS(prod): Job IMAC/IMAC Jenkins Main and Jenkins Agent - Docker Builds/PR-127/6 build status is: FAILURE!' --message 'Please go to https://jenkins.aws.hhsoig.gov/job/IMAC/job/IMAC%20Jenkins%20Main%20and%20Jenkins%20Agent%20-%20Docker%20Builds/job/PR-127/6/ and verify the build' --message-attributes '{"department":{"DataType": "String","StringValue": "imac"}}'
-15:49:18  
-15:49:18  aws: [ERROR]: An error occurred (InvalidParameter) when calling the Publish operation: Invalid parameter: Subject
-15:49:18  [Pipeline] echo
-15:49:18  ERROR: Cannot publish message to the prod-jenkins-notifications sns topic...
-
-############################
-###JENKINSFILE
-########################
-try {
-// INIT
-disable_concurrent_builds()
-git_checkout()
-// CI
-build(dev)
-scan()
-push(dev)
-// CD
-promote(dev, _757265181315) // sie lza dev
-promote(dev, _475117487119) // ml-complaints dev
-promote(dev, _730335313798) // ml-complaints dev
-promote(dev, _340752827390) // viz-tools dev
-promote(dev, _779846803742) // gis-tools dev
-promote(dev, _302695037820) // data-pipeline dev
-promote(dev, _306026246970) // data-aquisition dev
-promote(dev, _306026246970) // data-acquisition dev
-
-} catch (err) {
-
-    currentBuild.result = 'FAILURE'
-
-    email_via_sns()
-
-    throw err
-}
-####################
-###pipeline_config.groovy
-#################
-////////////////////////////////////////////////////////////////////////////////
-// imac-docker/pipeline_config.groovy
-////////////////////////////////////////////////////////////////////////////////
-@merge libraries {
-    docker
-    version_control
-    pipeline
-    sast
-    dast
-    utils
-}
-
-application_environments{
-  dev {
-    short_name = "dev"
-    deployment_branch = "main"
-    account_id = "213141505949" // nosem: detected-aws-account-id
+          } catch (Exception e) {
+            echo "ERROR: Cannot publish message to the ${jenkins_env}-jenkins-notifications SNS topic."
+            throw e
+          }
+        }
+      }
+    }
   }
-  _757265181315 { // sie lza dev
-    short_name = "757265181315"
-    deployment_branch = "main"
-    account_id = "757265181315" // nosem: detected-aws-account-id
-  }
-  _475117487119 { // ml-complaints dev
-    short_name = "475117487119"
-    deployment_branch = "main"
-    account_id = "475117487119" // nosem: detected-aws-account-id
-  }
-  _730335313798 { // ides dev
-    short_name = "730335313798"
-    deployment_branch = "main"
-    account_id = "730335313798" // nosem: detected-aws-account-id
-  }
-  _340752827390 { // viz-tools dev
-    short_name = "340752827390"
-    deployment_branch = "main"
-    account_id = "340752827390" // nosem: detected-aws-account-id
-  }
-  _779846803742 { // gis-tools dev
-    short_name = "779846803742"
-    deployment_branch = "main"
-    account_id = "779846803742" // nosem: detected-aws-account-id
-  }
-  _302695037820 { // data-pipelines dev
-    short_name = "302695037820"
-    deployment_branch = "main"
-    account_id = "302695037820" // nosem: detected-aws-account-id
-  }
-  _723265503409 { // data-infrastructure dev
-    short_name = "723265503409"
-    deployment_branch = "main"
-    account_id = "723265503409" // nosem: detected-aws-account-id
-  }
-  _306026246970 { // data-aquisition dev
-    short_name = "306026246970"
-    deployment_branch = "main"
-    account_id = "306026246970" // nosem: detected-aws-account-id
-  }
-}
-keywords{
-  project = "imac"
 }
