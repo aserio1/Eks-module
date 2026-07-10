@@ -71,8 +71,36 @@ try {
 
 
 #CODE###########
-aws sns publish \
-  --topic-arn "$sns_arn" \
-  --subject "$subject" \
-  --message "$message" \
-  --message-attributes "{\"department\":{\"DataType\":\"String\",\"StringValue\":\"$project\"}}"
+void call(){ 
+
+  stage("Publish to SNS"){
+    node(jte.keywords.project) {
+      ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
+        println 'Publishing a message to jenkins sns topic.'
+        script {
+          def jenkins_env = 'prod'
+          if (env.JENKINS_URL.startsWith("https://dev")) {
+            jenkins_env = 'dev'
+          }
+          def sns_arn = sh(returnStdout: true,
+            script: "unset AWS_PROFILE && aws sns list-topics --region us-east-1 --output text | grep $jenkins_env-jenkins-notifications | cut -d 'S' -f 2 | tr -d \'\t'")
+          sns_arn = sns_arn.trim()
+          def buildStatus = currentBuild.result
+          def subject = "JENKINS($jenkins_env): Job $JOB_NAME/$BUILD_NUMBER build status is: $buildStatus!"
+          def message = "Please go to $BUILD_URL and verify the build"
+          try {
+            sh """
+            unset AWS_PROFILE
+            aws sns publish --topic-arn '$sns_arn'  --subject '$subject' --message '$message' \
+              --message-attributes '{"department":{"DataType": "String","StringValue": "$jte.keywords.project"}}'
+            """
+          } catch (Exception e) {
+            println "ERROR: Cannot publish message to the $jenkins_env-jenkins-notifications sns topic..."
+            throw e
+          }
+        }
+    	}
+    }
+  }
+}
+
