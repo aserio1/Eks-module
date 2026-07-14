@@ -60,3 +60,16 @@ RUN rpm -qa trivy && rpm -e trivy || true && \
     trivy --version && \
 
 TRIVY_VERSION=0.72.0
+
+
+##############
+docker run -d \
+  --name trivy-server \
+  --network jenkins-net \
+  --restart=always \
+  -p 4954:4954 \
+  -e TRIVY_CACHE_BACKEND=redis://redis-container:6379 \
+  213141505949.dkr.ecr.us-east-1.amazonaws.com/ecr-public/aquasecurity/trivy-security:0.72.0 \
+  server \
+    --listen 0.0.0.0:4954 \
+    --cache-backend redis://redis-container:6379
