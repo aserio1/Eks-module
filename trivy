@@ -51,3 +51,12 @@ aws ecr delete-repository \
   --region us-east-1 \
   --repository-name trivy-security \
   --force
+
+##########PULL
+# Update trivy to the specified version
+RUN rpm -qa trivy && rpm -e trivy || true && \
+    rpm -ivh https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.rpm && \
+    mkdir -p /home/jenkins/.trivy && \
+    trivy --version && \
+
+TRIVY_VERSION=0.72.0
