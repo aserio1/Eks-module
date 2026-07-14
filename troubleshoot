@@ -66,13 +66,13 @@ void call() {
     }
   }
 }
+######################################
+[External]JENKINS(prod): PR-127 #10 FAILURE
+#######################
+since sending email is the last step in a pipeline - we don't need to set a default - please remove ?: "FAILURE" - also from "Pipeline syntax"
+typical concurrent result SUCCESS, UNSTABLE or FAILURE, will never be null
 
-###################
- aws sns list-topics --region us-east-1 --output text
-18:02:04  [Pipeline] sh
-18:02:04  + unset AWS_PROFILE
-18:02:04  + aws sns publish --topic-arn arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications --subject 'JENKINS(prod): Job IMAC/IMAC Jenkins Main and Jenkins Agent - Docker Builds/PR-127/8 build status is: FAILURE!' --message 'Please go to https://jenkins.aws.hhsoig.gov/job/IMAC/job/IMAC%20Jenkins%20Main%20and%20Jenkins%20Agent%20-%20Docker%20Builds/job/PR-127/8/ and verify the build' --message-attributes '{"department":{"DataType": "String","StringValue": "imac"}}'
-18:02:05  
-18:02:05  aws: [ERROR]: An error occurred (InvalidParameter) when calling the Publish operation: Invalid parameter: Subject
-18:02:06  [Pipeline] echo
-18:02:06  ERROR: Cannot publish message to the prod-jenkins-notifications sns topic...
+######################
+JOB_BASE_NAME will not be relevant since for multibranch it will resolve to the branch name (e.g. main) and it is not useful info - I think maybe we want to use only JOB_NAME removing the JOB_BASE_NAME from it and also we could rename "IMAC Jenkins Main and Jenkins Agent - Docker Builds" to "IMAC Docker Builds"
+
+
