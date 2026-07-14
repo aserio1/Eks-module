@@ -516,3 +516,217 @@ ROFILE       USER_ID                                                            
    757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_42c1ddc1e750dac5/Graham.Kerster@oig.hhs.gov    cloud9-Graham.Kerster@oig.hhs.gov         ec2CREATED        5     2026-07-08 18:15 UTC  membership
 ⚠️ 757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_ee08d5cc50a1f525/Jonathan.Gladish@oig.hhs.gov  cloud9-Jonathan.Gladish@oig.hhs.gov       ec2   CREATED        34    2026-06-09 20:10 UTC  membership
 ⚠️ 757265181315  AWSReservedSSO_hhs-oig-cloud-analytics-tier2_42c1ddc1e750dac5/William.Zichos@oig.hhs.gov    cloud9-William.Zichos@oig.hhs.gov         ec2   CREATED        33    2026-06-10 18:48 UTC  membership
+
+
+#################FINAL USERS #######################
+PROFILE USER_ID NAME TYPE STATUS DAYS LAST_DATE LAST_TIME SOURCE
+213141505949 ADFS-Tier2/Marielle.Roth@oig.hhs.gov dev-ADFS-Tier2/Marielle.Roth@oig.hhs.gov ec2 CREATED 20 2026-06-23 21:40 membership
+475117487119 ADFS-Tier2/Suseendran.Natarajan@oig.hhs.gov NoIngress ec2 DELETE_FAILED 1452 2022-07-23 03:53 membership
+475117487119 GIO_A3_DeveloperRole/Vilas.Mamidyala@oig.hhs.gov vilastest03 ec2 DELETE_FAILED 1551 2022-04-14 20:14 membership
+730335313798 AWSReservedSSO_hhs-oig-analyst-ides-tier2_22c746b1ab4a2fac/Ryan.McGirr@oig.hhs.gov cloud9-Ryan.McGirr@oig.hhs.gov ec2 CREATED 20 2026-06-23 18:24 membership
+757265181315 AWSReservedSSO_hhs-oig-cloud-analytics-tier2_42c1ddc1e750dac5/Graham.Kerster@oig.hhs.gov cloud9-Graham.Kerster@oig.hhs.gov ec2 CREATED 5 2026-07-08 18:15 membership
+757265181315 AWSReservedSSO_hhs-oig-cloud-analytics-tier2_ee08d5cc50a1f525/Jonathan.Gladish@oig.hhs.gov cloud9-Jonathan.Gladish@oig.hhs.gov ec2 CREATED 34 2026-06-09 20:10 membership
+757265181315 AWSReservedSSO_hhs-oig-cloud-analytics-tier2_42c1ddc1e750dac5/William.Zichos@oig.hhs.gov cloud9-William.Zichos@oig.hhs.gov ec2 CREATED 33 2026-06-10 18:48 membership
+
+
+
+
+###########################CODE      #########################
+#!/usr/bin/env bash
+set -uo pipefail
+
+INPUT_FILE="${1:-delete_cloud9_by_name.txt}"
+MODE="${2:-dry-run}"
+REGION="us-east-1"
+
+DELETED=0
+FAILED=0
+NOT_FOUND=0
+AMBIGUOUS=0
+PROCESSED=0
+SKIPPED=0
+
+if [[ ! -f "$INPUT_FILE" ]]; then
+  echo "ERROR: File not found: $INPUT_FILE"
+  exit 1
+fi
+
+if [[ "$MODE" != "dry-run" && "$MODE" != "--execute" ]]; then
+  echo "Usage: $0 [input-file] [--execute]"
+  exit 1
+fi
+
+echo "INPUT_FILE=$INPUT_FILE"
+echo "MODE=$MODE"
+echo "REGION=$REGION"
+echo
+
+while read -r PROFILE USER_ID NAME TYPE STATUS DAYS LAST_DATE LAST_TIME SOURCE EXTRA; do
+  # Skip blank lines, comments, headers, separators and malformed rows.
+  [[ -z "${PROFILE:-}" ]] && continue
+  [[ "$PROFILE" == \#* ]] && continue
+  [[ "$PROFILE" == "PROFILE" ]] && continue
+  [[ "$PROFILE" =~ ^-+$ ]] && continue
+  [[ ! "$PROFILE" =~ ^[0-9]{12}$ ]] && continue
+
+  PROCESSED=$((PROCESSED + 1))
+
+  echo "============================================================"
+  echo "PROFILE=$PROFILE"
+  echo "USER_ID=$USER_ID"
+  echo "NAME=$NAME"
+  echo "TYPE=$TYPE"
+  echo "STATUS=$STATUS"
+  echo "DAYS=$DAYS"
+
+  # Confirm credentials for the account before processing.
+  ACCOUNT_ID=$(aws sts get-caller-identity \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --query Account \
+    --output text 2>/dev/null || true)
+
+  if [[ "$ACCOUNT_ID" != "$PROFILE" ]]; then
+    echo "✗ Cannot authenticate to profile $PROFILE or account mismatch."
+    FAILED=$((FAILED + 1))
+    echo
+    continue
+  fi
+
+  # Retrieve every Cloud9 environment in the account.
+  mapfile -t ENV_IDS < <(
+    aws cloud9 list-environments \
+      --profile "$PROFILE" \
+      --region "$REGION" \
+      --query 'environmentIds[]' \
+      --output text 2>/dev/null | tr '\t' '\n'
+  )
+
+  if [[ ${#ENV_IDS[@]} -eq 0 ]]; then
+    echo "Cloud9 environment does not exist: $NAME"
+    NOT_FOUND=$((NOT_FOUND + 1))
+    echo
+    continue
+  fi
+
+  # Cloud9 describe-environments accepts no more than 25 IDs per request.
+  MATCHES=()
+
+  for ((i=0; i<${#ENV_IDS[@]}; i+=25)); do
+    BATCH=("${ENV_IDS[@]:i:25}")
+
+    while IFS=$'\t' read -r FOUND_ID FOUND_OWNER FOUND_STATUS FOUND_REASON; do
+      [[ -z "$FOUND_ID" || "$FOUND_ID" == "None" ]] && continue
+
+      # Prefer both the environment name and owner identity.
+      if [[ "$FOUND_OWNER" == *"$USER_ID"* ]]; then
+        MATCHES+=("${FOUND_ID}|${FOUND_OWNER}|${FOUND_STATUS}|${FOUND_REASON}")
+      fi
+    done < <(
+      aws cloud9 describe-environments \
+        --profile "$PROFILE" \
+        --region "$REGION" \
+        --environment-ids "${BATCH[@]}" \
+        --query "environments[?name==\`${NAME}\`].[id,ownerArn,lifecycle.status,lifecycle.reason]" \
+        --output text 2>/dev/null || true
+    )
+  done
+
+  # Fall back to an exact name match when the owner ARN format differs.
+  if [[ ${#MATCHES[@]} -eq 0 ]]; then
+    for ((i=0; i<${#ENV_IDS[@]}; i+=25)); do
+      BATCH=("${ENV_IDS[@]:i:25}")
+
+      while IFS=$'\t' read -r FOUND_ID FOUND_OWNER FOUND_STATUS FOUND_REASON; do
+        [[ -z "$FOUND_ID" || "$FOUND_ID" == "None" ]] && continue
+        MATCHES+=("${FOUND_ID}|${FOUND_OWNER}|${FOUND_STATUS}|${FOUND_REASON}")
+      done < <(
+        aws cloud9 describe-environments \
+          --profile "$PROFILE" \
+          --region "$REGION" \
+          --environment-ids "${BATCH[@]}" \
+          --query "environments[?name==\`${NAME}\`].[id,ownerArn,lifecycle.status,lifecycle.reason]" \
+          --output text 2>/dev/null || true
+      )
+    done
+  fi
+
+  if [[ ${#MATCHES[@]} -eq 0 ]]; then
+    echo "Cloud9 environment not found: $NAME"
+    NOT_FOUND=$((NOT_FOUND + 1))
+    echo
+    continue
+  fi
+
+  if [[ ${#MATCHES[@]} -gt 1 ]]; then
+    echo "✗ Multiple Cloud9 environments have the name: $NAME"
+    printf '  %s\n' "${MATCHES[@]}"
+    echo "Skipping to prevent deleting the wrong environment."
+    AMBIGUOUS=$((AMBIGUOUS + 1))
+    echo
+    continue
+  fi
+
+  IFS='|' read -r ENV_ID OWNER_ARN CURRENT_STATUS FAILURE_REASON <<< "${MATCHES[0]}"
+
+  echo "ENV_ID=$ENV_ID"
+  echo "OWNER_ARN=$OWNER_ARN"
+  echo "CURRENT_STATUS=$CURRENT_STATUS"
+
+  if [[ -n "$FAILURE_REASON" && "$FAILURE_REASON" != "None" ]]; then
+    echo "LIFECYCLE_REASON=$FAILURE_REASON"
+  fi
+
+  if [[ "$MODE" != "--execute" ]]; then
+    echo "Dry-run: would delete Cloud9 environment $ENV_ID"
+    SKIPPED=$((SKIPPED + 1))
+    echo
+    continue
+  fi
+
+  echo "Deleting Cloud9 environment: $ENV_ID"
+
+  if aws cloud9 delete-environment \
+    --profile "$PROFILE" \
+    --region "$REGION" \
+    --environment-id "$ENV_ID"; then
+
+    echo "✓ Delete request accepted."
+    DELETED=$((DELETED + 1))
+  else
+    echo "✗ Delete failed for Cloud9 environment: $ENV_ID"
+
+    aws cloud9 describe-environments \
+      --profile "$PROFILE" \
+      --region "$REGION" \
+      --environment-ids "$ENV_ID" \
+      --query 'environments[0].{
+        Id:id,
+        Name:name,
+        Status:lifecycle.status,
+        Reason:lifecycle.reason
+      }' \
+      --output table 2>/dev/null || true
+
+    FAILED=$((FAILED + 1))
+  fi
+
+  echo
+
+done < "$INPUT_FILE"
+
+echo "============================================================"
+echo "Cloud9 Cleanup Summary"
+echo "============================================================"
+echo "Processed                : $PROCESSED"
+echo "Delete requests accepted : $DELETED"
+echo "Dry-run skipped          : $SKIPPED"
+echo "Not found                : $NOT_FOUND"
+echo "Ambiguous name           : $AMBIGUOUS"
+echo "Failed                   : $FAILED"
+echo "Mode                     : $MODE"
+echo "============================================================"
+
+if [[ "$FAILED" -gt 0 || "$AMBIGUOUS" -gt 0 ]]; then
+  exit 1
+fi
