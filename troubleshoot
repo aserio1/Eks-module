@@ -2,7 +2,7 @@ void call() {
 
   stage("Publish to SNS") {
     node(jte.keywords.project) {
-      ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}") {
+      ws("workspace/${env.JOB_NAME.replace('%2F', '/')}/${env.BUILD_NUMBER}") {
 
         println "Publishing a message to Jenkins SNS topic."
 
@@ -29,12 +29,31 @@ void call() {
             error("SNS topic ${jenkins_env}-jenkins-notifications was not found.")
           }
 
-          def buildStatus = currentBuild.currentResult ?: "FAILURE"
-          def subject = "JENKINS(${jenkins_env}): ${env.JOB_BASE_NAME} #${env.BUILD_NUMBER} ${buildStatus}"
-          def message = "Please go to ${env.BUILD_URL} and verify the build"
+          def buildStatus = currentBuild.currentResult
+
+          // Example original JOB_NAME:
+          // IMAC/IMAC Jenkins Main and Jenkins Agent - Docker Builds/PR-127
+          def displayJobName = env.JOB_NAME
+            .replace("IMAC Jenkins Main and Jenkins Agent - Docker Builds", "IMAC Docker Builds")
+            .replace("/", " / ")
+
+          def subject = "[External] JENKINS(${jenkins_env}): ${displayJobName} #${env.BUILD_NUMBER} ${buildStatus}"
+
+          def message = """
+Jenkins pipeline status: ${buildStatus}
+
+Job: ${displayJobName}
+Build: #${env.BUILD_NUMBER}
+Environment: ${jenkins_env}
+Project: ${jte.keywords.project}
+
+Review the build:
+${env.BUILD_URL}
+          """.stripIndent().trim()
+
           def project = jte.keywords.project
 
-          // SNS subject must remain below 100 characters.
+          // Amazon SNS subjects must be fewer than 100 characters.
           if (subject.length() >= 100) {
             subject = subject.take(99)
           }
@@ -66,13 +85,3 @@ void call() {
     }
   }
 }
-######################################
-[External]JENKINS(prod): PR-127 #10 FAILURE
-#######################
-since sending email is the last step in a pipeline - we don't need to set a default - please remove ?: "FAILURE" - also from "Pipeline syntax"
-typical concurrent result SUCCESS, UNSTABLE or FAILURE, will never be null
-
-######################
-JOB_BASE_NAME will not be relevant since for multibranch it will resolve to the branch name (e.g. main) and it is not useful info - I think maybe we want to use only JOB_NAME removing the JOB_BASE_NAME from it and also we could rename "IMAC Jenkins Main and Jenkins Agent - Docker Builds" to "IMAC Docker Builds"
-
-
