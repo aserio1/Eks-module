@@ -38,3 +38,10 @@ docker run -d \
     server \
     --listen 0.0.0.0:4954 \
     --cache-backend redis://redis-container:6379
+
+
+###########
+aws ecr create-repository \
+  --profile 213141505949 \
+  --region us-east-1 \
+  --repository-name trivy-security
