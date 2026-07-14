@@ -1,0 +1,27 @@
+#####PUSH
+docker push 213141505949.dkr.ecr.us-east-1.amazonaws.com/ecr-public/aquasecurity/trivy-security:0.69.2
+
+#####
+docker run -d \
+  --name redis-container \
+  --network jenkins-net \
+  --restart=always \
+  -p 6379:6379 \
+  ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/oig/imac/redis:latest redis-server \
+    --bind 0.0.0.0 \
+    --protected-mode no \
+    --maxmemory $REDIS_MAXMEM \
+    --maxmemory-policy allkeys-lru \
+    --save "" \
+    --appendonly no
+
+######TRIVY
+docker run -d \
+  --name trivy-server \
+  --network jenkins-net \
+  --restart=always \
+  -p 0.0.0.0:4954:4954 \
+  -e TRIVY_CACHE_BACKEND=redis://redis-container:6379 \
+  aquasec/trivy:$${TRIVY_VERSION} server \
+    --listen 0.0.0.0:4954 \
+    --cache-backend redis://redis-container:6379
