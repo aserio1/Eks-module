@@ -730,3 +730,11 @@ echo "============================================================"
 if [[ "$FAILED" -gt 0 || "$AMBIGUOUS" -gt 0 ]]; then
   exit 1
 fi
+
+
+############EXECUTE
+chmod +x delete_cloud9_by_name.sh
+
+./delete_cloud9_by_name.sh delete_cloud9_by_name.txt
+
+./delete_cloud9_by_name.sh delete_cloud9_by_name.txt --execute
