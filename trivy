@@ -45,3 +45,9 @@ aws ecr create-repository \
   --profile 213141505949 \
   --region us-east-1 \
   --repository-name trivy-security
+
+aws ecr delete-repository \
+  --profile 213141505949 \
+  --region us-east-1 \
+  --repository-name trivy-security \
+  --force
