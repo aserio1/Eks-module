@@ -32,15 +32,12 @@ void call() {
           def buildStatus = currentBuild.currentResult
 
           // Example original JOB_NAME:
-          // IMAC/IMAC Jenkins Main and Jenkins Agent - Docker Builds/PR-127
-          def displayJobName = env.JOB_NAME
-            .replace("IMAC Jenkins Main and Jenkins Agent - Docker Builds", "IMAC Docker Builds")
-            .replace("/", " / ")
+         // JOB_NAME for a multibranch job looks like: folder/folder/JobName/branchName
+          // We only want the bare job name (no folder, no branch).
+          def jobNameParts = env.JOB_NAME.split('/')
+          def bareJobName = jobNameParts.size() >= 2 ? jobNameParts[-2] : jobNameParts[-1]
 
-          def subject = "[External] JENKINS(${jenkins_env}): ${displayJobName} #${env.BUILD_NUMBER} ${buildStatus}"
-
-          def message = """
-Jenkins pipeline status: ${buildStatus}
+          def subject = "JENKINS($jenkins_env): $bareJobName build status is: $buildStatus!"
 
 Job: ${displayJobName}
 Build: #${env.BUILD_NUMBER}
@@ -57,10 +54,6 @@ ${env.BUILD_URL}
           if (subject.length() >= 100) {
             subject = subject.take(99)
           }
-
-          echo "SNS ARN: ${sns_arn}"
-          echo "SNS subject: ${subject}"
-          echo "SNS subject length: ${subject.length()}"
 
           try {
             sh """
@@ -85,3 +78,14 @@ ${env.BUILD_URL}
     }
   }
 }
+
+##################################
+  [JTE] Failed to parse step text. Library: utils. Step: email_via_sns.
+09:19:41 [2026-07-16T14:19:41.722Z] [JTE] 1: startup failed: 
+09:19:41  [JTE] JTE_utils_email_via_sns: 44: unexpected char: '#' @ line 44, column 8.
+09:19:41  [JTE]    Build: #${env.BUILD_NUMBER}
+09:19:41  [JTE]           ^
+09:19:41  [JTE] 
+09:19:41  [JTE] 1 error
+09:19:41  [JTE]  
+09:19:41  [JTE] org.codehaus.groovy.
