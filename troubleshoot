@@ -89,3 +89,13 @@ ${env.BUILD_URL}
 09:19:41  [JTE] 1 error
 09:19:41  [JTE]  
 09:19:41  [JTE] org.codehaus.groovy.
+
+#############
+         // JOB_NAME for a multibranch job looks like: folder/folder/JobName/branchName
+          // We only want the bare job name (no folder, no branch).
+          def jobNameParts = env.JOB_NAME.split('/')
+          def bareJobName = jobNameParts.size() >= 2 ? jobNameParts[-2] : jobNameParts[-1]
+
+          def subject = "JENKINS($jenkins_env): $bareJobName build status is: $buildStatus!"
+
+
