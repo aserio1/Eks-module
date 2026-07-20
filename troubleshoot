@@ -1,82 +1,83 @@
-void call() {
+####ERROR
+ Requirement already satisfied: idna<4,>=2.5 in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from requests>=2.5->moto==5.0.5->-r ./src/functions/get_feature_flag/requirements.txt (line 6)) (3.18)
+20:23:26  Requirement already satisfied: certifi>=2023.5.7 in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from requests>=2.5->moto==5.0.5->-r ./src/functions/get_feature_flag/requirements.txt (line 6)) (2026.5.20)
+20:23:26  Requirement already satisfied: pyyaml in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from responses>=0.15.0->moto==5.0.5->-r ./src/functions/get_feature_flag/requirements.txt (line 6)) (6.0.3)
+20:23:26  Installing collected packages: pytest, pyflakes, pycodestyle, click, flake8, botocore, s3transfer, boto3, moto
+20:23:26    Attempting uninstall: pytest
+20:23:26      Found existing installation: pytest 9.0.2
+20:23:26      Uninstalling pytest-9.0.2:
+20:23:26        Successfully uninstalled pytest-9.0.2
+20:23:27    Attempting uninstall: pyflakes
+20:23:27      Found existing installation: pyflakes 3.4.0
+20:23:27      Uninstalling pyflakes-3.4.0:
+20:23:27        Successfully uninstalled pyflakes-3.4.0
+20:23:27    Attempting uninstall: pycodestyle
+20:23:27      Found existing installation: pycodestyle 2.14.0
+20:23:27      Uninstalling pycodestyle-2.14.0:
+20:23:27        Successfully uninstalled pycodestyle-2.14.0
+20:23:27    Attempting uninstall: click
+20:23:27      Found existing installation: click 8.2.1
+20:23:27      Uninstalling click-8.2.1:
+20:23:27        Successfully uninstalled click-8.2.1
+20:23:27    Attempting uninstall: flake8
+20:23:27      Found existing installation: flake8 7.3.0
+20:23:27      Uninstalling flake8-7.3.0:
+20:23:27        Successfully uninstalled flake8-7.3.0
+20:23:27    Attempting uninstall: botocore
+20:23:27      Found existing installation: botocore 1.40.76
+20:23:27      Uninstalling botocore-1.40.76:
+20:23:27        Successfully uninstalled botocore-1.40.76
+20:23:29    Attempting uninstall: s3transfer
+20:23:29      Found existing installation: s3transfer 0.14.0
+20:23:29      Uninstalling s3transfer-0.14.0:
+20:23:29        Successfully uninstalled s3transfer-0.14.0
+20:23:29    Attempting uninstall: boto3
+20:23:29      Found existing installation: boto3 1.40.54
+20:23:29      Uninstalling boto3-1.40.54:
+20:23:29        Successfully uninstalled boto3-1.40.54
+20:23:29    Attempting uninstall: moto
+20:23:29      Found existing installation: moto None
+20:23:29  error: uninstall-no-record-file
+20:23:29  
+20:23:29  × Cannot uninstall moto None
+20:23:29  ╰─> The package's contents are unknown: no RECORD file was found for moto.
+20:23:29  
+20:23:29  hint: You might be able to recover from this via: pip install --force-reinstall --no-deps moto==5.1.13
 
-  stage("Publish to SNS") {
+
+
+
+
+
+
+####### CODE ##########
+void call(conda_python_version=""){
+    stage("Py Setup"){
+    String createCondaScript = resource("create_conda.sh")
+        println "DEPRECATED: Please use the setup script."
+      
     node(jte.keywords.project) {
-      ws("workspace/${env.JOB_NAME.replace('%2F', '/')}/${env.BUILD_NUMBER}") {
-
-        println "Publishing a message to Jenkins SNS topic."
-
-        script {
-          def jenkins_env = "prod"
-
-          if (env.JENKINS_URL.startsWith("https://dev")) {
-            jenkins_env = "dev"
-          }
-
-          def sns_arn = sh(
-            returnStdout: true,
-            script: """
-              unset AWS_PROFILE
-
-              aws sns list-topics \
-                --region us-east-1 \
-                --query "Topics[?contains(TopicArn, '${jenkins_env}-jenkins-notifications')].TopicArn | [0]" \
-                --output text
-            """
-          ).trim()
-
-          if (!sns_arn || sns_arn == "None") {
-            error("SNS topic ${jenkins_env}-jenkins-notifications was not found.")
-          }
-
-          def buildStatus = currentBuild.currentResult
-
-          // JOB_NAME for a multibranch job looks like: folder/folder/JobName/branchName
-          // We only want the bare job name (no folder, no branch).
-          def jobNameParts = env.JOB_NAME.split('/')
-          def bareJobName = jobNameParts.size() >= 2 ? jobNameParts[-2] : jobNameParts[-1]
-
-          def subject = "JENKINS(${jenkins_env}): ${bareJobName} build status is: ${buildStatus}!"
-
-          def message = """
-Jenkins pipeline status: ${buildStatus}
-
-Job: ${bareJobName}
-Branch: ${env.JOB_BASE_NAME}
-Build: #${env.BUILD_NUMBER}
-Environment: ${jenkins_env}
-Project: ${jte.keywords.project}
-
-Review the Jenkins build:
-${env.BUILD_URL}
-          """.stripIndent().trim()
-
-          def project = jte.keywords.project
-
-          if (subject.length() >= 100) {
-            subject = subject.take(99)
-          }
-
-          try {
-            sh """
-              unset AWS_PROFILE
-
-              aws sns publish \
-                --region us-east-1 \
-                --topic-arn '${sns_arn}' \
-                --subject '${subject}' \
-                --message '${message}' \
-                --message-attributes '{"department":{"DataType":"String","StringValue":"${project}"}}'
-            """
-
-            echo "SNS message published successfully."
-
-          } catch (Exception e) {
-            echo "ERROR: Cannot publish message to the ${jenkins_env}-jenkins-notifications SNS topic."
-            throw e
-          }
+      ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
+        println "Installing Build Tool"
+        
+        //JTE has NO WAY to inspect what keywords are available, so use a try/catch.
+        try {
+          conda_python_version = jte.keywords.python_version
+        } catch (Exception ex) {
+          println "DEPRECATED - Please use jte.keywords.python_version to declare python version unambiguously."
         }
-      }
+        
+        if (conda_python_version != "") {
+          env_name = conda_python_version.replace(".","")
+          withEnv(["ENV_NAME=python${env_name}","PYTHON_VERSION=${conda_python_version}"]) {
+            sh createCondaScript
+          }
+        } else {
+          sh "pip3 --version"
+          sh "python3 --version"
+          sh "find . -iname 'requirements.txt' | xargs -n 1 pip3 install  -i https://repo.platform.aws.hhsoig.gov/repository/pypi-public/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --user -r"
+        } 
+    	}
     }
   }
 }
