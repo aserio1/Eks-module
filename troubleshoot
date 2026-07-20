@@ -81,3 +81,31 @@ void call(conda_python_version=""){
     }
   }
 }
+
+#############
+create_conda.sh
+if ! command -v ~/anaconda3/bin/conda &> /dev/null
+then
+    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
+    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
+fi
+
+if ! ~/anaconda3/bin/conda info --envs | grep -q $ENV_NAME
+then
+    ~/anaconda3/bin/conda create -y --name $ENV_NAME python=$PYTHON_VERSION
+fi
+
+echo "Activating Conda $ENV_NAME"
+set +x
+source ~/anaconda3/bin/activate $ENV_NAME
+set -x
+
+python --version
+# Loop through each file (handles space-separated list)
+for req_file in $REQUIREMENTS; do
+    matches=$(find . -iname "$req_file")
+    if [[ -n "$matches" ]]
+    then
+      find . -iname "$req_file" | xargs -n 1 pip3 install -i "https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple" --trusted-host repo.platform.aws.hhsoig.gov --no-color -r
+    fi
+done
