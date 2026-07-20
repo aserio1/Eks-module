@@ -1,126 +1,88 @@
-####ERROR
- Requirement already satisfied: idna<4,>=2.5 in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from requests>=2.5->moto==5.0.5->-r ./src/functions/get_feature_flag/requirements.txt (line 6)) (3.18)
-20:23:26  Requirement already satisfied: certifi>=2023.5.7 in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from requests>=2.5->moto==5.0.5->-r ./src/functions/get_feature_flag/requirements.txt (line 6)) (2026.5.20)
-20:23:26  Requirement already satisfied: pyyaml in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from responses>=0.15.0->moto==5.0.5->-r ./src/functions/get_feature_flag/requirements.txt (line 6)) (6.0.3)
-20:23:26  Installing collected packages: pytest, pyflakes, pycodestyle, click, flake8, botocore, s3transfer, boto3, moto
-20:23:26    Attempting uninstall: pytest
-20:23:26      Found existing installation: pytest 9.0.2
-20:23:26      Uninstalling pytest-9.0.2:
-20:23:26        Successfully uninstalled pytest-9.0.2
-20:23:27    Attempting uninstall: pyflakes
-20:23:27      Found existing installation: pyflakes 3.4.0
-20:23:27      Uninstalling pyflakes-3.4.0:
-20:23:27        Successfully uninstalled pyflakes-3.4.0
-20:23:27    Attempting uninstall: pycodestyle
-20:23:27      Found existing installation: pycodestyle 2.14.0
-20:23:27      Uninstalling pycodestyle-2.14.0:
-20:23:27        Successfully uninstalled pycodestyle-2.14.0
-20:23:27    Attempting uninstall: click
-20:23:27      Found existing installation: click 8.2.1
-20:23:27      Uninstalling click-8.2.1:
-20:23:27        Successfully uninstalled click-8.2.1
-20:23:27    Attempting uninstall: flake8
-20:23:27      Found existing installation: flake8 7.3.0
-20:23:27      Uninstalling flake8-7.3.0:
-20:23:27        Successfully uninstalled flake8-7.3.0
-20:23:27    Attempting uninstall: botocore
-20:23:27      Found existing installation: botocore 1.40.76
-20:23:27      Uninstalling botocore-1.40.76:
-20:23:27        Successfully uninstalled botocore-1.40.76
-20:23:29    Attempting uninstall: s3transfer
-20:23:29      Found existing installation: s3transfer 0.14.0
-20:23:29      Uninstalling s3transfer-0.14.0:
-20:23:29        Successfully uninstalled s3transfer-0.14.0
-20:23:29    Attempting uninstall: boto3
-20:23:29      Found existing installation: boto3 1.40.54
-20:23:29      Uninstalling boto3-1.40.54:
-20:23:29        Successfully uninstalled boto3-1.40.54
-20:23:29    Attempting uninstall: moto
-20:23:29      Found existing installation: moto None
-20:23:29  error: uninstall-no-record-file
-20:23:29  
-20:23:29  × Cannot uninstall moto None
-20:23:29  ╰─> The package's contents are unknown: no RECORD file was found for moto.
-20:23:29  
-20:23:29  hint: You might be able to recover from this via: pip install --force-reinstall --no-deps moto==5.1.13
-
-
-
-
-
-
-
-####### CODE ##########
-void call(conda_python_version=""){
-    stage("Py Setup"){
-    String createCondaScript = resource("create_conda.sh")
-        println "DEPRECATED: Please use the setup script."
-      
-    node(jte.keywords.project) {
-      ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
-        println "Installing Build Tool"
-        
-        //JTE has NO WAY to inspect what keywords are available, so use a try/catch.
-        try {
-          conda_python_version = jte.keywords.python_version
-        } catch (Exception ex) {
-          println "DEPRECATED - Please use jte.keywords.python_version to declare python version unambiguously."
-        }
-        
-        if (conda_python_version != "") {
-          env_name = conda_python_version.replace(".","")
-          withEnv(["ENV_NAME=python${env_name}","PYTHON_VERSION=${conda_python_version}"]) {
-            sh createCondaScript
-          }
-        } else {
-          sh "pip3 --version"
-          sh "python3 --version"
-          sh "find . -iname 'requirements.txt' | xargs -n 1 pip3 install  -i https://repo.platform.aws.hhsoig.gov/repository/pypi-public/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --user -r"
-        } 
-    	}
-    }
-  }
-}
-
-#############
-create_conda.sh
 if ! command -v ~/anaconda3/bin/conda &> /dev/null
 then
     wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
     bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
 fi
 
-if ! ~/anaconda3/bin/conda info --envs | grep -q $ENV_NAME
+if ! ~/anaconda3/bin/conda info --envs | grep -q "$ENV_NAME"
 then
-    ~/anaconda3/bin/conda create -y --name $ENV_NAME python=$PYTHON_VERSION
+    ~/anaconda3/bin/conda create -y --name "$ENV_NAME" python="$PYTHON_VERSION"
 fi
 
 echo "Activating Conda $ENV_NAME"
 set +x
-source ~/anaconda3/bin/activate $ENV_NAME
+source ~/anaconda3/bin/activate "$ENV_NAME"
 set -x
 
 python --version
-# Loop through each file (handles space-separated list)
+
 for req_file in $REQUIREMENTS; do
     matches=$(find . -iname "$req_file")
+
     if [[ -n "$matches" ]]
     then
-      find . -iname "$req_file" | xargs -n 1 pip3 install -i "https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple" --trusted-host repo.platform.aws.hhsoig.gov --no-color -r
+        while IFS= read -r requirements_file
+        do
+            echo "Installing requirements from $requirements_file"
+
+            moto_version=$(grep -E '^[[:space:]]*moto==' "$requirements_file" | head -1 | cut -d= -f3)
+
+            if [[ -n "$moto_version" ]]
+            then
+                echo "Repairing moto==$moto_version before installing requirements"
+
+                python -m pip install \
+                    --ignore-installed \
+                    --no-deps \
+                    "moto==$moto_version" \
+                    -i "https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple" \
+                    --trusted-host repo.platform.aws.hhsoig.gov \
+                    --no-color
+            fi
+
+            python -m pip install \
+                -i "https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple" \
+                --trusted-host repo.platform.aws.hhsoig.gov \
+                --no-color \
+                -r "$requirements_file"
+
+        done <<< "$matches"
     fi
 done
 
 
-#############
-boto3==1.35.8
-black==26.3.1
-click==8.1.7
-flake8==6.1.0
-mock==4.0.3
-moto==5.0.5
-pytest==8.3.4
-pytest-cov==6.0.0
-urllib3>=2.6.3
 
-sie-feature-flag/src/functions/get_feature_flag
-/requirements.txt
+
+
+############
+sie-feature-flags detects
+moto==5.0.5
+
+#################
+--ignore-installed is being used because the existing Moto installation inside the Conda environment is damaged.
+
+Your error showed something like:
+
+Found existing installation: moto None
+Cannot uninstall moto None
+The package's contents are unknown: no RECORD file was found
+
+############################
+What --ignore-installed does
+
+This command:
+
+python -m pip install --ignore-installed "moto==$moto_version"
+
+###########################
+tells pip:
+
+Do not try to inspect or uninstall the currently installed Moto package. Install the requested package files as though Moto were not already installed.
+
+That bypasses the broken uninstall process.
+
+It does not mean “ignore Moto.” It means:
+
+ignore the existing installed copy
+
+and install the version requested by the repository.
