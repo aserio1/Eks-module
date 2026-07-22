@@ -73,12 +73,9 @@ done
 
 
 ##########################################
-Instead, the environment gets a unique name for every Jenkins build. For example:
-Each build starts with:
-
-conda create --name "$ENV_NAME" python="$PYTHON_VERSION"
-This provides a clean Python environment with no packages left behind by previous repositories or builds.
-
-At the end of the build, this cleanup runs automatically:
-
-trap cleanup EXIT
+the reason why we had the issue is because we have one conda environment that is shared across all other pipelines and 
+each pipeline has different conda environment with different requirement.txt with different versions
+requirements.txt example is moto environment in the imac-jte-libraries we have moto 4.0.1 and sie-feature-flag repo
+is using the moto 5.0.5 so in a situation like this muliple pipeline running at same time with different 
+moto version as an example, i want to be able to find a fix so the pipeline does not break based on different
+version of packages being used.
