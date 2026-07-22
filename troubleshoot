@@ -86,3 +86,6 @@ It does not mean “ignore Moto.” It means:
 ignore the existing installed copy
 
 and install the version requested by the repository.
+
+#######################
+As u know moto is not an issue anymore - this fix is very much centered around moto - instead moto was an example of package corruption - the ticket is centered around what to do to reduce the re-occurrence of package corruption due to sharing the conda env to avoid random failures of pipeline during pip install on repo requirements.txt
