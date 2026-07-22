@@ -1,44 +1,63 @@
+#!/usr/bin/env bash
+
+set -e
+
 if ! command -v ~/anaconda3/bin/conda &> /dev/null
 then
     wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
     bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
 fi
 
-if ! ~/anaconda3/bin/conda info --envs | grep -q "$ENV_NAME"
+BASE_ENV_NAME="$ENV_NAME"
+
+if [[ -n "${BUILD_TAG:-}" ]]
 then
-    ~/anaconda3/bin/conda create -y --name "$ENV_NAME" python="$PYTHON_VERSION"
+    SAFE_BUILD_TAG=$(echo "$BUILD_TAG" | tr -c '[:alnum:]_-' '-')
+    ENV_NAME="${BASE_ENV_NAME}-${SAFE_BUILD_TAG}"
+elif [[ -n "${BUILD_NUMBER:-}" ]]
+then
+    ENV_NAME="${BASE_ENV_NAME}-${BUILD_NUMBER}"
+else
+    ENV_NAME="${BASE_ENV_NAME}-$$"
 fi
 
-echo "Activating Conda $ENV_NAME"
+echo "Creating isolated Conda environment: $ENV_NAME"
+
+~/anaconda3/bin/conda create \
+    -y \
+    --name "$ENV_NAME" \
+    python="$PYTHON_VERSION"
+
+cleanup()
+{
+    echo "Removing isolated Conda environment: $ENV_NAME"
+
+    set +e
+    source ~/anaconda3/bin/deactivate
+    ~/anaconda3/bin/conda env remove --name "$ENV_NAME" --yes
+    set -e
+}
+
+trap cleanup EXIT
+
+echo "Activating Conda environment: $ENV_NAME"
+
 set +x
 source ~/anaconda3/bin/activate "$ENV_NAME"
 set -x
 
 python --version
+python -m pip --version
 
-for req_file in $REQUIREMENTS; do
-    matches=$(find . -iname "$req_file")
+for req_file in $REQUIREMENTS
+do
+    matches=$(find . -type f -iname "$req_file")
 
     if [[ -n "$matches" ]]
     then
         while IFS= read -r requirements_file
         do
             echo "Installing requirements from $requirements_file"
-
-            moto_version=$(grep -E '^[[:space:]]*moto==' "$requirements_file" | head -1 | cut -d= -f3)
-
-            if [[ -n "$moto_version" ]]
-            then
-                echo "Repairing moto==$moto_version before installing requirements"
-
-                python -m pip install \
-                    --ignore-installed \
-                    --no-deps \
-                    "moto==$moto_version" \
-                    -i "https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple" \
-                    --trusted-host repo.platform.aws.hhsoig.gov \
-                    --no-color
-            fi
 
             python -m pip install \
                 -i "https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple" \
@@ -47,45 +66,19 @@ for req_file in $REQUIREMENTS; do
                 -r "$requirements_file"
 
         done <<< "$matches"
+    else
+        echo "No matching requirements file found for: $req_file"
     fi
 done
 
 
+##########################################
+Instead, the environment gets a unique name for every Jenkins build. For example:
+Each build starts with:
 
+conda create --name "$ENV_NAME" python="$PYTHON_VERSION"
+This provides a clean Python environment with no packages left behind by previous repositories or builds.
 
+At the end of the build, this cleanup runs automatically:
 
-############
-sie-feature-flags detects
-moto==5.0.5
-
-#################
---ignore-installed is being used because the existing Moto installation inside the Conda environment is damaged.
-
-Your error showed something like:
-
-Found existing installation: moto None
-Cannot uninstall moto None
-The package's contents are unknown: no RECORD file was found
-
-############################
-What --ignore-installed does
-
-This command:
-
-python -m pip install --ignore-installed "moto==$moto_version"
-
-###########################
-tells pip:
-
-Do not try to inspect or uninstall the currently installed Moto package. Install the requested package files as though Moto were not already installed.
-
-That bypasses the broken uninstall process.
-
-It does not mean “ignore Moto.” It means:
-
-ignore the existing installed copy
-
-and install the version requested by the repository.
-
-#######################
-As u know moto is not an issue anymore - this fix is very much centered around moto - instead moto was an example of package corruption - the ticket is centered around what to do to reduce the re-occurrence of package corruption due to sharing the conda env to avoid random failures of pipeline during pip install on repo requirements.txt
+trap cleanup EXIT
