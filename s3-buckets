@@ -1,67 +1,81 @@
+resource "aws_s3_bucket" "jenkins_binaries" {
+  bucket = "jenkins-binaries-213141505949"
 
-bucket name = jenkins-binaries-213141505949
-AWS Region
-US East (N. Virginia) us-east-1
+  tags = {
+    Owner                     = ""
+    ApplicationName           = ""
+    CreatedBy                 = ""
+    Compliance                = ""
+    ResourceRole              = ""
+    ResourceName              = ""
+    Cluster                   = ""
+    Security                  = ""
+    ResponsibleGroup          = ""
+    Project                   = ""
+    "SecurityCategorization " = ""
+    Version                   = ""
+    BusinessUnit              = ""
+    CreatedOn                 = ""
+    "Opt In"                  = ""
+    "Environment "            = "Dev"
+  }
 
-arn:aws:s3:::jenkins-binaries-213141505949
+  lifecycle {
+    prevent_destroy = true
+  }
+}
 
-User-defined tags (16) Info
+resource "aws_s3_bucket_versioning" "jenkins_binaries" {
+  bucket = aws_s3_bucket.jenkins_binaries.id
 
-Add new tag
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
 
-Key                   Value - optional
+resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
+  bucket = aws_s3_bucket.jenkins_binaries.id
 
-ApplicationName
+  depends_on = [
+    aws_s3_bucket_versioning.jenkins_binaries
+  ]
 
-BusinessUnit
+  rule {
+    id     = "cleanup-noncurrent-versions"
+    status = "Enabled"
 
-Cluster
+    filter {}
 
-Compliance
+    noncurrent_version_expiration {
+      noncurrent_days           = 90
+      newer_noncurrent_versions = 3
+    }
+  }
 
-CreatedBy
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
 
-CreatedOn
+    filter {}
 
-Environment                    = Dev
-Opt In
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
 
-Owner
+##############################################
+terraform {
+  required_version = ">= 1.5.0"
 
-Project
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
 
-##########################
-here is what ticket ask 
-For Jenkins we use s3://jenkins-binaries to store any software which needed to downloaded via GFE so that we can install in jenkins agents. 
-
-The bucket is not in Terraform yet, and needs cleanup of old software artifacts and needs versioning enabled.
-
-Acceptance:
-
-s3 bucket backfilled in Terraform
-versioning enabled
-investigate if lifecycle can be use in conjunction with versioning
-
-#####################
-aws sts get-caller-identity
-
-aws s3api get-bucket-location \
-  --bucket jenkins-binaries-213141505949
-
-aws s3api get-bucket-tagging \
-  --bucket jenkins-binaries-213141505949
-
-aws s3api get-bucket-versioning \
-  --bucket jenkins-binaries-213141505949
-
-aws s3api get-bucket-lifecycle-configuration \
-  --bucket jenkins-binaries-213141505949
-
-###############################
-aws s3api list-objects-v2 \
-  --bucket jenkins-binaries-213141505949 \
-  --query 'Contents[].{Key:Key,Size:Size,LastModified:LastModified}' \
-  --output table
-
-#####################
-
+provider "aws" {
+  region = "us-east-1"
+}
