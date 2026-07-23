@@ -82,4 +82,8 @@ bash-5.1$ aws s3api get-bucket-tagging \
     ]
 }
 ##########################
+5.1$ aws s3api get-bucket-versioning \
+  --bucket jenkins-binaries-213141505949
+
+######################################
 
