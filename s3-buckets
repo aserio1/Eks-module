@@ -1,0 +1,50 @@
+
+jenkins-binaries-213141505949
+AWS Region
+US East (N. Virginia) us-east-1
+
+arn:aws:s3:::jenkins-binaries-213141505949
+
+User-defined tags (16) Info
+
+Delete
+Add new tag
+
+1
+2
+
+Key
+	
+Value - optional
+
+ApplicationName
+
+BusinessUnit
+
+Cluster
+
+Compliance
+
+CreatedBy
+
+CreatedOn
+
+Environment 
+Dev
+Opt In
+
+Owner
+
+Project
+
+##########################
+here is what ticket ask 
+For Jenkins we use s3://jenkins-binaries to store any software which needed to downloaded via GFE so that we can install in jenkins agents. 
+
+The bucket is not in Terraform yet, and needs cleanup of old software artifacts and needs versioning enabled.
+
+Acceptance:
+
+s3 bucket backfilled in Terraform
+versioning enabled
+investigate if lifecycle can be use in conjunction with versioning
