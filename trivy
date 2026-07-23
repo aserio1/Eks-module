@@ -11,3 +11,75 @@ aws s3api get-bucket-location \
     "LocationConstraint": null
 }
 ########################
+bash-5.1$ aws s3api get-bucket-tagging \
+  --bucket jenkins-binaries-213141505949
+{
+    "TagSet": [
+        {
+            "Key": "Owner",
+            "Value": ""
+        },
+        {
+            "Key": "ApplicationName",
+            "Value": ""
+        },
+        {
+            "Key": "CreatedBy",
+            "Value": ""
+        },
+        {
+            "Key": "Compliance",
+            "Value": ""
+        },
+        {
+            "Key": "ResourceRole",
+            "Value": ""
+        },
+        {
+            "Key": "ResourceName",
+            "Value": ""
+        },
+        {
+            "Key": "Cluster",
+            "Value": ""
+        },
+        {
+            "Key": "Security",
+            "Value": ""
+        },
+        {
+            "Key": "ResponsibleGroup",
+            "Value": ""
+        },
+        {
+            "Key": "Project",
+            "Value": ""
+        },
+        {
+            "Key": "SecurityCategorization ",
+            "Value": ""
+        },
+        {
+            "Key": "Version",
+            "Value": ""
+        },
+        {
+            "Key": "BusinessUnit",
+            "Value": ""
+        },
+        {
+            "Key": "CreatedOn",
+            "Value": ""
+        },
+        {
+            "Key": "Opt In",
+            "Value": ""
+        },
+        {
+            "Key": "Environment ",
+            "Value": "Dev"
+        }
+    ]
+}
+##########################
+
