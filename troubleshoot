@@ -8,37 +8,15 @@ then
     bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
 fi
 
-BASE_ENV_NAME="$ENV_NAME"
-
-if [[ -n "${BUILD_TAG:-}" ]]
+if ! ~/anaconda3/bin/conda info --envs |
+    awk '{print $1}' |
+    grep -Fxq "$ENV_NAME"
 then
-    SAFE_BUILD_TAG=$(echo "$BUILD_TAG" | tr -c '[:alnum:]_-' '-')
-    ENV_NAME="${BASE_ENV_NAME}-${SAFE_BUILD_TAG}"
-elif [[ -n "${BUILD_NUMBER:-}" ]]
-then
-    ENV_NAME="${BASE_ENV_NAME}-${BUILD_NUMBER}"
-else
-    ENV_NAME="${BASE_ENV_NAME}-$$"
+    ~/anaconda3/bin/conda create \
+        -y \
+        --name "$ENV_NAME" \
+        python="$PYTHON_VERSION"
 fi
-
-echo "Creating isolated Conda environment: $ENV_NAME"
-
-~/anaconda3/bin/conda create \
-    -y \
-    --name "$ENV_NAME" \
-    python="$PYTHON_VERSION"
-
-cleanup()
-{
-    echo "Removing isolated Conda environment: $ENV_NAME"
-
-    set +e
-    source ~/anaconda3/bin/deactivate
-    ~/anaconda3/bin/conda env remove --name "$ENV_NAME" --yes
-    set -e
-}
-
-trap cleanup EXIT
 
 echo "Activating Conda environment: $ENV_NAME"
 
@@ -49,33 +27,52 @@ set -x
 python --version
 python -m pip --version
 
+DEPENDENCY_DIR="${WORKSPACE:-$(pwd)}/.python-deps/${ENV_NAME}"
+
+echo "Using pipeline dependency directory: $DEPENDENCY_DIR"
+
+rm -rf "$DEPENDENCY_DIR"
+mkdir -p "$DEPENDENCY_DIR"
+
 for req_file in $REQUIREMENTS
 do
     matches=$(find . -type f -iname "$req_file")
 
-    if [[ -n "$matches" ]]
+    if [[ -z "$matches" ]]
     then
-        while IFS= read -r requirements_file
-        do
-            echo "Installing requirements from $requirements_file"
-
-            python -m pip install \
-                -i "https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple" \
-                --trusted-host repo.platform.aws.hhsoig.gov \
-                --no-color \
-                -r "$requirements_file"
-
-        done <<< "$matches"
-    else
         echo "No matching requirements file found for: $req_file"
+        continue
     fi
+
+    while IFS= read -r requirements_file
+    do
+        echo "Installing requirements from $requirements_file"
+
+        python -m pip install \
+            --target "$DEPENDENCY_DIR" \
+            --upgrade \
+            --no-cache-dir \
+            -i "https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple" \
+            --trusted-host repo.platform.aws.hhsoig.gov \
+            --no-color \
+            -r "$requirements_file"
+
+    done <<< "$matches"
 done
 
+export PYTHONPATH="$DEPENDENCY_DIR${PYTHONPATH:+:$PYTHONPATH}"
+export PATH="$DEPENDENCY_DIR/bin:$PATH"
 
-##########################################
-the reason why we had the issue is because we have one conda environment that is shared across all other pipelines and 
-each pipeline has different conda environment with different requirement.txt with different versions
-requirements.txt example is moto environment in the imac-jte-libraries we have moto 4.0.1 and sie-feature-flag repo
-is using the moto 5.0.5 so in a situation like this muliple pipeline running at same time with different 
-moto version as an example, i want to be able to find a fix so the pipeline does not break based on different
-version of packages being used.
+echo "PYTHONPATH=$PYTHONPATH"
+
+python -c '
+import sys
+print("Python executable:", sys.executable)
+print("Dependency search paths:")
+for path in sys.path:
+    print(path)
+'
+
+python -m pip check
+
+#######################################
