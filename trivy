@@ -86,4 +86,10 @@ bash-5.1$ aws s3api get-bucket-tagging \
   --bucket jenkins-binaries-213141505949
 
 ######################################
+1$ aws s3api get-bucket-lifecycle-configuration \
+  --bucket jenkins-binaries-213141505949
+
+aws: [ERROR]: An error occurred (NoSuchLifecycleConfiguration) when calling the GetBucketLifecycleConfiguration operation: The lifecycle configuration does not exist
+
+###############################
 
