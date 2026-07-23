@@ -1,5 +1,5 @@
 
-jenkins-binaries-213141505949
+bucket name = jenkins-binaries-213141505949
 AWS Region
 US East (N. Virginia) us-east-1
 
@@ -7,15 +7,9 @@ arn:aws:s3:::jenkins-binaries-213141505949
 
 User-defined tags (16) Info
 
-Delete
 Add new tag
 
-1
-2
-
-Key
-	
-Value - optional
+Key                   Value - optional
 
 ApplicationName
 
@@ -29,8 +23,7 @@ CreatedBy
 
 CreatedOn
 
-Environment 
-Dev
+Environment                    = Dev
 Opt In
 
 Owner
@@ -48,3 +41,27 @@ Acceptance:
 s3 bucket backfilled in Terraform
 versioning enabled
 investigate if lifecycle can be use in conjunction with versioning
+
+#####################
+aws sts get-caller-identity
+
+aws s3api get-bucket-location \
+  --bucket jenkins-binaries-213141505949
+
+aws s3api get-bucket-tagging \
+  --bucket jenkins-binaries-213141505949
+
+aws s3api get-bucket-versioning \
+  --bucket jenkins-binaries-213141505949
+
+aws s3api get-bucket-lifecycle-configuration \
+  --bucket jenkins-binaries-213141505949
+
+###############################
+aws s3api list-objects-v2 \
+  --bucket jenkins-binaries-213141505949 \
+  --query 'Contents[].{Key:Key,Size:Size,LastModified:LastModified}' \
+  --output table
+
+#####################
+
