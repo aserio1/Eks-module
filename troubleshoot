@@ -1,34 +1,151 @@
-comments
-################
-Chindris, Cosmina (OIG/OMP) (CTR)
-Sidi Kemvo, Claudio (OIG/OMP) (CTR) can u please review Aserio's PR https://git.aws.hhsoig.gov/CDO/imac-jte-libraries/pull/354/files - I looked into what --target does  - and it seems it just install…
-Joseph, Aseriobiome V (OIG/OMP) (CTR) this fix will stop the issue, but for a true long-term fix I'd push it one step further to a per-run venv plus a cleanup of the already corrupted shared env.
- 
-otherwise you've moved the packages out of the shared env while leaving the shared env broken.
- 
-Sidi Kemvo, Claudio (OIG/OMP) (CTR) per run venv is slow - that's why Chris implemented the shared env if u recall
- 
-since these corruptions don't happen often - I would go with the pre-check script I shared above
+#!/usr/bin/env bash
 
+set -e
 
-#################CODE ###########
-# Pre-flight: catch a corrupted env before the real install runs
-if ! pip check > /dev/null 2>&1; then
-    echo "pip check failed - env has broken/inconsistent packages, auto-healing"
-
-    # Identify exactly which packages pip check flagged, then force-reinstall
-    # just those, rather than blowing away the whole env
-    BROKEN_PKGS=$(pip check 2>&1 | grep -oP "^\K[a-zA-Z0-9._-]+(?= )" | sort -u)
-
-    if [ -n "${BROKEN_PKGS}" ]; then
-        echo "Reinstalling broken packages: ${BROKEN_PKGS}"
-        pip install --force-reinstall --no-deps ${BROKEN_PKGS}
-    fi
-
-    # Re-check; if still broken, something more serious is going on
-    if ! pip check > /dev/null 2>&1; then
-        echo "WARNING: pip check still failing after targeted reinstall, falling back to full reinstall"
-        pip install --force-reinstall --no-deps -r requirements.txt
-    fi
+if ! command -v ~/anaconda3/bin/conda &> /dev/null
+then
+    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
+    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
 fi
- 
+
+if ! ~/anaconda3/bin/conda info --envs |
+    awk '{print $1}' |
+    grep -Fxq "$ENV_NAME"
+then
+    ~/anaconda3/bin/conda create \
+        -y \
+        --name "$ENV_NAME" \
+        python="$PYTHON_VERSION"
+fi
+
+echo "Activating Conda environment: $ENV_NAME"
+
+set +x
+source ~/anaconda3/bin/activate "$ENV_NAME"
+set -x
+
+python --version
+python -m pip --version
+
+PIP_INDEX_URL="https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple"
+PIP_TRUSTED_HOST="repo.platform.aws.hhsoig.gov"
+
+echo "Running pre-flight validation of the shared Conda environment"
+
+PIP_CHECK_OUTPUT=$(python -m pip check 2>&1 || true)
+
+if [[ "$PIP_CHECK_OUTPUT" != "No broken requirements found." ]]
+then
+    echo "pip check found broken or inconsistent packages:"
+    echo "$PIP_CHECK_OUTPUT"
+    echo "Attempting targeted repair"
+
+    BROKEN_PKGS=$(
+        echo "$PIP_CHECK_OUTPUT" |
+        awk '
+            / has requirement / {
+                print $1
+            }
+
+            / requires .* which is not installed/ {
+                print $1
+            }
+        ' |
+        sort -u
+    )
+
+    if [[ -n "$BROKEN_PKGS" ]]
+    then
+        echo "Reinstalling packages reported by pip check:"
+        echo "$BROKEN_PKGS"
+
+        while IFS= read -r package
+        do
+            [[ -z "$package" ]] && continue
+
+            echo "Force-reinstalling package: $package"
+
+            python -m pip install \
+                --force-reinstall \
+                --no-deps \
+                --no-cache-dir \
+                -i "$PIP_INDEX_URL" \
+                --trusted-host "$PIP_TRUSTED_HOST" \
+                --no-color \
+                "$package"
+
+        done <<< "$BROKEN_PKGS"
+    fi
+
+    echo "Rechecking the shared Conda environment"
+
+    if ! python -m pip check
+    then
+        echo "WARNING: pip check still reports dependency problems"
+        echo "Repository requirements will be force-reinstalled"
+        FORCE_REQUIREMENTS_REINSTALL=true
+    else
+        echo "Shared Conda environment repair completed successfully"
+        FORCE_REQUIREMENTS_REINSTALL=false
+    fi
+else
+    echo "Shared Conda environment passed pip check"
+    FORCE_REQUIREMENTS_REINSTALL=false
+fi
+
+for req_file in $REQUIREMENTS
+do
+    matches=$(find . -type f -iname "$req_file")
+
+    if [[ -z "$matches" ]]
+    then
+        echo "No matching requirements file found for: $req_file"
+        continue
+    fi
+
+    while IFS= read -r requirements_file
+    do
+        [[ -z "$requirements_file" ]] && continue
+
+        echo "Installing requirements from $requirements_file"
+
+        if [[ "$FORCE_REQUIREMENTS_REINSTALL" == "true" ]]
+        then
+            python -m pip install \
+                --force-reinstall \
+                --no-cache-dir \
+                -i "$PIP_INDEX_URL" \
+                --trusted-host "$PIP_TRUSTED_HOST" \
+                --no-color \
+                -r "$requirements_file"
+        else
+            if ! python -m pip install \
+                --no-cache-dir \
+                -i "$PIP_INDEX_URL" \
+                --trusted-host "$PIP_TRUSTED_HOST" \
+                --no-color \
+                -r "$requirements_file"
+            then
+                echo "Normal requirements installation failed"
+                echo "Retrying with force-reinstall"
+
+                python -m pip install \
+                    --force-reinstall \
+                    --no-cache-dir \
+                    -i "$PIP_INDEX_URL" \
+                    --trusted-host "$PIP_TRUSTED_HOST" \
+                    --no-color \
+                    -r "$requirements_file"
+            fi
+        fi
+
+    done <<< "$matches"
+done
+
+echo "Running final dependency validation"
+
+if ! python -m pip check
+then
+    echo "WARNING: The shared Conda environment still contains dependency conflicts"
+    echo "The installed requirements from different repositories may not be mutually compatible"
+fi
