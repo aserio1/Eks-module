@@ -1,3 +1,73 @@
+ [Pipeline] { (Py Setup)
+15:44:46  [Pipeline] node
+15:44:46  Running on sie in /home/jenkins/workspace/ghts_Explorer_Query_Builder_main
+15:44:46  [Pipeline] {
+15:44:47  [Pipeline] ws
+15:44:47  Running in /home/jenkins/workspace/Swift Insights Explorer/Query Builder/main/185
+15:44:47  [Pipeline] {
+15:44:47  [Pipeline] echo
+15:44:47  Installing Build Tool
+15:44:47  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named env_name (to a value of type String) which could lead to memory leaks or other issues.
+15:44:47  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named requirements (to a value of type String) which could lead to memory leaks or other issues.
+15:44:47  [Pipeline] withEnv
+15:44:47  [Pipeline] {
+15:44:47  [Pipeline] sh
+15:44:49  Activating Conda environment: python313
+15:44:49  + python --version
+15:44:49  Python 3.13.12
+15:44:49  + python -m pip --version
+15:44:50  pip 26.0.1 from /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages/pip (python 3.13)
+15:44:50  + PIP_INDEX_URL=https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
+15:44:50  + PIP_TRUSTED_HOST=repo.platform.aws.hhsoig.gov
+15:44:50  + echo 'Running pre-flight validation of the shared Conda environment'
+15:44:50  Running pre-flight validation of the shared Conda environment
+15:44:50  ++ python -m pip check
+15:44:50  + PIP_CHECK_OUTPUT='No broken requirements found.'
+15:44:50  + [[ No broken requirements found. != \N\o\ \b\r\o\k\e\n\ \r\e\q\u\i\r\e\m\e\n\t\s\ \f\o\u\n\d\. ]]
+15:44:50  + echo 'Shared Conda environment passed pip check'
+15:44:50  Shared Conda environment passed pip check
+15:44:50  + FORCE_REQUIREMENTS_REINSTALL=false
+15:44:50  + for req_file in $REQUIREMENTS
+15:44:50  ++ find . -type f -iname requirements.txt
+15:44:51  + matches='./src/functions/query_builder/requirements.txt
+15:44:51  ./src/functions/query_retrieval/requirements.txt
+15:44:51  ./infrastructure/docker/query_builder/requirements.txt'
+15:44:51  + [[ -z ./src/functions/query_builder/requirements.txt
+15:44:51  ./src/functions/query_retrieval/requirements.txt
+15:44:51  ./infrastructure/docker/query_builder/requirements.txt ]]
+15:44:51  + IFS=
+15:44:51  + read -r requirements_file
+15:44:51  + [[ -z ./src/functions/query_builder/requirements.txt ]]
+15:44:51  + echo 'Installing requirements from ./src/functions/query_builder/requirements.txt'
+15:44:51  Installing requirements from ./src/functions/query_builder/requirements.txt
+15:44:51  + [[ false == \t\r\u\e ]]
+15:44:51  + python -m pip install --no-cache-dir -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color -r ./src/functions/query_builder/requirements.txt
+15:44:51  Looking in indexes: https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
+15:44:53  Collecting boto3==1.35.63 (from -r ./src/functions/query_builder/requirements.txt (line 1))
+15:44:53    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/boto3/1.35.63/boto3-1.35.63-py3-none-any.whl (139 kB)
+15:44:53  Requirement already satisfied: cffi==2.0.0 in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from -r ./src/functions/query_builder/requirements.txt (line 2)) (2.0.0)
+15:44:53  Requirement already satisfied: cryptography>=46.0.5 in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from -r ./src/functions/query_builder/requirements.txt (line 3)) (49.0.0)
+15:44:53  Collecting flake8==7.0.0 (from -r ./src/functions/query_builder/requirements.txt (line 4))
+15:45:01  ERROR: Could not install packages due to an OSError: HTTPSConnectionPool(host='repo.platform.aws.hhsoig.gov', port=443): Max retries exceeded with url: /repository/pypi-all/packages/flake8/7.0.0/flake8-7.0.0-py2.py3-none-any.whl (Caused by ResponseError('too many 500 error responses'))
+15:45:01  
+15:45:01  + echo 'Normal requirements installation failed'
+15:45:01  Normal requirements installation failed
+15:45:01  + echo 'Retrying with force-reinstall'
+15:45:01  Retrying with force-reinstall
+15:45:01  + python -m pip install --force-reinstall --no-cache-dir -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color -r ./src/functions/query_builder/requirements.txt
+15:45:01  Looking in indexes: https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
+15:45:02  Collecting boto3==1.35.63 (from -r ./src/functions/query_builder/requirements.txt (line 1))
+15:45:02    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/boto3/1.35.63/boto3-1.35.63-py3-none-any.whl (139 kB)
+15:45:03  Collecting cffi==2.0.0 (from -r ./src/functions/query_builder/requirements.txt (line 2))
+15:45:03    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/cffi/2.0.0/cffi-2.0.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (219 kB)
+15:45:04  Collecting cryptography>=46.0.5 (from -r ./src/functions/query_builder/requirements.txt (line 3))
+15:45:04    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/cryptography/49.0.0/cryptography-49.0.0-cp311-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
+15:45:04       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 63.1 MB/s  0:00:00
+15:45:04  Collecting flake8==7.0.0 (from -r ./src/functions/query_builder/requirements.txt (line 4))
+15:45:12  ERROR: Could not install packages due to an OSError: HTTPSConnectionPool(host='repo.platform.aws.hhsoig.gov', port=443): Max retries exceeded with url: /repository/pypi-all/packages/flake8/7.0.0/flake8-7.0.0-py2.py3-none-any.whl (Caused by ResponseError('too many 500 error responses'))
+
+
+############
 #!/usr/bin/env bash
 
 set -e
@@ -149,3 +219,5 @@ then
     echo "WARNING: The shared Conda environment still contains dependency conflicts"
     echo "The installed requirements from different repositories may not be mutually compatible"
 fi
+
+
