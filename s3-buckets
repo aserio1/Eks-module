@@ -104,20 +104,28 @@ aws s3api list-objects-v2 \
 
 
 ##############ASKED
-bash-5.2$
-bash-5.2$
-bash-5.2$
 bash-5.2$ export AWS_PROFILE=dev
+bash-5.2$ terraform init -reconfigure
+Initializing the backend...
+bucket
+  The name of the S3 bucket
+
+  Enter a value: ^C
+
+Initializing modules...
+╷
+│ Error: Module installation was canceled by an interrupt signal.
+│
+│
+╵
 bash-5.2$ aws sts get-caller-identity
 {
     "UserId": "AROATDIBZI6OSLKBGELG6:botocore-session-1785174011",
     "Account": "213141505949",
     "Arn": "arn:aws:sts::213141505949:assumed-role/prod_jenkins_role_imac_dev/botocore-session-1785174011"
 }
-bash-5.2$ terraform init
+bash-5.2$ terraform init -reconfigure
 Initializing the backend...
 bucket
   The name of the S3 bucket
 
-  Enter a value: Terminated
-sh-5.2$
