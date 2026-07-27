@@ -100,3 +100,24 @@ aws s3api list-objects-v2 \
   --bucket jenkins-binaries-213141505949 \
   --query 'Contents[].{Key:Key,Size:Size,LastModified:LastModified}' \
   --output table
+
+
+
+##############ASKED
+bash-5.2$
+bash-5.2$
+bash-5.2$
+bash-5.2$ export AWS_PROFILE=dev
+bash-5.2$ aws sts get-caller-identity
+{
+    "UserId": "AROATDIBZI6OSLKBGELG6:botocore-session-1785174011",
+    "Account": "213141505949",
+    "Arn": "arn:aws:sts::213141505949:assumed-role/prod_jenkins_role_imac_dev/botocore-session-1785174011"
+}
+bash-5.2$ terraform init
+Initializing the backend...
+bucket
+  The name of the S3 bucket
+
+  Enter a value: Terminated
+sh-5.2$
