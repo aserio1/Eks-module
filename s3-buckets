@@ -129,3 +129,8 @@ Initializing the backend...
 bucket
   The name of the S3 bucket
 
+
+aws s3api list-buckets \
+  --query 'Buckets[?contains(Name, `tfstate`) || contains(Name, `tf-state`) || contains(Name, `terraform`)].Name' \
+  --output table
+
