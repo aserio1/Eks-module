@@ -251,3 +251,81 @@ provider "aws" {
     }
   }
 }
+###########
+LAMBDA ISSUE
+$$####################
+394a]
+╷
+│ Error: reading Lambda Function (dev-imac-scale-up-utility-agent-asg) latest version: operation error Lambda: ListVersionsByFunction, https response error StatusCode: 403, RequestID: 669d2dcf-be40-4531-ab36-af8bffc9042e, api error AccessDeniedException: User: arn:aws:sts::213141505949:assumed-role/prod_jenkins_agent_role_imac/i-0d8246019c6b5f5d4 is not authorized to perform: lambda:ListVersionsByFunction on resource: arn:aws:lambda:us-east-1:213141505949:function:dev-imac-scale-up-utility-agent-asg because no identity-based policy allows the lambda:ListVersionsByFunction action
+│
+│   with data.aws_lambda_function.utility_lambda,
+│   on /home/jenkins/imac-jenkins/infrastructure/terraform/monitoring.tf line 10, in data "aws_lambda_function" "utility_lambda":
+│   10: data "aws_lambda_function" "utility_lambda" {
+
+######CODE
+monitoring.tf 
+###############
+# Data source to find the agent ASG
+data "aws_autoscaling_groups" "monitored_agent" {
+  filter {
+    name   = "tag:Name"
+    values = ["${var.prefix}-Jenkins Agent - ${var.monitored_agent}"]
+  }
+}
+
+# utility lambda
+data "aws_lambda_function" "utility_lambda" {
+  function_name = "${var.prefix}-imac-scale-up-utility-agent-asg"
+}
+
+# EC2 Instance Status Check Alarm for Utility Agent
+resource "aws_cloudwatch_metric_alarm" "asg_capacity_alarm" {
+  alarm_name          = "${var.prefix}-${var.monitored_agent}-jenkins-agent-asg-zero-capacity-alarm"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = "3"
+  metric_name         = "GroupDesiredCapacity"
+  namespace           = "AWS/AutoScaling"
+  period              = "60"
+  statistic           = "Minimum"
+  threshold           = "1"
+  alarm_description   = "Alert when the ASG desired capacity is 0"
+  alarm_actions       = [aws_sns_topic.jenkins_alerts.arn, data.aws_lambda_function.utility_lambda.arn]
+  ok_actions          = [aws_sns_topic.jenkins_alerts.arn]
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    AutoScalingGroupName = length(data.aws_autoscaling_groups.monitored_agent.names) == 1 ? data.aws_autoscaling_groups.monitored_agent.names[0] : "No unique ASG found"
+  }
+
+  tags = merge(local.tags, {
+    Purpose = "Jenkins agent monitoring"
+  })
+
+  lifecycle {
+    ignore_changes = [dimensions]
+  }
+}
+
+# EFS size >=200 GB Alarm
+resource "aws_cloudwatch_metric_alarm" "efs_storagebytes_high" {
+  alarm_name          = "efs-${module.base_infrastructure.efs_file_system_id}-storagebytes-${var.efs_threshold_gib}GiB-daily"
+  alarm_description   = "Alarm when EFS size >= ${var.efs_threshold_gib} GiB (checked daily, using Maximum)"
+  namespace           = "AWS/EFS"
+  metric_name         = "StorageBytes"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = local.efs_threshold_bytes
+
+  # Check once per day
+  period             = 86400     # 24 hours in seconds
+  statistic          = "Maximum" # Trigger if any sample during the day exceeds threshold
+  evaluation_periods = 1
+
+  dimensions = {
+    FileSystemId = module.base_infrastructure.efs_file_system_id
+    StorageClass = "Total"
+  }
+
+  treat_missing_data = "notBreaching"
+  alarm_actions      = [aws_sns_topic.jenkins_alerts.arn]
+  ok_actions         = [aws_sns_topic.jenkins_alerts.arn]
+}
