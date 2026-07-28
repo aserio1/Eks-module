@@ -106,3 +106,63 @@ aws s3api list-objects-v2 \
 ##############ASKED
 terraform import aws_s3_bucket.jenkins_binaries jenkins-binaries-213141505949
 
+#########################################
+############PROVIDER ##############
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.9.0"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13.1"
+    }
+  }
+  backend "s3" {
+    key     = "jenkins.tfstate"
+    encrypt = true
+  }
+
+  required_version = ">= 1.2.0"
+}
+
+provider "aws" {
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      BusinessUnit    = "cdo"
+      Project         = "imac"
+      Environment     = var.prefix
+      FISMABoundary   = "dsgss"
+      ApplicationName = "IMAC Jenkins"
+      OwnerContact    = "imac@oig.hhs.gov"
+      CreatedBy       = "terraform"
+      Created         = local.created_timestamp
+      Owner           = "Katie Rose"
+      Version         = "1.0"
+    }
+  }
+}
+#################################
+bash-5.2$ terraform init
+Initializing the backend...
+bucket
+  The name of the S3 bucket
+
+  Enter a value: jenkins.tfstate
+
+
+Initializing modules...
+
+╷
+│ Error: Missing region value
+│
+│   on providers.tf line 12, in terraform:
+│   12:   backend "s3" {
+│
+│ The "region" attribute or the "AWS_REGION" or "AWS_DEFAULT_REGION" environment variables must be set.
+╵
+bash-5.2$
+
