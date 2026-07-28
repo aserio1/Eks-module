@@ -193,4 +193,9 @@ jenkins_email_subscriptions = [
   }
 ]
 
+######################
+terraform import \
+  -var-file="dev.tfvars" \
+  aws_s3_bucket.jenkins_binaries \
+  jenkins-binaries-213141505949
 
