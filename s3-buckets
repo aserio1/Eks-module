@@ -199,3 +199,55 @@ terraform import \
   aws_s3_bucket.jenkins_binaries \
   jenkins-binaries-213141505949
 
+####################
+commands will detect it and remind you to do so if necessary.
+bash-5.2$ terraform import \
+  -var-file="dev.tfvars" \
+  aws_s3_bucket.jenkins_binaries \
+  jenkins-binaries-213141505949
+╷
+│ Error: Invalid provider configuration
+│
+│   on /home/jenkins/imac-jenkins/infrastructure/terraform/providers.tf line 20:
+│   20: provider "aws" {
+│
+│ The configuration for provider["registry.terraform.io/hashicorp/aws"] depends on values that cannot be determined until apply.
+╵
+########################
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.9.0"
+    }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.13.1"
+    }
+  }
+  backend "s3" {
+    key     = "jenkins.tfstate"
+    encrypt = true
+  }
+
+  required_version = ">= 1.2.0"
+}
+
+provider "aws" {
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      BusinessUnit    = "cdo"
+      Project         = "imac"
+      Environment     = var.prefix
+      FISMABoundary   = "dsgss"
+      ApplicationName = "IMAC Jenkins"
+      OwnerContact    = "imac@oig.hhs.gov"
+      CreatedBy       = "terraform"
+      Created         = local.created_timestamp
+      Owner           = "Katie Rose"
+      Version         = "1.0"
+    }
+  }
+}
