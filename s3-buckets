@@ -325,6 +325,25 @@ resource "aws_cloudwatch_metric_alarm" "efs_storagebytes_high" {
     StorageClass = "Total"
   }
 
+
+
+####################
+
+
+  default_tags {
+    tags = {
+      BusinessUnit    = "cdo"
+      Project         = "imac"
+      Environment     = var.prefix
+      FISMABoundary   = "dsgss"
+      ApplicationName = "IMAC Jenkins"
+      OwnerContact    = "imac@oig.hhs.gov"
+      CreatedBy       = "terraform"
+      Created         = local.created_timestamp
+      Owner           = "Katie Rose"
+      Version         = "1.0"
+    }
+  }
   treat_missing_data = "notBreaching"
   alarm_actions      = [aws_sns_topic.jenkins_alerts.arn]
   ok_actions         = [aws_sns_topic.jenkins_alerts.arn]
