@@ -1,159 +1,32 @@
-  # aws_s3_bucket.jenkins_binaries will be created
-15:56:58    + resource "aws_s3_bucket" "jenkins_binaries" {
-15:56:58        + acceleration_status         = (known after apply)
-15:56:58        + acl                         = (known after apply)
-15:56:58        + arn                         = (known after apply)
-15:56:58        + bucket                      = "jenkins-binaries-213141505949"
-15:56:58        + bucket_domain_name          = (known after apply)
-15:56:58        + bucket_prefix               = (known after apply)
-15:56:58        + bucket_region               = (known after apply)
-15:56:58        + bucket_regional_domain_name = (known after apply)
-15:56:58        + force_destroy               = false
-15:56:58        + hosted_zone_id              = (known after apply)
-15:56:58        + id                          = (known after apply)
-15:56:58        + object_lock_enabled         = (known after apply)
-15:56:58        + policy                      = (known after apply)
-15:56:58        + region                      = "us-east-1"
-15:56:58        + request_payer               = (known after apply)
-15:56:58        + tags                        = {
-15:56:58            + "ApplicationName"         = null
-15:56:58            + "BusinessUnit"            = null
-15:56:58            + "Cluster"                 = null
-15:56:58            + "Compliance"              = null
-15:56:58            + "CreatedBy"               = null
-15:56:58            + "CreatedOn"               = null
-15:56:58            + "Environment "            = "Dev"
-15:56:58            + "Opt In"                  = null
-15:56:58            + "Owner"                   = null
-15:56:58            + "Project"                 = null
-15:56:58            + "ResourceName"            = null
-15:56:58            + "ResourceRole"            = null
-15:56:58            + "ResponsibleGroup"        = null
-15:56:58            + "Security"                = null
-15:56:58            + "SecurityCategorization " = null
-15:56:58            + "Version"                 = null
-15:56:58          }
-15:56:58        + tags_all                    = (known after apply)
-15:56:58        + website_domain              = (known after apply)
-15:56:58        + website_endpoint            = (known after apply)
-15:56:58  
-15:56:58        + cors_rule (known after apply)
-15:56:58  
-15:56:58        + grant (known after apply)
-15:56:58  
-15:56:58        + lifecycle_rule (known after apply)
-15:56:58  
-15:56:58        + logging (known after apply)
-15:56:58  
-15:56:58        + object_lock_configuration (known after apply)
-15:56:58  
-15:56:58        + replication_configuration (known after apply)
-15:56:58  
-15:56:58        + server_side_encryption_configuration (known after apply)
-15:56:58  
-15:56:58        + versioning (known after apply)
-15:56:58  
-15:56:58        + website (known after apply)
-15:56:58      }
-15:56:58  
-15:56:58    # aws_s3_bucket_lifecycle_configuration.jenkins_binaries will be created
-15:56:58    + resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
-15:56:58        + bucket                                 = (known after apply)
-15:56:58        + expected_bucket_owner                  = (known after apply)
-15:56:58        + id                                     = (known after apply)
-15:56:58        + region                                 = "us-east-1"
-15:56:58        + transition_default_minimum_object_size = "all_storage_classes_128K"
-15:56:58  
-15:56:58        + rule {
-15:56:58            + id     = "retain-current-and-previous-version"
-15:56:58            + status = "Enabled"
-15:56:58              # (1 unchanged attribute hidden)
-15:56:58  
-15:56:58            + filter {
-15:56:58                  # (1 unchanged attribute hidden)
-15:56:58              }
-15:56:58  
-15:56:58            + noncurrent_version_expiration {
-15:56:58                + newer_noncurrent_versions = 1
-15:56:58                + noncurrent_days           = 90
-15:56:58              }
-15:56:58          }
-15:56:58        + rule {
-15:56:58            + id     = "abort-incomplete-multipart-uploads"
-15:56:58            + status = "Enabled"
-15:56:58              # (1 unchanged attribute hidden)
-15:56:58  
-15:56:58            + abort_incomplete_multipart_upload {
-15:56:58                + days_after_initiation = 7
-15:56:58              }
-15:56:58  
-15:56:58            + filter {
-15:56:58                  # (1 unchanged attribute hidden)
-15:56:58              }
-15:56:58          }
-15:56:58      }
-15:56:58  
-15:56:58    # aws_s3_bucket_versioning.jenkins_binaries will be created
-15:56:58    + resource "aws_s3_bucket_versioning" "jenkins_binaries" {
-15:56:58        + bucket = (known after apply)
-15:56:58        + id     = (known after apply)
-15:56:58        + region = "us-east-1"
-15:56:58  
-15:56:58        + versioning_configuration {
-15:56:58            + mfa_delete = (known after apply)
-15:56:58            + status     = "Enabled"
-15:56:58          }
-15:56:58      }
-15:56:58  
-15:56:58  Plan: 3 to add, 0 to change, 0 to destroy.
+aws s3 cp \
+  s3://imac-dev-tf-state-hhsoig/jenkins.tfstate \
+  /tmp/jenkins.tfstate
 
 
-######################
- Error: creating S3 Bucket (jenkins-binaries-213141505949): BucketAlreadyExists
-15:58:09  
-15:58:09    with aws_s3_bucket.jenkins_binaries,
-15:58:09    on s3.tf line 1, in resource "aws_s3_bucket" "jenkins_binaries":
-15:58:09     1: resource "aws_s3_bucket" "jenkins_binaries" {
-15:58:09  
+jq -r '
+  .resources[]
+  | select(.type == "aws_s3_bucket" and .name == "jenkins_binaries")
+  | .instances[].attributes.id
+' /tmp/jenkins.tfstate
 
-#######################
-bash-5.2$ terraform state show aws_s3_bucket.jenkins_binaries
-# aws_s3_bucket.jenkins_binaries:
-resource "aws_s3_bucket" "jenkins_binaries" {
-    acceleration_status         = null
-    arn                         = "arn:aws:s3:::jenkins-binaries-213141505949"
-    bucket                      = "jenkins-binaries-213141505949"
-    bucket_domain_name          = "jenkins-binaries-213141505949.s3.amazonaws.com"
-    bucket_prefix               = null
-    bucket_region               = "us-east-1"
-    bucket_regional_domain_name = "jenkins-binaries-213141505949.s3.us-east-1.amazonaws.com"
-    force_destroy               = false
-    hosted_zone_id              = "Z3AQBSTGFYJSTF"
-    id                          = "jenkins-binaries-213141505949"
-    object_lock_enabled         = false
-    policy                      = null
-    region                      = "us-east-1"
-    request_payer               = "BucketOwner"
-############
-bash-5.2$ terraform state list | grep jenkins
-data.aws_s3_bucket.jenkins_binaries
-aws_s3_bucket.jenkins_binaries
-aws_s3_bucket_versioning.jenkins_binaries
+export AWS_PROFILE=dev
 
+terraform init -reconfigure \
+  -backend-config="bucket=imac-dev-tf-state-hhsoig" \
+  -backend-config="key=jenkins.tfstate" \
+  -backend-config="region=us-east-1" \
+  -backend-config="dynamodb_table=imac-dev-tf-lock-hhsoig" \
+  -backend-config="encrypt=true"
 
-bash-5.2$ terraform state show aws_s3_bucket.jenkins_binaries
-# aws_s3_bucket.jenkins_binaries:
-resource "aws_s3_bucket" "jenkins_binaries" {
-    acceleration_status         = null
-    arn                         = "arn:aws:s3:::jenkins-binaries-213141505949"
-    bucket                      = "jenkins-binaries-213141505949"
-    bucket_domain_name          = "jenkins-binaries-213141505949.s3.amazonaws.com"
-    bucket_prefix               = null
-    bucket_region               = "us-east-1"
-    bucket_regional_domain_name = "jenkins-binaries-213141505949.s3.us-east-1.amazonaws.com"
-    force_destroy               = false
-    hosted_zone_id              = "Z3AQBSTGFYJSTF"
-    id                          = "jenkins-binaries-213141505949"
-    object_lock_enabled         = false
-    policy                      = null
-    region                      = "us-east-1"
+terraform state list | grep aws_s3_bucket.jenkins_binaries
+
+terraform import \
+  -var-file="dev.tfvars" \
+  aws_s3_bucket.jenkins_binaries \
+  jenkins-binaries-213141505949
+
+terraform plan \
+  -var-file="dev.tfvars" \
+  -target=aws_s3_bucket.jenkins_binaries \
+  -target=aws_s3_bucket_versioning.jenkins_binaries \
+  -target=aws_s3_bucket_lifecycle_configuration.jenkins_binaries
