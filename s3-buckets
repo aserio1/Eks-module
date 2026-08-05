@@ -351,6 +351,7 @@ resource "aws_cloudwatch_metric_alarm" "efs_storagebytes_high" {
 
 
 ##########
+################NEW ###########
 resource "aws_s3_bucket" "jenkins_binaries" {
   bucket = "jenkins-binaries-213141505949"
 
@@ -394,14 +395,14 @@ resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
   ]
 
   rule {
-    id     = "cleanup-noncurrent-versions"
+    id     = "retain-current-and-previous-version"
     status = "Enabled"
 
     filter {}
 
     noncurrent_version_expiration {
       noncurrent_days           = 90
-      newer_noncurrent_versions = 3
+      newer_noncurrent_versions = 1
     }
   }
 
@@ -416,6 +417,3 @@ resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
     }
   }
 }
-
-#######
-probably we need just the last and prev version at all times
