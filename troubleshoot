@@ -115,3 +115,10 @@
 15:58:09    on s3.tf line 1, in resource "aws_s3_bucket" "jenkins_binaries":
 15:58:09     1: resource "aws_s3_bucket" "jenkins_binaries" {
 15:58:09  
+
+
+############
+bash-5.2$ terraform state list | grep jenkins
+data.aws_s3_bucket.jenkins_binaries
+aws_s3_bucket.jenkins_binaries
+aws_s3_bucket_versioning.jenkins_binaries
