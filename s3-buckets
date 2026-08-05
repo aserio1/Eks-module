@@ -417,3 +417,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
     }
   }
 }
+#######################
+##########################################
+####### FIX ########################
+
+terraform init -no-color -backend-config region=us-east-1 -backend-config bucket=imac-dev-tf-state-hhsoig -backend-config dynamodb_table=imac-dev-tf-lock-hhsoig
+terraform init -no-color -backend-config region=us-east-1 -backend-config bucket=imac-prod-tf-state-hhsoig -backend-config dynamodb_table=imac-dev-tf-lock-hhsoig
+
+terraform init -reconfigure \
+  -backend-config="bucket=imac-prod-tf-state-hhsoig" \
+  -backend-config="key=jenkins/jenkins.tfstate" \
+  -backend-config="region=us-east-1" \
+  -backend-config="encrypt=true"
+
+
+i want to run aws assume role legacy_dev
