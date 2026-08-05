@@ -420,15 +420,38 @@ resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
 #######################
 ##########################################
 ####### FIX ########################
+terraform init -reconfigure \
+  -backend-config="bucket=imac-dev-tf-state-hhsoig" \
+  -backend-config="key=jenkins/jenkins.tfstate" \
+  -backend-config="region=us-east-1" \
+  -backend-config="dynamodb_table=imac-dev-tf-lock-hhsoig" \
+  -backend-config="encrypt=true"
 
-terraform init -no-color -backend-config region=us-east-1 -backend-config bucket=imac-dev-tf-state-hhsoig -backend-config dynamodb_table=imac-dev-tf-lock-hhsoig
-terraform init -no-color -backend-config region=us-east-1 -backend-config bucket=imac-prod-tf-state-hhsoig -backend-config dynamodb_table=imac-dev-tf-lock-hhsoig
+terraform import \
+  -var-file="dev.tfvars" \
+  aws_s3_bucket.jenkins_binaries \
+  jenkins-binaries-213141505949
 
+terraform import \
+  -var-file="dev.tfvars" \
+  aws_s3_bucket_lifecycle_configuration.jenkins_binaries \
+  jenkins-binaries-213141505949
+
+
+###
 terraform init -reconfigure \
   -backend-config="bucket=imac-prod-tf-state-hhsoig" \
   -backend-config="key=jenkins/jenkins.tfstate" \
   -backend-config="region=us-east-1" \
+  -backend-config="dynamodb_table=imac-prod-tf-lock-hhsoig" \
   -backend-config="encrypt=true"
 
+terraform import \
+  -var-file="prod.tfvars" \
+  aws_s3_bucket_versioning.jenkins_binaries \
+  jenkins-binaries-213141505949
 
-i want to run aws assume role legacy_dev
+terraform import \
+  -var-file="prod.tfvars" \
+  aws_s3_bucket_lifecycle_configuration.jenkins_binaries \
+  jenkins-binaries-213141505949
