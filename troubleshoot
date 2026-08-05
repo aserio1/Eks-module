@@ -1,223 +1,117 @@
- [Pipeline] { (Py Setup)
-15:44:46  [Pipeline] node
-15:44:46  Running on sie in /home/jenkins/workspace/ghts_Explorer_Query_Builder_main
-15:44:46  [Pipeline] {
-15:44:47  [Pipeline] ws
-15:44:47  Running in /home/jenkins/workspace/Swift Insights Explorer/Query Builder/main/185
-15:44:47  [Pipeline] {
-15:44:47  [Pipeline] echo
-15:44:47  Installing Build Tool
-15:44:47  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named env_name (to a value of type String) which could lead to memory leaks or other issues.
-15:44:47  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named requirements (to a value of type String) which could lead to memory leaks or other issues.
-15:44:47  [Pipeline] withEnv
-15:44:47  [Pipeline] {
-15:44:47  [Pipeline] sh
-15:44:49  Activating Conda environment: python313
-15:44:49  + python --version
-15:44:49  Python 3.13.12
-15:44:49  + python -m pip --version
-15:44:50  pip 26.0.1 from /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages/pip (python 3.13)
-15:44:50  + PIP_INDEX_URL=https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
-15:44:50  + PIP_TRUSTED_HOST=repo.platform.aws.hhsoig.gov
-15:44:50  + echo 'Running pre-flight validation of the shared Conda environment'
-15:44:50  Running pre-flight validation of the shared Conda environment
-15:44:50  ++ python -m pip check
-15:44:50  + PIP_CHECK_OUTPUT='No broken requirements found.'
-15:44:50  + [[ No broken requirements found. != \N\o\ \b\r\o\k\e\n\ \r\e\q\u\i\r\e\m\e\n\t\s\ \f\o\u\n\d\. ]]
-15:44:50  + echo 'Shared Conda environment passed pip check'
-15:44:50  Shared Conda environment passed pip check
-15:44:50  + FORCE_REQUIREMENTS_REINSTALL=false
-15:44:50  + for req_file in $REQUIREMENTS
-15:44:50  ++ find . -type f -iname requirements.txt
-15:44:51  + matches='./src/functions/query_builder/requirements.txt
-15:44:51  ./src/functions/query_retrieval/requirements.txt
-15:44:51  ./infrastructure/docker/query_builder/requirements.txt'
-15:44:51  + [[ -z ./src/functions/query_builder/requirements.txt
-15:44:51  ./src/functions/query_retrieval/requirements.txt
-15:44:51  ./infrastructure/docker/query_builder/requirements.txt ]]
-15:44:51  + IFS=
-15:44:51  + read -r requirements_file
-15:44:51  + [[ -z ./src/functions/query_builder/requirements.txt ]]
-15:44:51  + echo 'Installing requirements from ./src/functions/query_builder/requirements.txt'
-15:44:51  Installing requirements from ./src/functions/query_builder/requirements.txt
-15:44:51  + [[ false == \t\r\u\e ]]
-15:44:51  + python -m pip install --no-cache-dir -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color -r ./src/functions/query_builder/requirements.txt
-15:44:51  Looking in indexes: https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
-15:44:53  Collecting boto3==1.35.63 (from -r ./src/functions/query_builder/requirements.txt (line 1))
-15:44:53    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/boto3/1.35.63/boto3-1.35.63-py3-none-any.whl (139 kB)
-15:44:53  Requirement already satisfied: cffi==2.0.0 in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from -r ./src/functions/query_builder/requirements.txt (line 2)) (2.0.0)
-15:44:53  Requirement already satisfied: cryptography>=46.0.5 in /home/jenkins/anaconda3/envs/python313/lib/python3.13/site-packages (from -r ./src/functions/query_builder/requirements.txt (line 3)) (49.0.0)
-15:44:53  Collecting flake8==7.0.0 (from -r ./src/functions/query_builder/requirements.txt (line 4))
-15:45:01  ERROR: Could not install packages due to an OSError: HTTPSConnectionPool(host='repo.platform.aws.hhsoig.gov', port=443): Max retries exceeded with url: /repository/pypi-all/packages/flake8/7.0.0/flake8-7.0.0-py2.py3-none-any.whl (Caused by ResponseError('too many 500 error responses'))
-15:45:01  
-15:45:01  + echo 'Normal requirements installation failed'
-15:45:01  Normal requirements installation failed
-15:45:01  + echo 'Retrying with force-reinstall'
-15:45:01  Retrying with force-reinstall
-15:45:01  + python -m pip install --force-reinstall --no-cache-dir -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color -r ./src/functions/query_builder/requirements.txt
-15:45:01  Looking in indexes: https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
-15:45:02  Collecting boto3==1.35.63 (from -r ./src/functions/query_builder/requirements.txt (line 1))
-15:45:02    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/boto3/1.35.63/boto3-1.35.63-py3-none-any.whl (139 kB)
-15:45:03  Collecting cffi==2.0.0 (from -r ./src/functions/query_builder/requirements.txt (line 2))
-15:45:03    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/cffi/2.0.0/cffi-2.0.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (219 kB)
-15:45:04  Collecting cryptography>=46.0.5 (from -r ./src/functions/query_builder/requirements.txt (line 3))
-15:45:04    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/cryptography/49.0.0/cryptography-49.0.0-cp311-abi3-manylinux_2_34_x86_64.whl (4.7 MB)
-15:45:04       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 63.1 MB/s  0:00:00
-15:45:04  Collecting flake8==7.0.0 (from -r ./src/functions/query_builder/requirements.txt (line 4))
-15:45:12  ERROR: Could not install packages due to an OSError: HTTPSConnectionPool(host='repo.platform.aws.hhsoig.gov', port=443): Max retries exceeded with url: /repository/pypi-all/packages/flake8/7.0.0/flake8-7.0.0-py2.py3-none-any.whl (Caused by ResponseError('too many 500 error responses'))
+  # aws_s3_bucket.jenkins_binaries will be created
+15:56:58    + resource "aws_s3_bucket" "jenkins_binaries" {
+15:56:58        + acceleration_status         = (known after apply)
+15:56:58        + acl                         = (known after apply)
+15:56:58        + arn                         = (known after apply)
+15:56:58        + bucket                      = "jenkins-binaries-213141505949"
+15:56:58        + bucket_domain_name          = (known after apply)
+15:56:58        + bucket_prefix               = (known after apply)
+15:56:58        + bucket_region               = (known after apply)
+15:56:58        + bucket_regional_domain_name = (known after apply)
+15:56:58        + force_destroy               = false
+15:56:58        + hosted_zone_id              = (known after apply)
+15:56:58        + id                          = (known after apply)
+15:56:58        + object_lock_enabled         = (known after apply)
+15:56:58        + policy                      = (known after apply)
+15:56:58        + region                      = "us-east-1"
+15:56:58        + request_payer               = (known after apply)
+15:56:58        + tags                        = {
+15:56:58            + "ApplicationName"         = null
+15:56:58            + "BusinessUnit"            = null
+15:56:58            + "Cluster"                 = null
+15:56:58            + "Compliance"              = null
+15:56:58            + "CreatedBy"               = null
+15:56:58            + "CreatedOn"               = null
+15:56:58            + "Environment "            = "Dev"
+15:56:58            + "Opt In"                  = null
+15:56:58            + "Owner"                   = null
+15:56:58            + "Project"                 = null
+15:56:58            + "ResourceName"            = null
+15:56:58            + "ResourceRole"            = null
+15:56:58            + "ResponsibleGroup"        = null
+15:56:58            + "Security"                = null
+15:56:58            + "SecurityCategorization " = null
+15:56:58            + "Version"                 = null
+15:56:58          }
+15:56:58        + tags_all                    = (known after apply)
+15:56:58        + website_domain              = (known after apply)
+15:56:58        + website_endpoint            = (known after apply)
+15:56:58  
+15:56:58        + cors_rule (known after apply)
+15:56:58  
+15:56:58        + grant (known after apply)
+15:56:58  
+15:56:58        + lifecycle_rule (known after apply)
+15:56:58  
+15:56:58        + logging (known after apply)
+15:56:58  
+15:56:58        + object_lock_configuration (known after apply)
+15:56:58  
+15:56:58        + replication_configuration (known after apply)
+15:56:58  
+15:56:58        + server_side_encryption_configuration (known after apply)
+15:56:58  
+15:56:58        + versioning (known after apply)
+15:56:58  
+15:56:58        + website (known after apply)
+15:56:58      }
+15:56:58  
+15:56:58    # aws_s3_bucket_lifecycle_configuration.jenkins_binaries will be created
+15:56:58    + resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
+15:56:58        + bucket                                 = (known after apply)
+15:56:58        + expected_bucket_owner                  = (known after apply)
+15:56:58        + id                                     = (known after apply)
+15:56:58        + region                                 = "us-east-1"
+15:56:58        + transition_default_minimum_object_size = "all_storage_classes_128K"
+15:56:58  
+15:56:58        + rule {
+15:56:58            + id     = "retain-current-and-previous-version"
+15:56:58            + status = "Enabled"
+15:56:58              # (1 unchanged attribute hidden)
+15:56:58  
+15:56:58            + filter {
+15:56:58                  # (1 unchanged attribute hidden)
+15:56:58              }
+15:56:58  
+15:56:58            + noncurrent_version_expiration {
+15:56:58                + newer_noncurrent_versions = 1
+15:56:58                + noncurrent_days           = 90
+15:56:58              }
+15:56:58          }
+15:56:58        + rule {
+15:56:58            + id     = "abort-incomplete-multipart-uploads"
+15:56:58            + status = "Enabled"
+15:56:58              # (1 unchanged attribute hidden)
+15:56:58  
+15:56:58            + abort_incomplete_multipart_upload {
+15:56:58                + days_after_initiation = 7
+15:56:58              }
+15:56:58  
+15:56:58            + filter {
+15:56:58                  # (1 unchanged attribute hidden)
+15:56:58              }
+15:56:58          }
+15:56:58      }
+15:56:58  
+15:56:58    # aws_s3_bucket_versioning.jenkins_binaries will be created
+15:56:58    + resource "aws_s3_bucket_versioning" "jenkins_binaries" {
+15:56:58        + bucket = (known after apply)
+15:56:58        + id     = (known after apply)
+15:56:58        + region = "us-east-1"
+15:56:58  
+15:56:58        + versioning_configuration {
+15:56:58            + mfa_delete = (known after apply)
+15:56:58            + status     = "Enabled"
+15:56:58          }
+15:56:58      }
+15:56:58  
+15:56:58  Plan: 3 to add, 0 to change, 0 to destroy.
 
 
-############
-#!/usr/bin/env bash
-
-set -e
-
-if ! command -v ~/anaconda3/bin/conda &> /dev/null
-then
-    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
-    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
-fi
-
-if ! ~/anaconda3/bin/conda info --envs |
-    awk '{print $1}' |
-    grep -Fxq "$ENV_NAME"
-then
-    ~/anaconda3/bin/conda create \
-        -y \
-        --name "$ENV_NAME" \
-        python="$PYTHON_VERSION"
-fi
-
-echo "Activating Conda environment: $ENV_NAME"
-
-set +x
-source ~/anaconda3/bin/activate "$ENV_NAME"
-set -x
-
-python --version
-python -m pip --version
-
-PIP_INDEX_URL="https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple"
-PIP_TRUSTED_HOST="repo.platform.aws.hhsoig.gov"
-
-echo "Running pre-flight validation of the shared Conda environment"
-
-PIP_CHECK_OUTPUT=$(python -m pip check 2>&1 || true)
-
-if [[ "$PIP_CHECK_OUTPUT" != "No broken requirements found." ]]
-then
-    echo "pip check found broken or inconsistent packages:"
-    echo "$PIP_CHECK_OUTPUT"
-    echo "Attempting targeted repair"
-
-    BROKEN_PKGS=$(
-        echo "$PIP_CHECK_OUTPUT" |
-        awk '
-            / has requirement / {
-                print $1
-            }
-
-            / requires .* which is not installed/ {
-                print $1
-            }
-        ' |
-        sort -u
-    )
-
-    if [[ -n "$BROKEN_PKGS" ]]
-    then
-        echo "Reinstalling packages reported by pip check:"
-        echo "$BROKEN_PKGS"
-
-        while IFS= read -r package
-        do
-            [[ -z "$package" ]] && continue
-
-            echo "Force-reinstalling package: $package"
-
-            python -m pip install \
-                --force-reinstall \
-                --no-deps \
-                --no-cache-dir \
-                -i "$PIP_INDEX_URL" \
-                --trusted-host "$PIP_TRUSTED_HOST" \
-                --no-color \
-                "$package"
-
-        done <<< "$BROKEN_PKGS"
-    fi
-
-    echo "Rechecking the shared Conda environment"
-
-    if ! python -m pip check
-    then
-        echo "WARNING: pip check still reports dependency problems"
-        echo "Repository requirements will be force-reinstalled"
-        FORCE_REQUIREMENTS_REINSTALL=true
-    else
-        echo "Shared Conda environment repair completed successfully"
-        FORCE_REQUIREMENTS_REINSTALL=false
-    fi
-else
-    echo "Shared Conda environment passed pip check"
-    FORCE_REQUIREMENTS_REINSTALL=false
-fi
-
-for req_file in $REQUIREMENTS
-do
-    matches=$(find . -type f -iname "$req_file")
-
-    if [[ -z "$matches" ]]
-    then
-        echo "No matching requirements file found for: $req_file"
-        continue
-    fi
-
-    while IFS= read -r requirements_file
-    do
-        [[ -z "$requirements_file" ]] && continue
-
-        echo "Installing requirements from $requirements_file"
-
-        if [[ "$FORCE_REQUIREMENTS_REINSTALL" == "true" ]]
-        then
-            python -m pip install \
-                --force-reinstall \
-                --no-cache-dir \
-                -i "$PIP_INDEX_URL" \
-                --trusted-host "$PIP_TRUSTED_HOST" \
-                --no-color \
-                -r "$requirements_file"
-        else
-            if ! python -m pip install \
-                --no-cache-dir \
-                -i "$PIP_INDEX_URL" \
-                --trusted-host "$PIP_TRUSTED_HOST" \
-                --no-color \
-                -r "$requirements_file"
-            then
-                echo "Normal requirements installation failed"
-                echo "Retrying with force-reinstall"
-
-                python -m pip install \
-                    --force-reinstall \
-                    --no-cache-dir \
-                    -i "$PIP_INDEX_URL" \
-                    --trusted-host "$PIP_TRUSTED_HOST" \
-                    --no-color \
-                    -r "$requirements_file"
-            fi
-        fi
-
-    done <<< "$matches"
-done
-
-echo "Running final dependency validation"
-
-if ! python -m pip check
-then
-    echo "WARNING: The shared Conda environment still contains dependency conflicts"
-    echo "The installed requirements from different repositories may not be mutually compatible"
-fi
-
-
+######################
+ Error: creating S3 Bucket (jenkins-binaries-213141505949): BucketAlreadyExists
+15:58:09  
+15:58:09    with aws_s3_bucket.jenkins_binaries,
+15:58:09    on s3.tf line 1, in resource "aws_s3_bucket" "jenkins_binaries":
+15:58:09     1: resource "aws_s3_bucket" "jenkins_binaries" {
+15:58:09  
