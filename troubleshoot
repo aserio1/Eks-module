@@ -139,3 +139,21 @@ bash-5.2$ terraform state list | grep jenkins
 data.aws_s3_bucket.jenkins_binaries
 aws_s3_bucket.jenkins_binaries
 aws_s3_bucket_versioning.jenkins_binaries
+
+
+bash-5.2$ terraform state show aws_s3_bucket.jenkins_binaries
+# aws_s3_bucket.jenkins_binaries:
+resource "aws_s3_bucket" "jenkins_binaries" {
+    acceleration_status         = null
+    arn                         = "arn:aws:s3:::jenkins-binaries-213141505949"
+    bucket                      = "jenkins-binaries-213141505949"
+    bucket_domain_name          = "jenkins-binaries-213141505949.s3.amazonaws.com"
+    bucket_prefix               = null
+    bucket_region               = "us-east-1"
+    bucket_regional_domain_name = "jenkins-binaries-213141505949.s3.us-east-1.amazonaws.com"
+    force_destroy               = false
+    hosted_zone_id              = "Z3AQBSTGFYJSTF"
+    id                          = "jenkins-binaries-213141505949"
+    object_lock_enabled         = false
+    policy                      = null
+    region                      = "us-east-1"
