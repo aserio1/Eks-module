@@ -1,5 +1,5 @@
 aws s3 cp \
-  s3://imac-dev-tf-state-hhsoig/jenkins.tfstate \
+  s3://imac-prod-tf-state-hhsoig/jenkins.tfstate \
   /tmp/jenkins.tfstate
 
 
@@ -12,16 +12,16 @@ jq -r '
 export AWS_PROFILE=dev
 
 terraform init -reconfigure \
-  -backend-config="bucket=imac-dev-tf-state-hhsoig" \
+  -backend-config="bucket=imac-prod-tf-state-hhsoig" \
   -backend-config="key=jenkins.tfstate" \
   -backend-config="region=us-east-1" \
-  -backend-config="dynamodb_table=imac-dev-tf-lock-hhsoig" \
+  -backend-config="dynamodb_table=imac-prod-tf-lock-hhsoig" \
   -backend-config="encrypt=true"
 
 terraform state list | grep aws_s3_bucket.jenkins_binaries
 
 terraform import \
-  -var-file="dev.tfvars" \
+  -var-file="prod.tfvars" \
   aws_s3_bucket.jenkins_binaries \
   jenkins-binaries-213141505949
 
