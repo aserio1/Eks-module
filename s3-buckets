@@ -455,3 +455,11 @@ terraform import \
   -var-file="prod.tfvars" \
   aws_s3_bucket_lifecycle_configuration.jenkins_binaries \
   jenkins-binaries-213141505949
+
+
+########CONFIRM WITH LIST #####
+aws s3 ls s3://imac-dev-tf-state-hhsoig/jenkins/
+aws s3 ls s3://imac-dev-tf-state-hhsoig --recursive | grep jenkins.tfstate
+
+aws s3 ls s3://imac-prod-tf-state-hhsoig/jenkins/
+aws s3 ls s3://imac-prod-tf-state-hhsoig --recursive | grep jenkins.tfstate
