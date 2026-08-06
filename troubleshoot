@@ -1,1 +1,76 @@
+###UTILITY JOBS NAME###
+Data Workbench - Service Account S3 Bucket Registration
+GitHub Create New Repo
+IMAC Lambda Layer Builder Module
+IMAC Security Hub Scanning Module
+Jenkins Agent Node Instance Refresh
+Jenkins-Agent-SIE-API-IP-Update
+GitHub Repository
+Seed Job
+Self Serve Infra Teardown
+SIA OSS Package Scan
 
+
+##########
+    "name": "Utility",
+            "ad_group": "Users",
+            "create_folder": false,
+            "pipelines": [
+                {
+                    "name": "Jenkins-Agent-SIE-API-IP-Update",
+                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-jenkins.git",
+                    "jenkinsfile": "Jenkinsfile.update_sie_agent",
+                    "pipeline_config": "pipeline_config_update_sie_agent.groovy",
+                    "suppress_trigger": true
+                },
+                {
+                    "name": "Self Serve Infra Teardown",
+                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-jenkins.git",
+                    "jenkinsfile": "Jenkinsfile.decommission",
+                    "pipeline_config": "pipeline_config_decommission.groovy",
+                    "suppress_trigger": true
+                },
+                {
+                    "name": "Personal Cloud 9 Instance",
+                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-aws-cloud9.git",
+                    "jenkinsfile": "Jenkinsfile",
+                    "pipeline_config": "pipeline_config.groovy"
+                },
+                {
+                    "name": "Seed Job",
+                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-jenkins-jobs.git",
+                    "jenkinsfile": "Jenkinsfile",
+                    "pipeline_config": "pipeline_config.groovy"
+                },
+                {
+                    "name": "IMAC Security Hub Scanning Module",
+                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-common-functions.git",
+                    "jenkinsfile": "Jenkinsfile",
+                    "pipeline_config": "pipeline_config.groovy",
+                    "suppress_trigger": true
+                },
+                {
+                    "name": "IMAC Lambda Layer Builder Module",
+                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-common-functions.git",
+                    "jenkinsfile": "Jenkinsfile.lambda_layer_builder",
+                    "pipeline_config": "pipeline_config_lambda_layer_builder.groovy",
+                    "suppress_trigger": true
+                },
+                {
+                    "name": "GitHub Create New Repo",
+                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-scripts.git",
+                    "jenkinsfile": "admin/pipelines/Jenkinsfile.create_repo",
+                    "pipeline_config": "admin/pipelines/pipeline_config.groovy",
+                    "suppress_trigger": true
+                }
+            ]
+        }
+    ],
+    "decommission_pipelines": [
+        {
+            "name":        "Self Serve Infra Teardown",
+            "repo":        "https://git.aws.hhsoig.gov/CDO/imac-jenkins.git",
+            "jenkinsfile": "Jenkinsfile.decommission",
+            "branch":      "main"
+        }
+    ]
