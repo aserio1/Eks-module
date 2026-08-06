@@ -74,3 +74,45 @@ SIA OSS Package Scan
             "branch":      "main"
         }
     ]
+
+
+################
+Data Workbench - Service Account S3 Bucket Registration
+
+Registers and configures an Amazon S3 bucket for a Data Workbench service account, including the required permissions and access policies.
+
+GitHub Create New Repo
+
+Creates a new GitHub repository with the standard project structure, default settings, and required branch protections.
+
+IMAC Lambda Layer Builder Module
+
+Builds, packages, and publishes AWS Lambda layers so they can be shared across multiple Lambda functions.
+
+IMAC Security Hub Scanning Module
+
+Runs AWS Security Hub scans to identify security findings, compliance issues, and misconfigurations across AWS resources.
+
+Jenkins Agent Node Instance Refresh
+
+Refreshes Jenkins agent EC2 instances by replacing existing nodes with new ones to apply updates, patches, and configuration changes.
+
+Jenkins-Agent-SIE-API-IP-Update
+
+Updates the SIE API IP address configuration on Jenkins agents to maintain connectivity with external services.
+
+GitHub Repository
+
+Performs administrative GitHub repository tasks such as updating repository settings, managing permissions, and maintaining repository configuration.
+
+Seed Job
+
+Creates and updates Jenkins folders, pipelines, and jobs from source-controlled configuration files to keep the Jenkins environment consistent.
+
+Self Serve Infra Teardown
+
+Safely decommissions infrastructure by destroying selected AWS resources and cleaning up associated configurations.
+
+SIA OSS Package Scan
+
+Scans open-source software dependencies for known vulnerabilities, licensing issues, and outdated packages before deployment.
