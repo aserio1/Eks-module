@@ -552,3 +552,57 @@ resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
   # Leave commented until local.created_timestamp is known
     # during provider initialization.
     # Created = local.created_timestamp
+
+#######
+ Terraform will perform the following actions:
+11:47:59  
+11:47:59    # aws_s3_bucket.jenkins_binaries will be updated in-place
+11:47:59    ~ resource "aws_s3_bucket" "jenkins_binaries" {
+11:47:59          id                          = "jenkins-binaries-213141505949"
+11:47:59        ~ tags                        = {
+11:47:59            - "ApplicationName"         = null
+11:47:59            - "BusinessUnit"            = null
+11:47:59            - "Cluster"                 = null
+11:47:59            - "Compliance"              = null
+11:47:59            - "Created"                 = "2026-01-19T17:45:45Z" -> null
+11:47:59            - "CreatedBy"               = null
+11:47:59            - "CreatedOn"               = null
+11:47:59            - "Environment"             = "prod" -> null
+11:47:59            - "Environment "            = "Dev" -> null
+11:47:59            - "Opt In"                  = null
+11:47:59            - "Owner"                   = null
+11:47:59            - "Project"                 = null
+11:47:59            - "ResourceName"            = null
+11:47:59            - "ResourceRole"            = null
+11:47:59            - "ResponsibleGroup"        = null
+11:47:59            - "Security"                = null
+11:47:59            - "SecurityCategorization " = null
+11:47:59            - "Version"                 = null
+11:47:59          }
+11:47:59        ~ tags_all                    = {
+11:47:59            ~ "ApplicationName"         = null -> "IMAC Jenkins"
+11:47:59            ~ "BusinessUnit"            = null -> "cdo"
+11:47:59            - "Cluster"                 = null
+11:47:59            - "Compliance"              = null
+11:47:59            ~ "Created"                 = "2026-01-19T17:45:45Z" -> "2026-01-19T17:20:15Z"
+11:47:59            ~ "CreatedBy"               = null -> "terraform"
+11:47:59            - "CreatedOn"               = null
+11:47:59            ~ "Environment"             = "prod" -> "dev"
+11:47:59            - "Environment "            = "Dev" -> null
+11:47:59            - "Opt In"                  = null
+11:47:59            ~ "Owner"                   = null -> "Katie Rose"
+11:47:59            ~ "Project"                 = null -> "imac"
+11:47:59            - "ResourceName"            = null
+11:47:59            - "ResourceRole"            = null
+11:47:59            - "ResponsibleGroup"        = null
+11:47:59            - "Security"                = null
+11:47:59            - "SecurityCategorization " = null
+11:47:59            ~ "Version"                 = null -> "1.0"
+11:47:59              # (2 unchanged elements hidden)
+11:47:59          }
+11:47:59          # (13 unchanged attributes hidden)
+11:47:59  
+11:47:59          # (5 unchanged blocks hidden)
+11:47:59      }
+11:47:59  
+11:47:59  Plan: 0 to add, 1 to change, 0 to destroy.
