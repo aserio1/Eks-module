@@ -502,28 +502,8 @@ terraform plan \
 
 
 #############UPDATE     #######################
-current bukcet config 
 resource "aws_s3_bucket" "jenkins_binaries" {
-  bucket = "jenkins-binaries-213141505949"
-
-  tags = {
-    Owner                     = ""
-    ApplicationName           = ""
-    CreatedBy                 = ""
-    Compliance                = ""
-    ResourceRole              = ""
-    ResourceName              = ""
-    Cluster                   = ""
-    Security                  = ""
-    ResponsibleGroup          = ""
-    Project                   = ""
-    "SecurityCategorization " = ""
-    Version                   = ""
-    BusinessUnit              = ""
-    CreatedOn                 = ""
-    "Opt In"                  = ""
-    "Environment "            = "Dev"
-  }
+  bucket = "jenkins-binaries-${data.aws_caller_identity.current.account_id}"
 
   lifecycle {
     prevent_destroy = true
@@ -565,29 +545,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
 
     abort_incomplete_multipart_upload {
       days_after_initiation = 7
-    }
-  }
-}
-
-##################
-remove the account number to use variable account_id}
-and use this tag 
-
-provider "aws" {
-  region = "us-east-1"
-
-  default_tags {
-    tags = {
-      BusinessUnit    = "cdo"
-      Project         = "imac"
-      Environment     = var.prefix
-      FISMABoundary   = "dsgss"
-      ApplicationName = "IMAC Jenkins"
-      OwnerContact    = "imac@oig.hhs.gov"
-      CreatedBy       = "terraform"
-      Created         = local.created_timestamp
-      Owner           = "Katie Rose"
-      Version         = "1.0"
     }
   }
 }
