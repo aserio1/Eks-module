@@ -548,3 +548,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
     }
   }
 }
+
+  # Leave commented until local.created_timestamp is known
+    # during provider initialization.
+    # Created = local.created_timestamp
