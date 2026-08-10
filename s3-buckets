@@ -1,608 +1,97 @@
-resource "aws_s3_bucket" "jenkins_binaries" {
-  bucket = "jenkins-binaries-213141505949"
-
-  tags = {
-    Owner                     = ""
-    ApplicationName           = ""
-    CreatedBy                 = ""
-    Compliance                = ""
-    ResourceRole              = ""
-    ResourceName              = ""
-    Cluster                   = ""
-    Security                  = ""
-    ResponsibleGroup          = ""
-    Project                   = ""
-    "SecurityCategorization " = ""
-    Version                   = ""
-    BusinessUnit              = ""
-    CreatedOn                 = ""
-    "Opt In"                  = ""
-    "Environment "            = "Dev"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "aws_s3_bucket_versioning" "jenkins_binaries" {
-  bucket = aws_s3_bucket.jenkins_binaries.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
-  bucket = aws_s3_bucket.jenkins_binaries.id
-
-  depends_on = [
-    aws_s3_bucket_versioning.jenkins_binaries
-  ]
-
-  rule {
-    id     = "cleanup-noncurrent-versions"
-    status = "Enabled"
-
-    filter {}
-
-    noncurrent_version_expiration {
-      noncurrent_days           = 90
-      newer_noncurrent_versions = 3
-    }
-  }
-
-  rule {
-    id     = "abort-incomplete-multipart-uploads"
-    status = "Enabled"
-
-    filter {}
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 7
-    }
-  }
-}
-
-##############################################
-terraform {
-  required_version = ">= 1.5.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 6.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = "us-east-1"
-}
-
-##################################
-aws sts get-caller-identity
-
-aws s3api get-bucket-location \
-  --bucket jenkins-binaries-213141505949
-
-aws s3api get-bucket-tagging \
-  --bucket jenkins-binaries-213141505949
-
-aws s3api get-bucket-versioning \
-  --bucket jenkins-binaries-213141505949
-
-aws s3api get-bucket-lifecycle-configuration \
-  --bucket jenkins-binaries-213141505949
-
-###################OBJECT
-aws s3api list-objects-v2 \
-  --bucket jenkins-binaries-213141505949 \
-  --query 'Contents[].{Key:Key,Size:Size,LastModified:LastModified}' \
-  --output table
-
-
-
-##############ASKED
-terraform import aws_s3_bucket.jenkins_binaries jenkins-binaries-213141505949
-
-#########################################
-############PROVIDER ##############
-export AWS_PROFILE=dev
-
-terraform init -reconfigure
-
-
-terraform init -reconfigure \
-  -backend-config="bucket=YOUR-TERRAFORM-STATE-BUCKET" \
-  -backend-config="key=jenkins/jenkins.tfstate" \
-  -backend-config="region=us-east-1" \
-  -backend-config="encrypt=true"
-
-terraform import \
-  aws_s3_bucket.jenkins_binaries \
-  jenkins-binaries-213141505949
-
-
-##############################
-bash-5.2$ terraform init -reconfigure \
-  -backend-config="bucket=imac-prod-tf-state-hhsoig" \
-  -backend-config="key=jenkins/jenkins.tfstate" \
-  -backend-config="region=us-east-1" \
-  -backend-config="encrypt=true"
-Initializing the backend...
-
-Successfully configured the backend "s3"! Terraform will automatically
-use this backend unless the backend configuration changes.
-
-Initializing modules...
-
-
-########################################
- terraform init
-Initializing the backend...
-
-Initializing modules...
-
-Initializing provider plugins...
-- Reusing previous version of hashicorp/aws from the dependency lock file
-- Reusing previous version of hashicorp/time from the dependency lock file
-- Using previously-installed hashicorp/time v0.13.1
-- Using previously-installed hashicorp/aws v6.9.0
-
-
-Terraform has been successfully initialized!
-
-You may now begin working with Terraform. Try running "terraform plan" to see
-any changes that are required for your infrastructure. All Terraform commands
-should now work.
-
-If you ever set or change modules or backend configuration for Terraform,
-rerun this command to reinitialize your working directory. If you forget, other
-commands will detect it and remind you to do so if necessary.
-bash-5.2$ terraform import \
-  aws_s3_bucket.jenkins_binaries \
-  jenkins-binaries-213141505949
-var.agent_asg_instance_size
-  Size of the Jenkins agent instance min/max size
-
-  Enter a value:
-
-
-
-
-
-################
-prefix                   = "dev"
-jenkins_controller_size  = "t3.large"
-jenkins_docker_tag       = "2e00cdcf0c0ebddc01cfb9b3619ac996b904ddfe"
-agent_asg_instance_size  = 0
-always_on_agent_nodes    = ["imac", "utility"]
-jenkins_idp_entity_id    = "JenkinsSP"
-jenkins_idp_metadata_url = "https://login.microsoftonline.com/dad5f894-5309-4df6-9e48-232fdf1502ab/federationmetadata/2007-06/federationmetadata.xml?appid=cd13141e-5e3f-498b-9815-742e2040285a"
-monitored_agent          = "utility" # or your agent name
-team_email               = "imac@oig.hhs.gov"
-base_ami_id              = "ami-0e6d20cec116c041e"
-efs_threshold_gib        = 15
-jenkins_email_subscriptions = [
-  {
-    email = "imac@oig.hhs.gov"
-    filter_policy = {
-      department = ["imac"]
-    }
-  }
-]
-
-######################
-terraform import \
-  -var-file="dev.tfvars" \
-  aws_s3_bucket.jenkins_binaries \
-  jenkins-binaries-213141505949
-
-####################
-commands will detect it and remind you to do so if necessary.
-bash-5.2$ terraform import \
-  -var-file="dev.tfvars" \
-  aws_s3_bucket.jenkins_binaries \
-  jenkins-binaries-213141505949
-╷
-│ Error: Invalid provider configuration
-│
-│   on /home/jenkins/imac-jenkins/infrastructure/terraform/providers.tf line 20:
-│   20: provider "aws" {
-│
-│ The configuration for provider["registry.terraform.io/hashicorp/aws"] depends on values that cannot be determined until apply.
-╵
-########################
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 6.9.0"
-    }
-    time = {
-      source  = "hashicorp/time"
-      version = "~> 0.13.1"
-    }
-  }
-  backend "s3" {
-    key     = "jenkins.tfstate"
-    encrypt = true
-  }
-
-  required_version = ">= 1.2.0"
-}
-
-provider "aws" {
-  region = "us-east-1"
-
-  default_tags {
-    tags = {
-      BusinessUnit    = "cdo"
-      Project         = "imac"
-      Environment     = var.prefix
-      FISMABoundary   = "dsgss"
-      ApplicationName = "IMAC Jenkins"
-      OwnerContact    = "imac@oig.hhs.gov"
-      CreatedBy       = "terraform"
-      Created         = local.created_timestamp
-      Owner           = "Katie Rose"
-      Version         = "1.0"
-    }
-  }
-}
-###########
-LAMBDA ISSUE
-$$####################
-394a]
-╷
-│ Error: reading Lambda Function (dev-imac-scale-up-utility-agent-asg) latest version: operation error Lambda: ListVersionsByFunction, https response error StatusCode: 403, RequestID: 669d2dcf-be40-4531-ab36-af8bffc9042e, api error AccessDeniedException: User: arn:aws:sts::213141505949:assumed-role/prod_jenkins_agent_role_imac/i-0d8246019c6b5f5d4 is not authorized to perform: lambda:ListVersionsByFunction on resource: arn:aws:lambda:us-east-1:213141505949:function:dev-imac-scale-up-utility-agent-asg because no identity-based policy allows the lambda:ListVersionsByFunction action
-│
-│   with data.aws_lambda_function.utility_lambda,
-│   on /home/jenkins/imac-jenkins/infrastructure/terraform/monitoring.tf line 10, in data "aws_lambda_function" "utility_lambda":
-│   10: data "aws_lambda_function" "utility_lambda" {
-
-######CODE
-monitoring.tf 
-###############
-# Data source to find the agent ASG
-data "aws_autoscaling_groups" "monitored_agent" {
-  filter {
-    name   = "tag:Name"
-    values = ["${var.prefix}-Jenkins Agent - ${var.monitored_agent}"]
-  }
-}
-
-# utility lambda
-data "aws_lambda_function" "utility_lambda" {
-  function_name = "${var.prefix}-imac-scale-up-utility-agent-asg"
-}
-
-# EC2 Instance Status Check Alarm for Utility Agent
-resource "aws_cloudwatch_metric_alarm" "asg_capacity_alarm" {
-  alarm_name          = "${var.prefix}-${var.monitored_agent}-jenkins-agent-asg-zero-capacity-alarm"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = "3"
-  metric_name         = "GroupDesiredCapacity"
-  namespace           = "AWS/AutoScaling"
-  period              = "60"
-  statistic           = "Minimum"
-  threshold           = "1"
-  alarm_description   = "Alert when the ASG desired capacity is 0"
-  alarm_actions       = [aws_sns_topic.jenkins_alerts.arn, data.aws_lambda_function.utility_lambda.arn]
-  ok_actions          = [aws_sns_topic.jenkins_alerts.arn]
-  treat_missing_data  = "breaching"
-
-  dimensions = {
-    AutoScalingGroupName = length(data.aws_autoscaling_groups.monitored_agent.names) == 1 ? data.aws_autoscaling_groups.monitored_agent.names[0] : "No unique ASG found"
-  }
-
-  tags = merge(local.tags, {
-    Purpose = "Jenkins agent monitoring"
-  })
-
-  lifecycle {
-    ignore_changes = [dimensions]
-  }
-}
-
-# EFS size >=200 GB Alarm
-resource "aws_cloudwatch_metric_alarm" "efs_storagebytes_high" {
-  alarm_name          = "efs-${module.base_infrastructure.efs_file_system_id}-storagebytes-${var.efs_threshold_gib}GiB-daily"
-  alarm_description   = "Alarm when EFS size >= ${var.efs_threshold_gib} GiB (checked daily, using Maximum)"
-  namespace           = "AWS/EFS"
-  metric_name         = "StorageBytes"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = local.efs_threshold_bytes
-
-  # Check once per day
-  period             = 86400     # 24 hours in seconds
-  statistic          = "Maximum" # Trigger if any sample during the day exceeds threshold
-  evaluation_periods = 1
-
-  dimensions = {
-    FileSystemId = module.base_infrastructure.efs_file_system_id
-    StorageClass = "Total"
-  }
-
-
-
-####################
-
-
-  default_tags {
-    tags = {
-      BusinessUnit    = "cdo"
-      Project         = "imac"
-      Environment     = var.prefix
-      FISMABoundary   = "dsgss"
-      ApplicationName = "IMAC Jenkins"
-      OwnerContact    = "imac@oig.hhs.gov"
-      CreatedBy       = "terraform"
-      Created         = local.created_timestamp
-      Owner           = "Katie Rose"
-      Version         = "1.0"
-    }
-  }
-  treat_missing_data = "notBreaching"
-  alarm_actions      = [aws_sns_topic.jenkins_alerts.arn]
-  ok_actions         = [aws_sns_topic.jenkins_alerts.arn]
-}
-
-
-##########
-################NEW ###########
-resource "aws_s3_bucket" "jenkins_binaries" {
-  bucket = "jenkins-binaries-213141505949"
-
-  tags = {
-    Owner                     = ""
-    ApplicationName           = ""
-    CreatedBy                 = ""
-    Compliance                = ""
-    ResourceRole              = ""
-    ResourceName              = ""
-    Cluster                   = ""
-    Security                  = ""
-    ResponsibleGroup          = ""
-    Project                   = ""
-    "SecurityCategorization " = ""
-    Version                   = ""
-    BusinessUnit              = ""
-    CreatedOn                 = ""
-    "Opt In"                  = ""
-    "Environment "            = "Dev"
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "aws_s3_bucket_versioning" "jenkins_binaries" {
-  bucket = aws_s3_bucket.jenkins_binaries.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
-  bucket = aws_s3_bucket.jenkins_binaries.id
-
-  depends_on = [
-    aws_s3_bucket_versioning.jenkins_binaries
-  ]
-
-  rule {
-    id     = "retain-current-and-previous-version"
-    status = "Enabled"
-
-    filter {}
-
-    noncurrent_version_expiration {
-      noncurrent_days           = 90
-      newer_noncurrent_versions = 1
-    }
-  }
-
-  rule {
-    id     = "abort-incomplete-multipart-uploads"
-    status = "Enabled"
-
-    filter {}
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 7
-    }
-  }
-}
-#######################
-##########################################
-####### FIX ########################
-terraform init -reconfigure \
-  -backend-config="bucket=imac-dev-tf-state-hhsoig" \
-  -backend-config="key=jenkins/jenkins.tfstate" \
-  -backend-config="region=us-east-1" \
-  -backend-config="dynamodb_table=imac-dev-tf-lock-hhsoig" \
-  -backend-config="encrypt=true"
-
-terraform import \
-  -var-file="dev.tfvars" \
-  aws_s3_bucket.jenkins_binaries \
-  jenkins-binaries-213141505949
-
-terraform import \
-  -var-file="dev.tfvars" \
-  aws_s3_bucket_lifecycle_configuration.jenkins_binaries \
-  jenkins-binaries-213141505949
-
-
-###
-terraform init -reconfigure \
-  -backend-config="bucket=imac-prod-tf-state-hhsoig" \
-  -backend-config="key=jenkins/jenkins.tfstate" \
-  -backend-config="region=us-east-1" \
-  -backend-config="dynamodb_table=imac-prod-tf-lock-hhsoig" \
-  -backend-config="encrypt=true"
-
-terraform import \
-  -var-file="prod.tfvars" \
-  aws_s3_bucket_versioning.jenkins_binaries \
-  jenkins-binaries-213141505949
-
-terraform import \
-  -var-file="prod.tfvars" \
-  aws_s3_bucket_lifecycle_configuration.jenkins_binaries \
-  jenkins-binaries-213141505949
-
-
-########CONFIRM WITH LIST #####
-aws s3 ls s3://imac-dev-tf-state-hhsoig/jenkins/
-aws s3 ls s3://imac-dev-tf-state-hhsoig --recursive | grep jenkins.tfstate
-
-aws s3 ls s3://imac-prod-tf-state-hhsoig/jenkins/
-aws s3 ls s3://imac-prod-tf-state-hhsoig --recursive | grep jenkins.tfstate
-
-
-
-####################################
-aws s3 cp \
-  s3://imac-prod-tf-state-hhsoig/jenkins.tfstate \
-  /tmp/jenkins.tfstate
-
-
-jq -r '
-  .resources[]
-  | select(.type == "aws_s3_bucket" and .name == "jenkins_binaries")
-  | .instances[].attributes.id
-' /tmp/jenkins.tfstate
-
-export AWS_PROFILE=dev
-
-terraform init -reconfigure \
-  -backend-config="bucket=imac-prod-tf-state-hhsoig" \
-  -backend-config="key=jenkins.tfstate" \
-  -backend-config="region=us-east-1" \
-  -backend-config="dynamodb_table=imac-prod-tf-lock-hhsoig" \
-  -backend-config="encrypt=true"
-
-terraform state list | grep aws_s3_bucket.jenkins_binaries
-
-terraform import \
-  -var-file="prod.tfvars" \
-  aws_s3_bucket.jenkins_binaries \
-  jenkins-binaries-213141505949
-
-terraform plan \
-  -var-file="dev.tfvars" \
-  -target=aws_s3_bucket.jenkins_binaries \
-  -target=aws_s3_bucket_versioning.jenkins_binaries \
-  -target=aws_s3_bucket_lifecycle_configuration.jenkins_binaries
-
-
-#############UPDATE     #######################
-resource "aws_s3_bucket" "jenkins_binaries" {
-  bucket = "jenkins-binaries-${data.aws_caller_identity.current.account_id}"
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
-resource "aws_s3_bucket_versioning" "jenkins_binaries" {
-  bucket = aws_s3_bucket.jenkins_binaries.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "jenkins_binaries" {
-  bucket = aws_s3_bucket.jenkins_binaries.id
-
-  depends_on = [
-    aws_s3_bucket_versioning.jenkins_binaries
-  ]
-
-  rule {
-    id     = "retain-current-and-previous-version"
-    status = "Enabled"
-
-    filter {}
-
-    noncurrent_version_expiration {
-      noncurrent_days           = 90
-      newer_noncurrent_versions = 1
-    }
-  }
-
-  rule {
-    id     = "abort-incomplete-multipart-uploads"
-    status = "Enabled"
-
-    filter {}
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 7
-    }
-  }
-}
-
-  # Leave commented until local.created_timestamp is known
-    # during provider initialization.
-    # Created = local.created_timestamp
-
-#######
- Terraform will perform the following actions:
-11:47:59  
-11:47:59    # aws_s3_bucket.jenkins_binaries will be updated in-place
-11:47:59    ~ resource "aws_s3_bucket" "jenkins_binaries" {
-11:47:59          id                          = "jenkins-binaries-213141505949"
-11:47:59        ~ tags                        = {
-11:47:59            - "ApplicationName"         = null
-11:47:59            - "BusinessUnit"            = null
-11:47:59            - "Cluster"                 = null
-11:47:59            - "Compliance"              = null
-11:47:59            - "Created"                 = "2026-01-19T17:45:45Z" -> null
-11:47:59            - "CreatedBy"               = null
-11:47:59            - "CreatedOn"               = null
-11:47:59            - "Environment"             = "prod" -> null
-11:47:59            - "Environment "            = "Dev" -> null
-11:47:59            - "Opt In"                  = null
-11:47:59            - "Owner"                   = null
-11:47:59            - "Project"                 = null
-11:47:59            - "ResourceName"            = null
-11:47:59            - "ResourceRole"            = null
-11:47:59            - "ResponsibleGroup"        = null
-11:47:59            - "Security"                = null
-11:47:59            - "SecurityCategorization " = null
-11:47:59            - "Version"                 = null
-11:47:59          }
-11:47:59        ~ tags_all                    = {
-11:47:59            ~ "ApplicationName"         = null -> "IMAC Jenkins"
-11:47:59            ~ "BusinessUnit"            = null -> "cdo"
-11:47:59            - "Cluster"                 = null
-11:47:59            - "Compliance"              = null
-11:47:59            ~ "Created"                 = "2026-01-19T17:45:45Z" -> "2026-01-19T17:20:15Z"
-11:47:59            ~ "CreatedBy"               = null -> "terraform"
-11:47:59            - "CreatedOn"               = null
-11:47:59            ~ "Environment"             = "prod" -> "dev"
-11:47:59            - "Environment "            = "Dev" -> null
-11:47:59            - "Opt In"                  = null
-11:47:59            ~ "Owner"                   = null -> "Katie Rose"
-11:47:59            ~ "Project"                 = null -> "imac"
-11:47:59            - "ResourceName"            = null
-11:47:59            - "ResourceRole"            = null
-11:47:59            - "ResponsibleGroup"        = null
-11:47:59            - "Security"                = null
-11:47:59            - "SecurityCategorization " = null
-11:47:59            ~ "Version"                 = null -> "1.0"
-11:47:59              # (2 unchanged elements hidden)
-11:47:59          }
-11:47:59          # (13 unchanged attributes hidden)
-11:47:59  
-11:47:59          # (5 unchanged blocks hidden)
-11:47:59      }
-11:47:59  
-11:47:59  Plan: 0 to add, 1 to change, 0 to destroy.
+getting error 
+  #15 [11/12] RUN chmod 755 /home/jenkins/init.groovy.d/user-token-gen.groovy &&     chmod 755 /home/jenkins/jenkins.sh &&     chown -R 2000:2000 /home/jenkins
+13:38:47  #15 DONE 0.4s
+13:38:47  
+13:38:47  #16 [12/12] RUN java -jar jpm.jar --war /home/jenkins/jenkins.war -f /home/jenkins/plugins.txt -d /home/jenkins/plugins &&     rm -rf /home/jenkins/jpm.jar
+13:38:47  #16 0.441 Error: Unable to access jarfile jpm.jar
+13:38:47  #16 ERROR: process "/bin/sh -c java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins &&     rm -rf $JENKINS_HOME/jpm.jar" did not complete successfully: exit code: 1
+13:38:47  ------
+13:38:47   > [12/12] RUN java -jar jpm.jar --war /home/jenkins/jenkins.war -f /home/jenkins/plugins.txt -d /home/jenkins/plugins &&     rm -rf /home/jenkins/jpm.jar:
+13:38:47  0.441 Error: Unable to access jarfile jpm.jar
+13:38:47  ------
+13:38:47  Dockerfile:70
+13:38:47  --------------------
+13:38:47    69 |     
+13:38:47    70 | >>> RUN java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins && \
+13:38:47    71 | >>>     rm -rf $JENKINS_HOME/jpm.jar
+13:38:47    72 |     
+13:38:47  --------------------
+13:38:47  ERROR: failed to build: failed to solve: process "/bin/sh -c java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins &&     rm -rf $JENKINS_HOME/jpm.jar" did not complete successfully: exit code: 1
+
+
+
+######### CODE ##########
+################################################################################
+# IMAC Jenkins Controller Docker Image
+#
+################################################################################
+
+FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
+
+
+LABEL   oig.imac.base.image.purpose="Jenkins Controller Docker image" \
+        oig.imac.image.owner="Kate Rose" \
+        oig.imac.image.engineer="Kent Rockwell" \
+        oig.imac.base.image.parent="IMAC Jenkins base image" \
+        oig.imac.base.image.parent.registry="213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/base/jenkins:BASE_IMAGE_VERSION" \
+        oig.imac.base.image.ontogeny.registry="registry1.dso.mil/ironbank" \
+        oig.imac.base.image.ontogeny.image="registry1.dso.mil/ironbank/opensource/python:v3.14.5@sha256:be4255a2642bcf619c9594ebb4cbd8ac046ce9ce8c6e69b338048f53164e4b9a"
+
+ARG user=jenkins
+ARG group=jenkins
+ARG uid=2000
+ARG gid=2000
+ARG JENKINS_HOME=/home/jenkins
+ARG JENKINS_JAR_FILES="jenkins-jar-files-2026-08-10"
+
+USER root
+
+# Create User
+RUN mkdir -p $JENKINS_HOME \
+  && chown ${uid}:${gid} $JENKINS_HOME \
+  && groupadd -g ${gid} ${group} \
+  && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user}
+
+# Install OS Packages
+RUN yum -y update && \
+    yum -y install java-21-openjdk && \
+    yum clean all && \
+    rm -rf /var/cache/yum/*
+
+USER jenkins
+
+# Install Jenkins apps
+WORKDIR $JENKINS_HOME
+
+RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
+    unzip jenkins-zip-files.zip && \
+    mv ${JENKINS_JAR_FILES}/* . && \
+    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
+
+COPY dependencies/casc.yaml $JENKINS_HOME/casc.yaml
+COPY dependencies/jenkins.sh $JENKINS_HOME/jenkins.sh
+COPY dependencies/plugins.txt $JENKINS_HOME/plugins.txt
+
+RUN mkdir $JENKINS_HOME/init.groovy.d && \
+    chmod 755 $JENKINS_HOME/init.groovy.d
+
+COPY dependencies/user-token-gen.groovy $JENKINS_HOME/init.groovy.d/user-token-gen.groovy
+
+USER root
+
+RUN chmod 755 $JENKINS_HOME/init.groovy.d/user-token-gen.groovy && \
+    chmod 755 $JENKINS_HOME/jenkins.sh && \
+    chown -R ${uid}:${gid} $JENKINS_HOME
+
+USER jenkins
+
+ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
+ENV JENKINS_HOME $JENKINS_HOME
+# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
+ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
+
+RUN java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins && \
+    rm -rf $JENKINS_HOME/jpm.jar
+
+CMD [ "./jenkins.sh"]
+ENTRYPOINT []
