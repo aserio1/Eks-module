@@ -1,4 +1,3 @@
-##CODE
 #!/usr/bin/env bash
 
 set -e
@@ -31,169 +30,37 @@ python -m pip --version
 PIP_INDEX_URL="https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple"
 PIP_TRUSTED_HOST="repo.platform.aws.hhsoig.gov"
 
-echo "Running pre-flight validation of the shared Conda environment"
+PIP_INSTALL="python -m pip install \
+-i $PIP_INDEX_URL \
+--trusted-host $PIP_TRUSTED_HOST \
+--no-color \
+--no-cache-dir"
 
-PIP_CHECK_OUTPUT=$(python -m pip check 2>&1 || true)
-
-if [[ "$PIP_CHECK_OUTPUT" != "No broken requirements found." ]]
+if ! python -m pip check
 then
-    echo "pip check found broken or inconsistent packages:"
-    echo "$PIP_CHECK_OUTPUT"
-    echo "Attempting targeted repair"
+    echo "pip check failed - shared environment is inconsistent, forcing reinstall"
 
-    BROKEN_PKGS=$(
-        echo "$PIP_CHECK_OUTPUT" |
-        awk '
-            / has requirement / {
-                print $1
-            }
-
-            / requires .* which is not installed/ {
-                print $1
-            }
-        ' |
-        sort -u
-    )
-
-    if [[ -n "$BROKEN_PKGS" ]]
-    then
-        echo "Reinstalling packages reported by pip check:"
-        echo "$BROKEN_PKGS"
-
-        while IFS= read -r package
-        do
-            [[ -z "$package" ]] && continue
-
-            echo "Force-reinstalling package: $package"
-
-            python -m pip install \
-                --force-reinstall \
-                --no-deps \
-                --no-cache-dir \
-                -i "$PIP_INDEX_URL" \
-                --trusted-host "$PIP_TRUSTED_HOST" \
-                --no-color \
-                "$package"
-
-        done <<< "$BROKEN_PKGS"
-    fi
-
-    echo "Rechecking the shared Conda environment"
-
-    if ! python -m pip check
-    then
-        echo "WARNING: pip check still reports dependency problems"
-        echo "Repository requirements will be force-reinstalled"
-        FORCE_REQUIREMENTS_REINSTALL=true
-    else
-        echo "Shared Conda environment repair completed successfully"
-        FORCE_REQUIREMENTS_REINSTALL=false
-    fi
-else
-    echo "Shared Conda environment passed pip check"
-    FORCE_REQUIREMENTS_REINSTALL=false
-fi
-
-for req_file in $REQUIREMENTS
-do
-    matches=$(find . -type f -iname "$req_file")
-
-    if [[ -z "$matches" ]]
-    then
-        echo "No matching requirements file found for: $req_file"
-        continue
-    fi
-
-    while IFS= read -r requirements_file
+    for req_file in $REQUIREMENTS
     do
-        [[ -z "$requirements_file" ]] && continue
-
-        echo "Installing requirements from $requirements_file"
-
-        if [[ "$FORCE_REQUIREMENTS_REINSTALL" == "true" ]]
-        then
-            python -m pip install \
-                --force-reinstall \
-                --no-cache-dir \
-                -i "$PIP_INDEX_URL" \
-                --trusted-host "$PIP_TRUSTED_HOST" \
-                --no-color \
-                -r "$requirements_file"
-        else
-            if ! python -m pip install \
-                --no-cache-dir \
-                -i "$PIP_INDEX_URL" \
-                --trusted-host "$PIP_TRUSTED_HOST" \
-                --no-color \
-                -r "$requirements_file"
-            then
-                echo "Normal requirements installation failed"
-                echo "Retrying with force-reinstall"
-
-                python -m pip install \
-                    --force-reinstall \
-                    --no-cache-dir \
-                    -i "$PIP_INDEX_URL" \
-                    --trusted-host "$PIP_TRUSTED_HOST" \
-                    --no-color \
-                    -r "$requirements_file"
-            fi
-        fi
-
-    done <<< "$matches"
-done
-
-echo "Running final dependency validation"
-
-if ! python -m pip check
-then
-    echo "WARNING: The shared Conda environment still contains dependency conflicts"
-    echo "The installed requirements from different repositories may not be mutually compatible"
-fi
-
-
-
-############REcommned
-
-PIP_INDEX_URL="https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple"
-PIP_TRUSTED_HOST="repo.platform.aws.hhsoig.gov"
-
-echo "Running pre-flight validation of the shared Conda environment"
-
-
-Suggestion
-###
-I find that the following code does too many checks - we want to try a one detection point (not three), one repair attempt and one clear failure if repair does not work. This way pre-flight either passes or fails (repair path: force-reinstall everything, recheck, exit) you can replace all starting line 35 to the end with something simpler:
-
-# Pre-flight: heal a corrupted shared env before installing anything new.
-# This is rare (roughly once every two months, usually from a previously
-# interrupted build) - if it fires, force-reinstall everything from the
-# matched requirements files rather than trying to target individual
-# packages, then fail the build loudly if that doesn't fix it.
-#
-# python -m pip (not pip3) ensures this always runs against the pip bundled
-# with the currently activated conda env's python, rather than whatever
-# pip3 happens to resolve to first on PATH.
-if ! python -m pip check
-then
-    echo "pip check failed - shared env is inconsistent, forcing full reinstall"
-    for req_file in $REQUIREMENTS; do
-        find . -iname "$req_file" | xargs -n 1 $PIP_INSTALL --force-reinstall -r
+        find . -iname "$req_file" | while IFS= read -r requirements_file
+        do
+            eval "$PIP_INSTALL --force-reinstall -r \"$requirements_file\""
+        done
     done
 
     if ! python -m pip check
     then
-        echo "ERROR: environment still broken after reinstall - manual investigation needed"
+        echo "ERROR: environment is still broken after reinstall"
         exit 1
     fi
+
     echo "Environment repaired"
 fi
 
-# Loop through each file (handles space-separated list)
-for req_file in $REQUIREMENTS; do
-    matches=$(find . -iname "$req_file")
-    if [[ -n "$matches" ]]
-    then
-      find . -iname "$req_file" | xargs -n 1 $PIP_INSTALL -r
-    fi
+for req_file in $REQUIREMENTS
+do
+    find . -iname "$req_file" | while IFS= read -r requirements_file
+    do
+        eval "$PIP_INSTALL -r \"$requirements_file\""
+    done
 done
