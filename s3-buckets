@@ -1,97 +1,199 @@
-getting error 
-  #15 [11/12] RUN chmod 755 /home/jenkins/init.groovy.d/user-token-gen.groovy &&     chmod 755 /home/jenkins/jenkins.sh &&     chown -R 2000:2000 /home/jenkins
-13:38:47  #15 DONE 0.4s
-13:38:47  
-13:38:47  #16 [12/12] RUN java -jar jpm.jar --war /home/jenkins/jenkins.war -f /home/jenkins/plugins.txt -d /home/jenkins/plugins &&     rm -rf /home/jenkins/jpm.jar
-13:38:47  #16 0.441 Error: Unable to access jarfile jpm.jar
-13:38:47  #16 ERROR: process "/bin/sh -c java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins &&     rm -rf $JENKINS_HOME/jpm.jar" did not complete successfully: exit code: 1
-13:38:47  ------
-13:38:47   > [12/12] RUN java -jar jpm.jar --war /home/jenkins/jenkins.war -f /home/jenkins/plugins.txt -d /home/jenkins/plugins &&     rm -rf /home/jenkins/jpm.jar:
-13:38:47  0.441 Error: Unable to access jarfile jpm.jar
-13:38:47  ------
-13:38:47  Dockerfile:70
-13:38:47  --------------------
-13:38:47    69 |     
-13:38:47    70 | >>> RUN java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins && \
-13:38:47    71 | >>>     rm -rf $JENKINS_HOME/jpm.jar
-13:38:47    72 |     
-13:38:47  --------------------
-13:38:47  ERROR: failed to build: failed to solve: process "/bin/sh -c java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins &&     rm -rf $JENKINS_HOME/jpm.jar" did not complete successfully: exit code: 1
+##CODE
+#!/usr/bin/env bash
+
+set -e
+
+if ! command -v ~/anaconda3/bin/conda &> /dev/null
+then
+    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
+    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
+fi
+
+if ! ~/anaconda3/bin/conda info --envs |
+    awk '{print $1}' |
+    grep -Fxq "$ENV_NAME"
+then
+    ~/anaconda3/bin/conda create \
+        -y \
+        --name "$ENV_NAME" \
+        python="$PYTHON_VERSION"
+fi
+
+echo "Activating Conda environment: $ENV_NAME"
+
+set +x
+source ~/anaconda3/bin/activate "$ENV_NAME"
+set -x
+
+python --version
+python -m pip --version
+
+PIP_INDEX_URL="https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple"
+PIP_TRUSTED_HOST="repo.platform.aws.hhsoig.gov"
+
+echo "Running pre-flight validation of the shared Conda environment"
+
+PIP_CHECK_OUTPUT=$(python -m pip check 2>&1 || true)
+
+if [[ "$PIP_CHECK_OUTPUT" != "No broken requirements found." ]]
+then
+    echo "pip check found broken or inconsistent packages:"
+    echo "$PIP_CHECK_OUTPUT"
+    echo "Attempting targeted repair"
+
+    BROKEN_PKGS=$(
+        echo "$PIP_CHECK_OUTPUT" |
+        awk '
+            / has requirement / {
+                print $1
+            }
+
+            / requires .* which is not installed/ {
+                print $1
+            }
+        ' |
+        sort -u
+    )
+
+    if [[ -n "$BROKEN_PKGS" ]]
+    then
+        echo "Reinstalling packages reported by pip check:"
+        echo "$BROKEN_PKGS"
+
+        while IFS= read -r package
+        do
+            [[ -z "$package" ]] && continue
+
+            echo "Force-reinstalling package: $package"
+
+            python -m pip install \
+                --force-reinstall \
+                --no-deps \
+                --no-cache-dir \
+                -i "$PIP_INDEX_URL" \
+                --trusted-host "$PIP_TRUSTED_HOST" \
+                --no-color \
+                "$package"
+
+        done <<< "$BROKEN_PKGS"
+    fi
+
+    echo "Rechecking the shared Conda environment"
+
+    if ! python -m pip check
+    then
+        echo "WARNING: pip check still reports dependency problems"
+        echo "Repository requirements will be force-reinstalled"
+        FORCE_REQUIREMENTS_REINSTALL=true
+    else
+        echo "Shared Conda environment repair completed successfully"
+        FORCE_REQUIREMENTS_REINSTALL=false
+    fi
+else
+    echo "Shared Conda environment passed pip check"
+    FORCE_REQUIREMENTS_REINSTALL=false
+fi
+
+for req_file in $REQUIREMENTS
+do
+    matches=$(find . -type f -iname "$req_file")
+
+    if [[ -z "$matches" ]]
+    then
+        echo "No matching requirements file found for: $req_file"
+        continue
+    fi
+
+    while IFS= read -r requirements_file
+    do
+        [[ -z "$requirements_file" ]] && continue
+
+        echo "Installing requirements from $requirements_file"
+
+        if [[ "$FORCE_REQUIREMENTS_REINSTALL" == "true" ]]
+        then
+            python -m pip install \
+                --force-reinstall \
+                --no-cache-dir \
+                -i "$PIP_INDEX_URL" \
+                --trusted-host "$PIP_TRUSTED_HOST" \
+                --no-color \
+                -r "$requirements_file"
+        else
+            if ! python -m pip install \
+                --no-cache-dir \
+                -i "$PIP_INDEX_URL" \
+                --trusted-host "$PIP_TRUSTED_HOST" \
+                --no-color \
+                -r "$requirements_file"
+            then
+                echo "Normal requirements installation failed"
+                echo "Retrying with force-reinstall"
+
+                python -m pip install \
+                    --force-reinstall \
+                    --no-cache-dir \
+                    -i "$PIP_INDEX_URL" \
+                    --trusted-host "$PIP_TRUSTED_HOST" \
+                    --no-color \
+                    -r "$requirements_file"
+            fi
+        fi
+
+    done <<< "$matches"
+done
+
+echo "Running final dependency validation"
+
+if ! python -m pip check
+then
+    echo "WARNING: The shared Conda environment still contains dependency conflicts"
+    echo "The installed requirements from different repositories may not be mutually compatible"
+fi
 
 
 
-######### CODE ##########
-################################################################################
-# IMAC Jenkins Controller Docker Image
+############REcommned
+
+PIP_INDEX_URL="https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple"
+PIP_TRUSTED_HOST="repo.platform.aws.hhsoig.gov"
+
+echo "Running pre-flight validation of the shared Conda environment"
+
+
+Suggestion
+###
+I find that the following code does too many checks - we want to try a one detection point (not three), one repair attempt and one clear failure if repair does not work. This way pre-flight either passes or fails (repair path: force-reinstall everything, recheck, exit) you can replace all starting line 35 to the end with something simpler:
+
+# Pre-flight: heal a corrupted shared env before installing anything new.
+# This is rare (roughly once every two months, usually from a previously
+# interrupted build) - if it fires, force-reinstall everything from the
+# matched requirements files rather than trying to target individual
+# packages, then fail the build loudly if that doesn't fix it.
 #
-################################################################################
+# python -m pip (not pip3) ensures this always runs against the pip bundled
+# with the currently activated conda env's python, rather than whatever
+# pip3 happens to resolve to first on PATH.
+if ! python -m pip check
+then
+    echo "pip check failed - shared env is inconsistent, forcing full reinstall"
+    for req_file in $REQUIREMENTS; do
+        find . -iname "$req_file" | xargs -n 1 $PIP_INSTALL --force-reinstall -r
+    done
 
-FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
+    if ! python -m pip check
+    then
+        echo "ERROR: environment still broken after reinstall - manual investigation needed"
+        exit 1
+    fi
+    echo "Environment repaired"
+fi
 
-
-LABEL   oig.imac.base.image.purpose="Jenkins Controller Docker image" \
-        oig.imac.image.owner="Kate Rose" \
-        oig.imac.image.engineer="Kent Rockwell" \
-        oig.imac.base.image.parent="IMAC Jenkins base image" \
-        oig.imac.base.image.parent.registry="213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/base/jenkins:BASE_IMAGE_VERSION" \
-        oig.imac.base.image.ontogeny.registry="registry1.dso.mil/ironbank" \
-        oig.imac.base.image.ontogeny.image="registry1.dso.mil/ironbank/opensource/python:v3.14.5@sha256:be4255a2642bcf619c9594ebb4cbd8ac046ce9ce8c6e69b338048f53164e4b9a"
-
-ARG user=jenkins
-ARG group=jenkins
-ARG uid=2000
-ARG gid=2000
-ARG JENKINS_HOME=/home/jenkins
-ARG JENKINS_JAR_FILES="jenkins-jar-files-2026-08-10"
-
-USER root
-
-# Create User
-RUN mkdir -p $JENKINS_HOME \
-  && chown ${uid}:${gid} $JENKINS_HOME \
-  && groupadd -g ${gid} ${group} \
-  && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user}
-
-# Install OS Packages
-RUN yum -y update && \
-    yum -y install java-21-openjdk && \
-    yum clean all && \
-    rm -rf /var/cache/yum/*
-
-USER jenkins
-
-# Install Jenkins apps
-WORKDIR $JENKINS_HOME
-
-RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
-    unzip jenkins-zip-files.zip && \
-    mv ${JENKINS_JAR_FILES}/* . && \
-    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
-
-COPY dependencies/casc.yaml $JENKINS_HOME/casc.yaml
-COPY dependencies/jenkins.sh $JENKINS_HOME/jenkins.sh
-COPY dependencies/plugins.txt $JENKINS_HOME/plugins.txt
-
-RUN mkdir $JENKINS_HOME/init.groovy.d && \
-    chmod 755 $JENKINS_HOME/init.groovy.d
-
-COPY dependencies/user-token-gen.groovy $JENKINS_HOME/init.groovy.d/user-token-gen.groovy
-
-USER root
-
-RUN chmod 755 $JENKINS_HOME/init.groovy.d/user-token-gen.groovy && \
-    chmod 755 $JENKINS_HOME/jenkins.sh && \
-    chown -R ${uid}:${gid} $JENKINS_HOME
-
-USER jenkins
-
-ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
-ENV JENKINS_HOME $JENKINS_HOME
-# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
-ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
-
-RUN java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins && \
-    rm -rf $JENKINS_HOME/jpm.jar
-
-CMD [ "./jenkins.sh"]
-ENTRYPOINT []
+# Loop through each file (handles space-separated list)
+for req_file in $REQUIREMENTS; do
+    matches=$(find . -iname "$req_file")
+    if [[ -n "$matches" ]]
+    then
+      find . -iname "$req_file" | xargs -n 1 $PIP_INSTALL -r
+    fi
+done
