@@ -27,12 +27,9 @@ set -x
 python --version
 python -m pip --version
 
-PIP_INDEX_URL="https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple"
-PIP_TRUSTED_HOST="repo.platform.aws.hhsoig.gov"
-
 PIP_INSTALL="python -m pip install \
--i $PIP_INDEX_URL \
---trusted-host $PIP_TRUSTED_HOST \
+-i https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple \
+--trusted-host repo.platform.aws.hhsoig.gov \
 --no-color \
 --no-cache-dir"
 
