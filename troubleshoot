@@ -1,16 +1,3 @@
-#jIRA
-######
-Request from OCIO to add a new tag to our EC2 instances:
-
-(Sudheer)"Can  you please tag all the Ec2 instances with a tag "OS-version"  with values AL-2023 or  AL2 to reflect the correct os  ?
-
- we have  built a reporting tool to track all aws resources to monitor"
-
-Acceptance:
-
-Tag "OS-version" added to Jenkins EC2 with value of AL-2023 
-
-########## CODE
 ################################################################################
 # modules/jenkins_agent/ec2.tf
 ################################################################################
@@ -21,22 +8,22 @@ locals {
   user_data_template = local.is_scanner ? "scripts/scanner_user_data.tpl" : "scripts/user_data.tpl"
 
   user_data_vars = {
-    jenkins_main_url    = var.jenkins_main_url
-    project             = var.project
-    username            = var.username
-    efs_mount_target    = var.efs_mount_target
-    prefix              = var.prefix
-    ecr_repo_account_id = var.ecr_repo_account_id
-    agent_image         = var.agent_image
-    agent_tag           = var.agent_tag
-    agent_pem           = data.aws_ssm_parameter.jenkins_agent_private_key.value
-    environments        = var.environments
-    tenable_linking_key = data.aws_ssm_parameter.tenable_agent_key.value
+    jenkins_main_url     = var.jenkins_main_url
+    project              = var.project
+    username             = var.username
+    efs_mount_target     = var.efs_mount_target
+    prefix               = var.prefix
+    ecr_repo_account_id  = var.ecr_repo_account_id
+    agent_image          = var.agent_image
+    agent_tag            = var.agent_tag
+    agent_pem            = data.aws_ssm_parameter.jenkins_agent_private_key.value
+    environments         = var.environments
+    tenable_linking_key  = data.aws_ssm_parameter.tenable_agent_key.value
   }
 }
 
 resource "aws_iam_instance_profile" "jenkins_agent_role" {
-  name = "${var.prefix}_jenkins_agent_${var.project}_role"
+  name = "${var.prefix}-jenkins_agent-${var.project}_role"
   role = aws_iam_role.jenkins_agent_role.name
 }
 
@@ -68,6 +55,7 @@ resource "aws_launch_template" "jenkins_agent_node" {
 
   block_device_mappings {
     device_name = "/dev/xvda"
+
     ebs {
       delete_on_termination = true
       volume_size           = var.ebs_size
@@ -89,15 +77,18 @@ resource "aws_autoscaling_group" "jenkins_agent_node" {
     version = aws_launch_template.jenkins_agent_node.latest_version
   }
 
-  enabled_metrics = ["GroupDesiredCapacity"]
+  enabled_metrics = [
+    "GroupDesiredCapacity"
+  ]
 
   instance_refresh {
     strategy = "Rolling"
+
     preferences {
-      # Scanner is always 1 instance so allow full replacement
       min_healthy_percentage = local.is_scanner ? 0 : 50
       instance_warmup        = 120
     }
+
     triggers = ["tag"]
   }
 
@@ -106,15 +97,19 @@ resource "aws_autoscaling_group" "jenkins_agent_node" {
   }
 
   dynamic "tag" {
-    for_each = merge(var.tags, {
-      Name          = "${var.prefix}-Jenkins Agent - ${var.project}"
-      AgentType     = var.agent_type
-      ImagePushedAt = data.aws_ecr_image.agent_image.image_pushed_at
+    for_each = merge(
+      var.tags,
+      {
+        Name           = "${var.prefix}-Jenkins Agent - ${var.project}"
+        AgentType      = var.agent_type
+        ImagePushedAt  = data.aws_ecr_image.agent_image.image_pushed_at
+        "OS-version"   = "AL-2023"
       },
       var.prefix == "dev" ? {} : {
         Schedule = "oig-office-hours"
       }
     )
+
     content {
       key                 = tag.key
       value               = tag.value
