@@ -1,118 +1,124 @@
-###UTILITY JOBS NAME###
-Data Workbench - Service Account S3 Bucket Registration
-GitHub Create New Repo
-IMAC Lambda Layer Builder Module
-IMAC Security Hub Scanning Module
-Jenkins Agent Node Instance Refresh
-Jenkins-Agent-SIE-API-IP-Update
-GitHub Repository
-Seed Job
-Self Serve Infra Teardown
-SIA OSS Package Scan
+#jIRA
+######
+Request from OCIO to add a new tag to our EC2 instances:
 
+(Sudheer)"Can  you please tag all the Ec2 instances with a tag "OS-version"  with values AL-2023 or  AL2 to reflect the correct os  ?
 
-##########
-    "name": "Utility",
-            "ad_group": "Users",
-            "create_folder": false,
-            "pipelines": [
-                {
-                    "name": "Jenkins-Agent-SIE-API-IP-Update",
-                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-jenkins.git",
-                    "jenkinsfile": "Jenkinsfile.update_sie_agent",
-                    "pipeline_config": "pipeline_config_update_sie_agent.groovy",
-                    "suppress_trigger": true
-                },
-                {
-                    "name": "Self Serve Infra Teardown",
-                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-jenkins.git",
-                    "jenkinsfile": "Jenkinsfile.decommission",
-                    "pipeline_config": "pipeline_config_decommission.groovy",
-                    "suppress_trigger": true
-                },
-                {
-                    "name": "Personal Cloud 9 Instance",
-                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-aws-cloud9.git",
-                    "jenkinsfile": "Jenkinsfile",
-                    "pipeline_config": "pipeline_config.groovy"
-                },
-                {
-                    "name": "Seed Job",
-                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-jenkins-jobs.git",
-                    "jenkinsfile": "Jenkinsfile",
-                    "pipeline_config": "pipeline_config.groovy"
-                },
-                {
-                    "name": "IMAC Security Hub Scanning Module",
-                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-common-functions.git",
-                    "jenkinsfile": "Jenkinsfile",
-                    "pipeline_config": "pipeline_config.groovy",
-                    "suppress_trigger": true
-                },
-                {
-                    "name": "IMAC Lambda Layer Builder Module",
-                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-common-functions.git",
-                    "jenkinsfile": "Jenkinsfile.lambda_layer_builder",
-                    "pipeline_config": "pipeline_config_lambda_layer_builder.groovy",
-                    "suppress_trigger": true
-                },
-                {
-                    "name": "GitHub Create New Repo",
-                    "repo": "https://git.aws.hhsoig.gov/CDO/imac-scripts.git",
-                    "jenkinsfile": "admin/pipelines/Jenkinsfile.create_repo",
-                    "pipeline_config": "admin/pipelines/pipeline_config.groovy",
-                    "suppress_trigger": true
-                }
-            ]
-        }
-    ],
-    "decommission_pipelines": [
-        {
-            "name":        "Self Serve Infra Teardown",
-            "repo":        "https://git.aws.hhsoig.gov/CDO/imac-jenkins.git",
-            "jenkinsfile": "Jenkinsfile.decommission",
-            "branch":      "main"
-        }
-    ]
+ we have  built a reporting tool to track all aws resources to monitor"
 
+Acceptance:
 
-################
-Data Workbench - Service Account S3 Bucket Registration
+Tag "OS-version" added to Jenkins EC2 with value of AL-2023 
 
-Registers and configures an Amazon S3 bucket for a Data Workbench service account, including the required permissions and access policies.
+########## CODE
+################################################################################
+# modules/jenkins_agent/ec2.tf
+################################################################################
 
-GitHub Create New Repo
+locals {
+  is_scanner = var.agent_type == "scanner"
 
-Creates a new GitHub repository with the standard project structure, default settings, and required branch protections.
+  user_data_template = local.is_scanner ? "scripts/scanner_user_data.tpl" : "scripts/user_data.tpl"
 
-IMAC Lambda Layer Builder Module
+  user_data_vars = {
+    jenkins_main_url    = var.jenkins_main_url
+    project             = var.project
+    username            = var.username
+    efs_mount_target    = var.efs_mount_target
+    prefix              = var.prefix
+    ecr_repo_account_id = var.ecr_repo_account_id
+    agent_image         = var.agent_image
+    agent_tag           = var.agent_tag
+    agent_pem           = data.aws_ssm_parameter.jenkins_agent_private_key.value
+    environments        = var.environments
+    tenable_linking_key = data.aws_ssm_parameter.tenable_agent_key.value
+  }
+}
 
-Builds, packages, and publishes AWS Lambda layers so they can be shared across multiple Lambda functions.
+resource "aws_iam_instance_profile" "jenkins_agent_role" {
+  name = "${var.prefix}_jenkins_agent_${var.project}_role"
+  role = aws_iam_role.jenkins_agent_role.name
+}
 
-IMAC Security Hub Scanning Module
+resource "aws_launch_template" "jenkins_agent_node" {
+  name_prefix   = "${var.prefix}-jenkins-agent-node-${var.project}"
+  image_id      = var.ami_id
+  instance_type = var.instance_type
+  key_name      = data.aws_key_pair.jenkins_agent_linux.key_name
 
-Runs AWS Security Hub scans to identify security findings, compliance issues, and misconfigurations across AWS resources.
+  iam_instance_profile {
+    name = aws_iam_instance_profile.jenkins_agent_role.name
+  }
 
-Jenkins Agent Node Instance Refresh
+  vpc_security_group_ids = var.security_group_ids
 
-Refreshes Jenkins agent EC2 instances by replacing existing nodes with new ones to apply updates, patches, and configuration changes.
+  user_data = base64encode(
+    templatefile("${path.module}/${local.user_data_template}", local.user_data_vars)
+  )
 
-Jenkins-Agent-SIE-API-IP-Update
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
 
-Updates the SIE API IP address configuration on Jenkins agents to maintain connectivity with external services.
+  monitoring {
+    enabled = false
+  }
 
-GitHub Repository
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      delete_on_termination = true
+      volume_size           = var.ebs_size
+      volume_type           = "gp3"
+      encrypted             = true
+      kms_key_id            = var.kms_key_arn
+    }
+  }
+}
 
-Performs administrative GitHub repository tasks such as updating repository settings, managing permissions, and maintaining repository configuration.
+resource "aws_autoscaling_group" "jenkins_agent_node" {
+  name_prefix         = "${var.prefix}-jenkins-agent-asg-${var.project}"
+  min_size            = local.is_scanner ? 1 : var.agent_asg_instance_size
+  max_size            = local.is_scanner ? 1 : var.agent_asg_instance_size
+  vpc_zone_identifier = var.subnet_ids
 
-Seed Job
+  launch_template {
+    id      = aws_launch_template.jenkins_agent_node.id
+    version = aws_launch_template.jenkins_agent_node.latest_version
+  }
 
-Creates and updates Jenkins folders, pipelines, and jobs from source-controlled configuration files to keep the Jenkins environment consistent.
+  enabled_metrics = ["GroupDesiredCapacity"]
 
-Self Serve Infra Teardown
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      # Scanner is always 1 instance so allow full replacement
+      min_healthy_percentage = local.is_scanner ? 0 : 50
+      instance_warmup        = 120
+    }
+    triggers = ["tag"]
+  }
 
-Safely decommissions infrastructure by destroying selected AWS resources and cleaning up associated configurations.
+  lifecycle {
+    create_before_destroy = true
+  }
 
-SIA OSS Package Scan
-
-Scans open-source software dependencies for known vulnerabilities, licensing issues, and outdated packages before deployment.
+  dynamic "tag" {
+    for_each = merge(var.tags, {
+      Name          = "${var.prefix}-Jenkins Agent - ${var.project}"
+      AgentType     = var.agent_type
+      ImagePushedAt = data.aws_ecr_image.agent_image.image_pushed_at
+      },
+      var.prefix == "dev" ? {} : {
+        Schedule = "oig-office-hours"
+      }
+    )
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = true
+    }
+  }
+}
