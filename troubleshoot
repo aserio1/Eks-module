@@ -50,3 +50,40 @@ module "jenkins_job" {
                 }
             ]
         }
+
+#######################
+  Plan: 0 to add, 0 to change, 1 to destroy.
+20:34:53  
+20:34:53  Error: Error in function call
+20:34:53  
+20:34:53    on modules/jenkins_job/job.tf line 6, in resource "jenkins_job" "job":
+20:34:53     6:   template = templatefile("${path.module}/template/job_template.xml", {
+20:34:53     7:     repo_owner               = local.repo_owner,
+20:34:53     8:     repository               = local.repository,
+20:34:53     9:     repo_url                 = var.repo,
+20:34:53    10:     jenkinsfile              = var.jenkinsfile,
+20:34:53    11:     pipeline_config          = var.pipeline_config,
+20:34:53    12:     triggered_branches_regex = var.triggered_branches_regex,
+20:34:53    13:     suppression_strategy     = var.suppression_strategy,
+20:34:53    14:     discover_tags            = var.discover_tags,
+20:34:53    15:     display_name             = var.display_name
+20:34:53    16:   })
+20:34:53      ├────────────────
+20:34:53      │ while calling templatefile(path, vars)
+20:34:53      │ local.repo_owner is "CDO"
+20:34:53      │ local.repository is "dwb-service-archival"
+20:34:53      │ path.module is "modules/jenkins_job"
+20:34:53      │ var.discover_tags is false
+20:34:53      │ var.display_name is null
+20:34:53      │ var.jenkinsfile is "jenkins/Jenkinsfile"
+20:34:53      │ var.pipeline_config is "jenkins/jenkins.groovy"
+20:34:53      │ var.repo is "https://git.aws.hhsoig.gov/CDO/dwb-service-archival.git"
+20:34:53      │ var.suppression_strategy is "INDEXING"
+20:34:53      │ var.triggered_branches_regex is "^.*$"
+20:34:53  
+20:34:53  Call to function "templatefile" failed:
+20:34:53  modules/jenkins_job/template/job_template.xml:5,18-30: Invalid template
+20:34:53  interpolation value; The expression result is null. Cannot include a null
+20:34:53  value in a string template..
+20:34:53  
+20:34:53  Error: Error in function call
