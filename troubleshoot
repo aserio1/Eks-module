@@ -1,16 +1,120 @@
-### Error ##
-Error: Unsupported attribute
-14:41:47  
-14:41:47    on seed-jobs.tf line 122, in module "jenkins_job":
-14:41:47   122:   display_name             = each.value.display_name
-14:41:47      ├────────────────
-14:41:47      │ each.value is object with 8 attributes
-14:41:47  
-14:41:47  This object does not have an attribute named "display_name".
+ 
+20:57:41  Error: Error in function call
+20:57:41  
+20:57:41    on modules/jenkins_job/job.tf line 15, in resource "jenkins_job" "job":
+20:57:41    15:     display_name             = coalesce(var.display_name, "")
+20:57:41      ├────────────────
+20:57:41      │ while calling coalesce(vals...)
+20:57:41      │ var.display_name is null
+20:57:41  
+20:57:41  Call to function "coalesce" failed: no non-null, non-empty-string arguments.
+20:57:41  
+20:57:41  Error: Error in function call
+20:57:41  
+20:57:41    on modules/jenkins_job/job.tf line 15, in resource "jenkins_job" "job":
+20:57:41    15:     display_name             = coalesce(var.display_name, "")
+20:57:41      ├────────────────
+20:57:41      │ while calling coalesce(vals...)
+20:57:41      │ var.display_name is null
+20:57:41  
+20:57:41  Call to function "coalesce" failed: no non-null, non-empty-string arguments.
+20:57:41  
+20:57:41  Error: Error in function call
+20:57:41  
+20:57:41    on modules/jenkins_job/job.tf line 15, in resource "jenkins_job" "job":
+20:57:41    15:     display_name             = coalesce(var.display_name, "")
+20:57:41      ├────────────────
+20:57:41      │ while calling coalesce(vals...)
+20:57:41      │ var.display_name is null
+20:57:41  
+20:57:41  Call to function "coalesce" failed: no non-null, non-empty-string arguments.
+20:57:41  
+20:57:41  Error: Error in function call
+20:57:41  
+20:57:41    on modules/jenkins_job/job.tf line 15, in resource "jenkins_job" "job":
+20:57:41    15:     display_name             = coalesce(var.display_name, "")
+20:57:41      ├────────────────
+20:57:41      │ while calling coalesce(vals...)
+20:57:41      │ var.display_name is null
+20:57:41  
+20:57:41  Call to function "coalesce" failed: no non-null, non-empty-string arguments.
+20:57:41  
+20:57:41  Error: Error in function call
+20:57:41  
+20:57:41    on modules/jenkins_job/job.tf line 15, in resource "jenkins_job" "job":
+20:57:41    15:     display_name             = coalesce(var.display_name, "")
+20:57:41      ├────────────────
+20:57:41      │ while calling coalesce(vals...)
+20:57:41      │ var.display_name is null
+20:57:41  
+20:57:41  Call to function "coalesce" failed: no non-null, non-empty-string arguments.
+20:57:41  
+20:57:41  Error: Error in function call
+20:57:41  
+20:57:41    on modules/jenkins_job/job.tf line 15, in resource "jenkins_job" "job":
+20:57:41    15:     display_name             = coalesce(var.display_name, "")
+20:57:41      ├────────────────
+20:57:41      │ while calling coalesce(vals...)
+20:57:41      │ var.display_name is null
+20:57:41  
+20:57:41  Call to function "coalesce" failed: no non-null, non-empty-string arguments.
+20:57:41  
+20:57:41  Error: Error in function call
+20:57:41  
+20:57:41    on modules/jenkins_job/outputs.tf line 2, in output "rendered_template":
+20:57:41     2:   value = templatefile("${path.module}/template/job_template.xml", {
+20:57:41     3:     repo_owner               = local.repo_owner,
+20:57:41     4:     repository               = local.repository,
+20:57:41     5:     repo_url                 = var.repo,
+20:57:41     6:     jenkinsfile              = var.jenkinsfile,
+20:57:41     7:     pipeline_config          = var.pipeline_config,
+20:57:41     8:     triggered_branches_regex = var.triggered_branches_regex,
+20:57:41     9:     suppression_strategy     = var.suppression_strategy,
+20:57:41    10:     discover_tags            = var.discover_tags,
+20:57:41    11:     display_name             = var.display_name,
+20:57:41    12:   })
+20:57:41      ├────────────────
+20:57:41      │ while calling templatefile(path, vars)
+20:57:41      │ local.repo_owner is "CDO"
+20:57:41      │ local.repository is "dwb-infra-lza"
+20:57:41      │ path.module is "modules/jenkins_job"
+20:57:41      │ var.discover_tags is false
+20:57:41      │ var.display_name is null
+20:57:41      │ var.jenkinsfile is "jenkins/Jenkinsfile"
+20:57:41      │ var.pipeline_config is "jenkins/jenkins.groovy"
+20:57:41      │ var.repo is "https://git.aws.hhsoig.gov/CDO/dwb-infra-lza.git"
+20:57:41      │ var.suppression_strategy is "INDEXING"
+20:57:41      │ var.triggered_branches_regex is "^.*$"
+20:57:41  
+20:57:41  Call to function "templatefile" failed:
+20:57:41  modules/jenkins_job/template/job_template.xml:5,18-30: Invalid template
+20:57:41  interpolation value; The expression result is null. Cannot include a null
+20:57:41  value in a string template..
+20:57:41  
+20:57:41  Error: Error in function call
+20:57:41  
+
+############### updated 
+resource "jenkins_job" "job" {
+  name = var.job_name
+  #folder = "/job/${var.folder_name}" #jenkins prefixes everything (including folders) with /job
+  folder = var.folder_name != "" ? "/job/${replace(var.folder_name, "/", "/job/")}" : null
+
+  template = templatefile("${path.module}/template/job_template.xml", {
+    repo_owner               = local.repo_owner,
+    repository               = local.repository,
+    repo_url                 = var.repo,
+    jenkinsfile              = var.jenkinsfile,
+    pipeline_config          = var.pipeline_config,
+    triggered_branches_regex = var.triggered_branches_regex,
+    suppression_strategy     = var.suppression_strategy,
+    discover_tags            = var.discover_tags,
+    display_name             = coalesce(var.display_name, "")
+  })
+}
 
 
-###########code
-# Create Jenkins jobs for each pipeline within the corresponding folder
+########### also 
 module "jenkins_job" {
   source = "./modules/jenkins_job"
 
@@ -26,7 +130,7 @@ module "jenkins_job" {
   suppression_strategy     = each.value.suppression_strategy
   triggered_branches_regex = each.value.triggered_branches_regex
   discover_tags            = each.value.discover_tags
-  display_name             = each.value.display_name
+  display_name             = try(each.value.display_name, null)
 
   # Wait until all folder created before proceeding with jenkins job
   depends_on = [
@@ -35,55 +139,12 @@ module "jenkins_job" {
   ]
 }
 
-### but remove this
-       {
-            "name": "Utility",
-            "ad_group": "Users",
-            "create_folder": false,
-            "pipelines": [
-                {
-                    "name": "Data Workbench - Service Account S3 Bucket Registration",
-                    "repo": "https://git.aws.hhsoig.gov/CDO/dwb-access.git",
-                    "jenkinsfile": "jenkins/Jenkinsfile.sa_bucket_lf_registration",
-                    "pipeline_config": "jenkins/jenkins.sa_bucket_lf_registration.groovy",
-                    "suppress_trigger": true
-                }
-            ]
-        }
-
-#######################
-  Plan: 0 to add, 0 to change, 1 to destroy.
-20:34:53  
-20:34:53  Error: Error in function call
-20:34:53  
-20:34:53    on modules/jenkins_job/job.tf line 6, in resource "jenkins_job" "job":
-20:34:53     6:   template = templatefile("${path.module}/template/job_template.xml", {
-20:34:53     7:     repo_owner               = local.repo_owner,
-20:34:53     8:     repository               = local.repository,
-20:34:53     9:     repo_url                 = var.repo,
-20:34:53    10:     jenkinsfile              = var.jenkinsfile,
-20:34:53    11:     pipeline_config          = var.pipeline_config,
-20:34:53    12:     triggered_branches_regex = var.triggered_branches_regex,
-20:34:53    13:     suppression_strategy     = var.suppression_strategy,
-20:34:53    14:     discover_tags            = var.discover_tags,
-20:34:53    15:     display_name             = var.display_name
-20:34:53    16:   })
-20:34:53      ├────────────────
-20:34:53      │ while calling templatefile(path, vars)
-20:34:53      │ local.repo_owner is "CDO"
-20:34:53      │ local.repository is "dwb-service-archival"
-20:34:53      │ path.module is "modules/jenkins_job"
-20:34:53      │ var.discover_tags is false
-20:34:53      │ var.display_name is null
-20:34:53      │ var.jenkinsfile is "jenkins/Jenkinsfile"
-20:34:53      │ var.pipeline_config is "jenkins/jenkins.groovy"
-20:34:53      │ var.repo is "https://git.aws.hhsoig.gov/CDO/dwb-service-archival.git"
-20:34:53      │ var.suppression_strategy is "INDEXING"
-20:34:53      │ var.triggered_branches_regex is "^.*$"
-20:34:53  
-20:34:53  Call to function "templatefile" failed:
-20:34:53  modules/jenkins_job/template/job_template.xml:5,18-30: Invalid template
-20:34:53  interpolation value; The expression result is null. Cannot include a null
-20:34:53  value in a string template..
-20:34:53  
-20:34:53  Error: Error in function call
+###################
+  <actions/>
+  <description />
+  <displayName>${display_name}</displayName>
+  <properties>
+    <org.boozallen.plugins.jte.init.governance.TemplateConfigFolderProperty plugin="templating-engine">
+      <tier>
+        <configurationProvider class="org.boozallen.plugins.jte.init.governance.config.NullPipelineConfigurationProvider"/>
+      </tier>
