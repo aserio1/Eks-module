@@ -1,16 +1,34 @@
-display_name = var.display_name != null ? var.display_name : ""
+###### CODE
+prefix                   = "dev"
+jenkins_controller_size  = "t3.large"
+jenkins_docker_tag       = "2e00cdcf0c0ebddc01cfb9b3619ac996b904ddfe"
+agent_asg_instance_size  = 0
+always_on_agent_nodes    = ["imac", "utility"]
+jenkins_idp_entity_id    = "JenkinsSP"
+jenkins_idp_metadata_url = "https://login.microsoftonline.com/dad5f894-5309-4df6-9e48-232fdf1502ab/federationmetadata/2007-06/federationmetadata.xml?appid=cd13141e-5e3f-498b-9815-742e2040285a"
+monitored_agent          = "utility" # or your agent name
+team_email               = "imac@oig.hhs.gov"
+base_ami_id              = "ami-0e6d20cec116c041e"
+efs_threshold_gib        = 15
+jenkins_email_subscriptions = [
+  {
+    email = "imac@oig.hhs.gov"
+    filter_policy = {
+      department = ["imac"]
+    }
+  }
+]
 
 
-output "rendered_template" {
-  value = templatefile("${path.module}/template/job_template.xml", {
-    repo_owner               = local.repo_owner,
-    repository               = local.repository,
-    repo_url                 = var.repo,
-    jenkinsfile              = var.jenkinsfile,
-    pipeline_config          = var.pipeline_config,
-    triggered_branches_regex = var.triggered_branches_regex,
-    suppression_strategy     = var.suppression_strategy,
-    discover_tags            = var.discover_tags,
-    display_name             = var.display_name,
-  })
-}
+
+
+############ JIRA TICKET 
+Currently, when a new AL2023 AMI is shared to the DWB account, the team manually identifies the new AMI and updates the Terraform configuration to use it. Automate this process so that Jenkins agent nodes always use the latest shared AL2023 AMI without manual intervention. Consider if automated testing can also be added based on some of the failures we incurred fromthe last update.
+
+Acceptance Criteria:
+
+Terraform data.aws_ami data source in data.tf is configured to automatically retrieve the most recent AL2023 AMI shared to the DWB account.
+Jenkins agent nodes (configured in jenkins_agents.tf) automatically use the latest AMI upon the next Terraform apply.
+A CI/CD pipeline or scheduled job is in place to run terraform apply automatically when a new AMI is detected.
+Automated testing of the AMI update in dev
+
