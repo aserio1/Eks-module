@@ -1,456 +1,80 @@
-### data.tf
-data "aws_caller_identity" "current" {}
-
-data "aws_vpc" "main" {}
-
-data "aws_subnets" "all_subnets" {}
-
-data "aws_kms_alias" "ebs_kms_key" {
-  name = "alias/DWB-DEV-DWB-USAGE-KEY"
-}
-
 data "aws_ami" "centos_stig_ami" {
   most_recent = true
 
+  owners = [
+    var.al2023_ami_owner_account_id
+  ]
+
   filter {
-    name   = "image-id"
-    values = [var.base_ami_id]
-  }
+    name = "name"
 
-}
-
-data "aws_default_tags" "provider_tags" {}
-
-# Lookup s3://jenkins-binaries-<account_id>
-data "aws_s3_bucket" "jenkins_binaries" {
-  bucket = "jenkins-binaries-${data.aws_caller_identity.current.account_id}"
-}
-
-# Static Created timestamp
-resource "time_static" "created" {}
-
-locals {
-  # Created timestamp
-  created_timestamp = time_static.created.rfc3339
-
-  # Pull provider default_tags
-  default_base_tags = data.aws_default_tags.provider_tags.tags
-
-  # Merge tags and pass into modules (ASG, etc)
-  tags = merge(local.default_base_tags, { Created = local.created_timestamp })
-
-  # Convert GiB to bytes (CloudWatch metrics are raw bytes)
-  efs_threshold_bytes = var.efs_threshold_gib * 1024 * 1024 * 1024
-
-  # The bucket arn needed to grant scanner agent IAM perms to bucket
-  scanner_reports_bucket_arn = data.aws_s3_bucket.jenkins_binaries.arn
-
-  jenkins_controller_policies = toset([
-    "AmazonEC2FullAccess",
-    "SecretsManagerReadWrite",
-    "AmazonS3FullAccess",
-    "AmazonDynamoDBFullAccess",
-    "AmazonSSMManagedInstanceCore",
-    "AmazonEC2ContainerRegistryFullAccess",
-    "AmazonSSMFullAccess",
-    "AWSKeyManagementServicePowerUser"
+    values = [
+      var.al2023_ami_name_pattern
     ]
-  )
-
-  ssl_certificate       = "arn:aws:acm:us-east-1:213141505949:certificate/400d2274-a672-46a8-8da9-6790604902bd"
-  ecr_repo_account_id   = "213141505949"
-  controller_image      = "oig/imac/jenkins/jenkins-controller"
-  controller_tag        = var.jenkins_docker_tag
-  default_agent_image   = "oig/imac/jenkins/jenkins-agent"
-  default_agent_tag     = var.jenkins_docker_tag
-  default_instance_type = "t3.medium"
-  default_ebs_size      = 130 # the ami has a 130GB volume cannot go lower than that
-  agent_nodes = [
-    {
-      project       = "imac",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = 512,
-      instance_type = local.default_instance_type,
-      environments = [
-        { name : "dev", target_account : "213141505949" },
-        { name : "prod", target_account : "213141505949" },
-        { name : "dev-imac-lza", target_account : "055694273479" },
-        { name : "test-imac-lza", target_account : "594541046048" },
-        { name : "prod-imac-lza", target_account : "102306345766" },
-        { name : "213141505949", target_account : "213141505949" },
-        { name : "973222108556", target_account : "973222108556" },
-        { name : "333866270941", target_account : "333866270941" },
-        { name : "757265181315", target_account : "757265181315" },
-        { name : "663200706104", target_account : "663200706104" },
-        { name : "598956749955", target_account : "598956749955" },
-        { name : "475117487119", target_account : "475117487119" },
-        { name : "966555604991", target_account : "966555604991" },
-        { name : "730335313798", target_account : "730335313798" },
-        { name : "438465134269", target_account : "438465134269" },
-        { name : "202533541645", target_account : "202533541645" },
-        { name : "340752827390", target_account : "340752827390" },
-        { name : "361769585396", target_account : "361769585396" },
-        { name : "445567108167", target_account : "445567108167" },
-        { name : "779846803742", target_account : "779846803742" },
-        { name : "864981735892", target_account : "864981735892" },
-        { name : "442426863774", target_account : "442426863774" },
-        { name : "302695037820", target_account : "302695037820" },
-        { name : "895583930055", target_account : "895583930055" },
-        { name : "817491136226", target_account : "817491136226" },
-        { name : "723265503409", target_account : "723265503409" },
-        { name : "244639567260", target_account : "244639567260" },
-        { name : "180703226693", target_account : "180703226693" },
-        { name : "306026246970", target_account : "306026246970" },
-        { name : "620558997858", target_account : "620558997858" },
-        { name : "756167686138", target_account : "756167686138" },
-        { name : "055694273479", target_account : "055694273479" },
-        { name : "594541046048", target_account : "594541046048" },
-        { name : "102306345766", target_account : "102306345766" }
-      ]
-    },
-    {
-      project       = "sie",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = 256,
-      instance_type = "t3.large",
-
-      environments = [
-        { name : "dev", target_account : "757265181315" },
-        { name : "qa", target_account : "598956749955" },
-        { name : "stage", target_account : "663200706104" },
-        { name : "prod", target_account : "663200706104" },
-        { name : "dev-data-pipelines", target_account : "302695037820" },
-        { name : "qa-data-pipelines", target_account : "895583930055" },
-        { name : "prod-data-pipelines", target_account : "817491136226" },
-        { name : "dev-data-aquisition", target_account : "306026246970" },
-        { name : "test-data-aquisition", target_account : "620558997858" },
-        { name : "prod-data-aquisition", target_account : "756167686138" }
-      ]
-    },
-    {
-      project       = "data_workbench",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = local.default_ebs_size,
-      instance_type = "t3.xlarge",
-
-      environments = [
-        { name : "predev", target_account : "757265181315" },
-        { name : "dev", target_account : "213141505949" },
-        { name : "qa", target_account : "973222108556" },
-        { name : "test", target_account : "973222108556" },
-        { name : "prod", target_account : "333866270941" },
-        { name : "dev-data-pipelines", target_account : "302695037820" },
-        { name : "qa-data-pipelines", target_account : "895583930055" },
-        { name : "prod-data-pipelines", target_account : "817491136226" },
-        { name : "dev-data-infrastructure", target_account : "723265503409" },
-        { name : "qa-data-infrastructure", target_account : "244639567260" },
-        { name : "prod-data-infrastructure", target_account : "180703226693" },
-        { name : "dev-data-aquisition", target_account : "306026246970" },
-        { name : "test-data-aquisition", target_account : "620558997858" },
-        { name : "prod-data-aquisition", target_account : "756167686138" }
-      ]
-    },
-    {
-      project       = "oams",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = local.default_ebs_size,
-      instance_type = local.default_instance_type,
-
-      environments = [
-        { name : "dev", target_account : "213141505949" },
-        { name : "qa", target_account : "973222108556" },
-        { name : "stage", target_account : "333866270941" },
-        { name : "prod", target_account : "333866270941" },
-        { name : "dev-viz-tools", target_account : "340752827390" },
-        { name : "qa-viz-tools", target_account : "361769585396" },
-        { name : "prod-viz-tools", target_account : "445567108167" },
-        { name : "dev-data-pipelines", target_account : "302695037820" },
-        { name : "qa-data-pipelines", target_account : "895583930055" },
-        { name : "stage-data-pipelines", target_account : "817491136226" },
-        { name : "prod-data-pipelines", target_account : "817491136226" },
-        { name : "dev-data-aquisition", target_account : "306026246970" },
-        { name : "test-data-aquisition", target_account : "620558997858" },
-        { name : "prod-data-aquisition", target_account : "756167686138" }
-      ]
-    },
-    {
-      project       = "ml-engineering",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = 256
-      instance_type = "t3.large",
-
-      environments = [
-        { name : "dev-mle-dwb", target_account : "213141505949" },
-        { name : "prod-mle-dwb", target_account : "333866270941" },
-        { name : "dev-dme-anomaly", target_account : "213141505949" },
-        { name : "prod-dme-anomaly", target_account : "333866270941" },
-        { name : "dev-risk-models", target_account : "213141505949" },
-        { name : "prod-risk-models", target_account : "333866270941" },
-        { name : "dev-ml-complaints", target_account : "475117487119" },
-        { name : "prod-ml-complaints", target_account : "966555604991" },
-        { name : "dev-ml-critical", target_account : "213141505949" },
-        { name : "prod-ml-critical", target_account : "333866270941" },
-        { name : "dev-ml-claim-gpt", target_account : "213141505949" },
-        { name : "prod-ml-claim-gpt", target_account : "333866270941" },
-        { name : "dev-gis-tools", target_account : "779846803742" },
-        { name : "qa-gis-tools", target_account : "864981735892" },
-        { name : "prod-gis-tools", target_account : "442426863774" },
-        { name : "dev-data-pipelines", target_account : "302695037820" },
-        { name : "qa-data-pipelines", target_account : "895583930055" },
-        { name : "prod-data-pipelines", target_account : "817491136226" },
-        { name : "dev-data-aquisition", target_account : "306026246970" },
-        { name : "test-data-aquisition", target_account : "620558997858" },
-        { name : "prod-data-aquisition", target_account : "756167686138" }
-      ]
-    },
-    {
-      project       = "cgap",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = local.default_ebs_size,
-      instance_type = local.default_instance_type,
-
-      environments = [
-        { name : "dev", target_account : "730335313798" },
-        { name : "dev-viz-tools", target_account : "340752827390" },
-        { name : "test-viz-tools", target_account : "361769585396" },
-        { name : "prod-viz-tools", target_account : "445567108167" },
-        { name : "dev-data-pipelines", target_account : "302695037820" },
-        { name : "test-data-pipelines", target_account : "895583930055" },
-        { name : "prod-data-pipelines", target_account : "817491136226" },
-        { name : "dev-data-aquisition", target_account : "306026246970" },
-        { name : "test-data-aquisition", target_account : "620558997858" },
-        { name : "prod-data-aquisition", target_account : "756167686138" },
-        { name : "dev-cloud-analytics", target_account : "757265181315" },
-        { name : "prod-cloud-analytics", target_account : "663200706104" }
-      ]
-    },
-    {
-      project       = "ides",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = local.default_ebs_size,
-      instance_type = local.default_instance_type,
-
-      environments = [
-        { name : "dev", target_account : "730335313798" },
-        { name : "qa", target_account : "438465134269" },
-        { name : "prod", target_account : "202533541645" }
-      ]
-    },
-    {
-      project       = "salt",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = local.default_ebs_size,
-      instance_type = local.default_instance_type,
-      environments = [
-        { name : "dev", target_account : "213141505949" },
-        { name : "prod", target_account : "333866270941" },
-        { name : "dev-data-pipelines", target_account : "302695037820" },
-        { name : "test-data-pipelines", target_account : "895583930055" },
-        { name : "prod-data-pipelines", target_account : "817491136226" }
-      ]
-    },
-    {
-      project       = "utility",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = local.default_ebs_size,
-      instance_type = "t3.small",
-
-      environments = [
-        { name : "dev", target_account : "213141505949" },
-        { name : "prod", target_account : "213141505949" }
-      ]
-    },
-    {
-      project       = "gis",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = local.default_ebs_size,
-      instance_type = local.default_instance_type,
-
-      environments = [
-        { name : "dev", target_account : "779846803742" },
-        { name : "qa", target_account : "864981735892" },
-        { name : "prod", target_account : "442426863774" }
-      ]
-    }
-  ]
-
-  scanner_nodes = [
-    {
-      project       = "sia",
-      agent_image   = local.default_agent_image,
-      agent_tag     = local.default_agent_tag,
-      ebs_size      = local.default_ebs_size,
-      instance_type = "t3.small",
-
-      environments = [
-        { name : "dev", target_account : "213141505949" },
-        { name : "prod", target_account : "213141505949" }
-      ]
-    }
-  ]
-  # Processing data from jenkins_email_subscriptions to compose the roles needed
-  # to have access to the sns topic and the kms associated with the topic
-
-  # Flatten all department values from the subscriptions
-  departments = distinct(flatten([
-    for sub in var.jenkins_email_subscriptions : sub.filter_policy["department"]
-  ]))
-
-  # Construct ARNs using department as suffix
-  role_arns = {
-    for dept in local.departments :
-    dept => "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.prefix}_jenkins_agent_role_${dept}"
   }
 
-  # Add a special-case ARN with a different format
-  extra_arn = {
-    "external-access" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.prefix}-jenkins_main_ssm_role",
-    "imac-role-admin" = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/prod_jenkins_role_imac_${var.prefix}"
+  filter {
+    name = "state"
+
+    values = [
+      "available"
+    ]
   }
 
-  # Merge all ARNs
-  all_arns = merge(local.role_arns, local.extra_arn)
+  filter {
+    name = "architecture"
 
-  # Convert to list of ARN
-  jenkins_sns_role_arns = values(local.all_arns)
-
-}
-
-
-
-
-########## dev.tfvars
-prefix                   = "dev"
-jenkins_controller_size  = "t3.large"
-jenkins_docker_tag       = "2e00cdcf0c0ebddc01cfb9b3619ac996b904ddfe"
-agent_asg_instance_size  = 0
-always_on_agent_nodes    = ["imac", "utility"]
-jenkins_idp_entity_id    = "JenkinsSP"
-jenkins_idp_metadata_url = "https://login.microsoftonline.com/dad5f894-5309-4df6-9e48-232fdf1502ab/federationmetadata/2007-06/federationmetadata.xml?appid=cd13141e-5e3f-498b-9815-742e2040285a"
-monitored_agent          = "utility" # or your agent name
-team_email               = "imac@oig.hhs.gov"
-base_ami_id              = "ami-0e6d20cec116c041e"
-efs_threshold_gib        = 15
-jenkins_email_subscriptions = [
-  {
-    email = "imac@oig.hhs.gov"
-    filter_policy = {
-      department = ["imac"]
-    }
-  }
-]
-
-########### jenkins_agent.tf 
-
-################################################################################
-# jenkins/jenkins_agent.tf
-################################################################################
-
-locals {
-  agent_node_deprecated_map = [for agent in local.agent_nodes : {
-    agent_tag     = agent.agent_tag
-    agent_image   = agent.agent_image
-    project       = agent.project
-    instance_type = agent.instance_type
-    ebs_size      = agent.ebs_size
-    environments = [for environment in agent.environments : {
-      name                = environment.name
-      target_account      = environment.target_account
-      target_account_role = "arn:aws:iam::${environment.target_account}:role/prod_jenkins_role_${agent.project}_${environment.name}"
-    }]
-  }]
-
-  agent_nodes_map = {
-    for obj in local.agent_node_deprecated_map : obj.project => obj
-    if length(var.allowed_agents) < 1 || contains(var.allowed_agents, obj.project)
+    values = [
+      "x86_64"
+    ]
   }
 
-  # Keyed by project so for_each works correctly.
-  # No environments — scanner does not assume cross-account roles.
-  scanner_agent_nodes_map = {
-    for agent in local.scanner_nodes : agent.project => {
-      agent_tag     = agent.agent_tag
-      agent_image   = agent.agent_image
-      project       = agent.project
-      instance_type = agent.instance_type
-      ebs_size      = agent.ebs_size
-    }
+  filter {
+    name = "root-device-type"
+
+    values = [
+      "ebs"
+    ]
+  }
+
+  filter {
+    name = "virtualization-type"
+
+    values = [
+      "hvm"
+    ]
   }
 }
 
-module "all_agent_nodes" {
-  source     = "./modules/jenkins_agent"
-  depends_on = [module.base_infrastructure]
 
-  for_each = local.agent_nodes_map
-
-  agent_type                  = "regular"
-  prefix                      = var.prefix
-  project                     = each.value.project
-  environments                = each.value.environments
-  jenkins_main_url            = module.base_infrastructure.jenkins_url
-  ami_id                      = data.aws_ami.centos_stig_ami.id
-  subnet_ids                  = data.aws_subnets.all_subnets.ids
-  jenkins_controller_policies = local.jenkins_controller_policies
-  security_group_ids          = module.base_infrastructure.agent_security_group_ids
-  tags                        = local.tags
-  ecr_repo_account_id         = local.ecr_repo_account_id
-  agent_image                 = each.value.agent_image
-  agent_tag                   = each.value.agent_tag
-  efs_mount_target            = module.base_infrastructure.efs_mount_target
-  instance_type               = each.value.instance_type
-  ebs_size                    = each.value.ebs_size
-  kms_key_arn                 = data.aws_kms_alias.ebs_kms_key.target_key_arn
-  always_on_agent_nodes       = var.always_on_agent_nodes
-  agent_asg_instance_size = (
-    contains(var.always_on_agent_nodes, each.value.project)
-  ) ? 1 : var.agent_asg_instance_size
-}
-
-module "scanner_agent_nodes" {
-  source     = "./modules/jenkins_agent"
-  depends_on = [module.base_infrastructure]
-
-  for_each = local.scanner_agent_nodes_map
-
-  agent_type          = "scanner"
-  prefix              = var.prefix
-  project             = each.value.project
-  jenkins_main_url    = module.base_infrastructure.jenkins_url
-  ami_id              = data.aws_ami.centos_stig_ami.id
-  subnet_ids          = data.aws_subnets.all_subnets.ids
-  security_group_ids  = module.base_infrastructure.scanner_agent_security_group_ids
-  tags                = local.tags
-  ecr_repo_account_id = local.ecr_repo_account_id
-  agent_image         = each.value.agent_image
-  agent_tag           = each.value.agent_tag
-  efs_mount_target    = module.base_infrastructure.efs_mount_target
-  instance_type       = each.value.instance_type
-  ebs_size            = each.value.ebs_size
-  kms_key_arn         = data.aws_kms_alias.ebs_kms_key.target_key_arn
-  reports_bucket_arn  = local.scanner_reports_bucket_arn
+################## variables
 
 
-  # Intentionally omitted vs regular agent:
-  #   jenkins_controller_policies — scanner has least-privilege IAM only
-  #   always_on_agent_nodes       — scanner is always exactly 1 instance
-  #   agent_asg_instance_size     — hardcoded to 1 in ec2.tf via is_scanner local
-  #   environments                — scanner does not assume cross-account roles
-}
-
-
-##### variable.tf
-variable "base_ami_id" {
+variable "al2023_ami_owner_account_id" {
   type        = string
-  description = "The ID of the AmazonLinux2Base AMI to use."
+  description = "AWS account ID that owns and shares the approved AL2023 AMIs."
 }
+
+variable "al2023_ami_name_pattern" {
+  type        = string
+  description = "Name pattern used to identify approved AL2023 AMIs."
+}
+
+##################### dev.tfvars 
+al2023_ami_owner_account_id = "123456789012"
+al2023_ami_name_pattern     = "DWB-AL2023-*"
+
+
+
+######
+aws ec2 describe-images \
+  --image-ids ami-0e6d20cec116c041e \
+  --query 'Images[0].{
+    ImageId:ImageId,
+    Name:Name,
+    OwnerId:OwnerId,
+    CreationDate:CreationDate,
+    Architecture:Architecture,
+    State:State
+  }' \
+  --output table
