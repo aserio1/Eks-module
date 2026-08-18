@@ -1,85 +1,486 @@
-data "aws_ami" "centos_stig_ami" {
-  most_recent = true
-
-  owners = [
-    var.al2023_ami_owner_account_id
-  ]
-
-  filter {
-    name = "name"
-
-    values = [
-      var.al2023_ami_name_pattern
-    ]
-  }
-
-  filter {
-    name = "state"
-
-    values = [
-      "available"
-    ]
-  }
-
-  filter {
-    name = "architecture"
-
-    values = [
-      "x86_64"
-    ]
-  }
-
-  filter {
-    name = "root-device-type"
-
-    values = [
-      "ebs"
-    ]
-  }
-
-  filter {
-    name = "virtualization-type"
-
-    values = [
-      "hvm"
-    ]
-  }
-}
-
-
-################## variables
-
-
-variable "al2023_ami_owner_account_id" {
-  type        = string
-  description = "AWS account ID that owns and shares the approved AL2023 AMIs."
-}
-
-variable "al2023_ami_name_pattern" {
-  type        = string
-  description = "Name pattern used to identify approved AL2023 AMIs."
-}
-
-##################### dev.tfvars 
-al2023_ami_owner_account_id = "123456789012"
-al2023_ami_name_pattern     = "DWB-AL2023-*"
-
-
-
-######
-aws ec2 describe-images \
-  --image-ids ami-0e6d20cec116c041e \
-  --query 'Images[0].{
-    ImageId:ImageId,
-    Name:Name,
-    OwnerId:OwnerId,
-    CreationDate:CreationDate,
-    Architecture:Architecture,
-    State:State
-  }' \
-  --output table
-
-
-##############
-al2023_ami_owner_account_id = "415774707382"
-al2023_ami_name_pattern     = "al2023-base-org-*"
+ 
+14:17:37  Terraform used the selected providers to generate the following execution
+14:17:37  plan. Resource actions are indicated with the following symbols:
+14:17:37    ~ update in-place
+14:17:37  
+14:17:37  Terraform will perform the following actions:
+14:17:37  
+14:17:37    # module.all_agent_nodes["cgap"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-cgap2024072917443141820000000b"
+14:17:37          name                             = "prod-jenkins-agent-asg-cgap2024072917443141820000000b"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-076af968036cbafc9"
+14:17:37              name    = "prod-jenkins-agent-node-cgap20240919223004341200000001"
+14:17:37            ~ version = "77" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:51.883439+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["cgap"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-076af968036cbafc9"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 77 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-cgap20240919223004341200000001"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["data_workbench"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-data_workbench2024041515525274830000003f"
+14:17:37          name                             = "prod-jenkins-agent-asg-data_workbench2024041515525274830000003f"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-0022ed13a86483efa"
+14:17:37              name    = "prod-jenkins-agent-node-data_workbench20240919223004379500000007"
+14:17:37            ~ version = "75" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:52.321994+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["data_workbench"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-0022ed13a86483efa"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 75 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-data_workbench20240919223004379500000007"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["gis"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-gis20250401142658823500000003"
+14:17:37          name                             = "prod-jenkins-agent-asg-gis20250401142658823500000003"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-093789159d3741424"
+14:17:37              name    = "prod-jenkins-agent-node-gis20250401142658473100000001"
+14:17:37            ~ version = "57" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:52.769767+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["gis"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-093789159d3741424"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 57 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-gis20250401142658473100000001"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["ides"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-ides2024082214582486780000000c"
+14:17:37          name                             = "prod-jenkins-agent-asg-ides2024082214582486780000000c"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-0dda0e121c6b651e4"
+14:17:37              name    = "prod-jenkins-agent-node-ides20240919223004375900000005"
+14:17:37            ~ version = "70" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:53.315981+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["ides"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-0dda0e121c6b651e4"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 70 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-ides20240919223004375900000005"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["imac"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-imac20240415155307974800000043"
+14:17:37          name                             = "prod-jenkins-agent-asg-imac20240415155307974800000043"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-0971f0413a0496578"
+14:17:37              name    = "prod-jenkins-agent-node-imac2024091922300442770000000d"
+14:17:37            ~ version = "77" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:53.723119+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["imac"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-0971f0413a0496578"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 77 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-imac2024091922300442770000000d"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["ml-engineering"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-ml-engineering2024052417003583290000000c"
+14:17:37          name                             = "prod-jenkins-agent-asg-ml-engineering2024052417003583290000000c"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-0cf888230e9ba1c00"
+14:17:37              name    = "prod-jenkins-agent-node-ml-engineering2024091922300442180000000b"
+14:17:37            ~ version = "77" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:54.087468+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["ml-engineering"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-0cf888230e9ba1c00"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 77 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-ml-engineering2024091922300442180000000b"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["oams"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-oams20240415155254240800000040"
+14:17:37          name                             = "prod-jenkins-agent-asg-oams20240415155254240800000040"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-024b0c1a72777d996"
+14:17:37              name    = "prod-jenkins-agent-node-oams20240919223004386000000009"
+14:17:37            ~ version = "73" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:54.582360+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["oams"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-024b0c1a72777d996"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 73 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-oams20240919223004386000000009"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["salt"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-salt20260518220807599800000003"
+14:17:37          name                             = "prod-jenkins-agent-asg-salt20260518220807599800000003"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-09ce36c18699c40dd"
+14:17:37              name    = "prod-jenkins-agent-node-salt20260518220801777600000001"
+14:17:37            ~ version = "15" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:55.164879+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["salt"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-09ce36c18699c40dd"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 15 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-salt20260518220801777600000001"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["sie"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-sie20240415155305892600000042"
+14:17:37          name                             = "prod-jenkins-agent-asg-sie20240415155305892600000042"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-0b0e13840c02211c5"
+14:17:37              name    = "prod-jenkins-agent-node-sie20240919223004444800000011"
+14:17:37            ~ version = "74" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:56.141726+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["sie"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-0b0e13840c02211c5"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 74 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-sie20240919223004444800000011"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["utility"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-utility2025010822191328710000000c"
+14:17:37          name                             = "prod-jenkins-agent-asg-utility2025010822191328710000000c"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-08c1337b3c17d58d2"
+14:17:37              name    = "prod-jenkins-agent-node-utility2025010822191294980000000a"
+14:17:37            ~ version = "60" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:56.532043+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.all_agent_nodes["utility"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-08c1337b3c17d58d2"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 60 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-utility2025010822191294980000000a"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.jenkins_controller.aws_autoscaling_group.jenkins_controller_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_controller_node" {
+14:17:37          id                               = "prod-jenkins-asg20230106165513568000000002"
+14:17:37          name                             = "prod-jenkins-asg20230106165513568000000002"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-03b6276764a123b01"
+14:17:37              name    = "prod-jenkins-controller20251020222152388000000001"
+14:17:37            ~ version = "36" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37          # (16 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.jenkins_controller.aws_launch_template.jenkins_controller_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_controller_node" {
+14:17:37          id                                   = "lt-03b6276764a123b01"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 36 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-controller20251020222152388000000001"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.scanner_agent_nodes["sia"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+14:17:37          id                               = "prod-jenkins-agent-asg-sia20260625231134302200000015"
+14:17:37          name                             = "prod-jenkins-agent-asg-sia20260625231134302200000015"
+14:17:37          # (32 unchanged attributes hidden)
+14:17:37  
+14:17:37        ~ launch_template {
+14:17:37              id      = "lt-09418749eb58e1a16"
+14:17:37              name    = "prod-jenkins-agent-node-sia20260625231127674400000013"
+14:17:37            ~ version = "4" -> (known after apply)
+14:17:37          }
+14:17:37  
+14:17:37        - tag {
+14:17:37            - key                 = "scheduled" -> null
+14:17:37            - propagate_at_launch = false -> null
+14:17:37            - value               = jsonencode(
+14:17:37                  {
+14:17:37                    - desired_size = 1
+14:17:37                    - max_size     = 1
+14:17:37                    - min_size     = 1
+14:17:37                    - schedule     = "oig-office-hours"
+14:17:37                    - ttl          = "2026-09-16T23:30:55.622017+00:00"
+14:17:37                  }
+14:17:37              ) -> null
+14:17:37          }
+14:17:37  
+14:17:37          # (18 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37    # module.scanner_agent_nodes["sia"].aws_launch_template.jenkins_agent_node will be updated in-place
+14:17:37    ~ resource "aws_launch_template" "jenkins_agent_node" {
+14:17:37          id                                   = "lt-09418749eb58e1a16"
+14:17:37        ~ image_id                             = "ami-0e6d20cec116c041e" -> "ami-086df1eab1d17be95"
+14:17:37        ~ latest_version                       = 4 -> (known after apply)
+14:17:37          name                                 = "prod-jenkins-agent-node-sia20260625231127674400000013"
+14:17:37          tags                                 = {}
+14:17:37          # (17 unchanged attributes hidden)
+14:17:37  
+14:17:37          # (4 unchanged blocks hidden)
+14:17:37      }
+14:17:37  
+14:17:37  Plan: 0 to add, 24 to change, 0 to destroy.
