@@ -1,1 +1,16 @@
 display_name = var.display_name != null ? var.display_name : ""
+
+
+output "rendered_template" {
+  value = templatefile("${path.module}/template/job_template.xml", {
+    repo_owner               = local.repo_owner,
+    repository               = local.repository,
+    repo_url                 = var.repo,
+    jenkinsfile              = var.jenkinsfile,
+    pipeline_config          = var.pipeline_config,
+    triggered_branches_regex = var.triggered_branches_regex,
+    suppression_strategy     = var.suppression_strategy,
+    discover_tags            = var.discover_tags,
+    display_name             = var.display_name,
+  })
+}
