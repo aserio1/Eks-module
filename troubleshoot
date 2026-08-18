@@ -1,119 +1,52 @@
-################################################################################
-# modules/jenkins_agent/ec2.tf
-################################################################################
+### Error ##
+Error: Unsupported attribute
+14:41:47  
+14:41:47    on seed-jobs.tf line 122, in module "jenkins_job":
+14:41:47   122:   display_name             = each.value.display_name
+14:41:47      ├────────────────
+14:41:47      │ each.value is object with 8 attributes
+14:41:47  
+14:41:47  This object does not have an attribute named "display_name".
 
-locals {
-  is_scanner = var.agent_type == "scanner"
 
-  user_data_template = local.is_scanner ? "scripts/scanner_user_data.tpl" : "scripts/user_data.tpl"
+###########code
+# Create Jenkins jobs for each pipeline within the corresponding folder
+module "jenkins_job" {
+  source = "./modules/jenkins_job"
 
-  user_data_vars = {
-    jenkins_main_url     = var.jenkins_main_url
-    project              = var.project
-    username             = var.username
-    efs_mount_target     = var.efs_mount_target
-    prefix               = var.prefix
-    ecr_repo_account_id  = var.ecr_repo_account_id
-    agent_image          = var.agent_image
-    agent_tag            = var.agent_tag
-    agent_pem            = data.aws_ssm_parameter.jenkins_agent_private_key.value
-    environments         = var.environments
-    tenable_linking_key  = data.aws_ssm_parameter.tenable_agent_key.value
-  }
-}
-
-resource "aws_iam_instance_profile" "jenkins_agent_role" {
-  name = "${var.prefix}-jenkins_agent-${var.project}_role"
-  role = aws_iam_role.jenkins_agent_role.name
-}
-
-resource "aws_launch_template" "jenkins_agent_node" {
-  name_prefix   = "${var.prefix}-jenkins-agent-node-${var.project}"
-  image_id      = var.ami_id
-  instance_type = var.instance_type
-  key_name      = data.aws_key_pair.jenkins_agent_linux.key_name
-
-  iam_instance_profile {
-    name = aws_iam_instance_profile.jenkins_agent_role.name
+  for_each = {
+    for p in local.pipelines : "${p.folder_name}-${p.job_name}" => p
   }
 
-  vpc_security_group_ids = var.security_group_ids
+  folder_name              = each.value.folder_name
+  job_name                 = each.value.job_name
+  repo                     = each.value.repo
+  jenkinsfile              = each.value.jenkinsfile
+  pipeline_config          = each.value.pipeline_config
+  suppression_strategy     = each.value.suppression_strategy
+  triggered_branches_regex = each.value.triggered_branches_regex
+  discover_tags            = each.value.discover_tags
+  display_name             = each.value.display_name
 
-  user_data = base64encode(
-    templatefile("${path.module}/${local.user_data_template}", local.user_data_vars)
-  )
-
-  metadata_options {
-    http_endpoint               = "enabled"
-    http_tokens                 = "required"
-    http_put_response_hop_limit = 2
-  }
-
-  monitoring {
-    enabled = false
-  }
-
-  block_device_mappings {
-    device_name = "/dev/xvda"
-
-    ebs {
-      delete_on_termination = true
-      volume_size           = var.ebs_size
-      volume_type           = "gp3"
-      encrypted             = true
-      kms_key_id            = var.kms_key_arn
-    }
-  }
-}
-
-resource "aws_autoscaling_group" "jenkins_agent_node" {
-  name_prefix         = "${var.prefix}-jenkins-agent-asg-${var.project}"
-  min_size            = local.is_scanner ? 1 : var.agent_asg_instance_size
-  max_size            = local.is_scanner ? 1 : var.agent_asg_instance_size
-  vpc_zone_identifier = var.subnet_ids
-
-  launch_template {
-    id      = aws_launch_template.jenkins_agent_node.id
-    version = aws_launch_template.jenkins_agent_node.latest_version
-  }
-
-  enabled_metrics = [
-    "GroupDesiredCapacity"
+  # Wait until all folder created before proceeding with jenkins job
+  depends_on = [
+    module.jenkins_folder_top,
+    module.jenkins_folder_child
   ]
-
-  instance_refresh {
-    strategy = "Rolling"
-
-    preferences {
-      min_healthy_percentage = local.is_scanner ? 0 : 50
-      instance_warmup        = 120
-    }
-
-    triggers = ["tag"]
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  dynamic "tag" {
-    for_each = merge(
-      var.tags,
-      {
-        Name           = "${var.prefix}-Jenkins Agent - ${var.project}"
-        AgentType      = var.agent_type
-        ImagePushedAt  = data.aws_ecr_image.agent_image.image_pushed_at
-        "OS-version"   = "AL-2023"
-      },
-      var.prefix == "dev" ? {} : {
-        Schedule = "oig-office-hours"
-      }
-    )
-
-    content {
-      key                 = tag.key
-      value               = tag.value
-      propagate_at_launch = true
-    }
-  }
 }
+
+### but remove this
+       {
+            "name": "Utility",
+            "ad_group": "Users",
+            "create_folder": false,
+            "pipelines": [
+                {
+                    "name": "Data Workbench - Service Account S3 Bucket Registration",
+                    "repo": "https://git.aws.hhsoig.gov/CDO/dwb-access.git",
+                    "jenkinsfile": "jenkins/Jenkinsfile.sa_bucket_lf_registration",
+                    "pipeline_config": "jenkins/jenkins.sa_bucket_lf_registration.groovy",
+                    "suppress_trigger": true
+                }
+            ]
+        }
