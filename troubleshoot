@@ -1,26 +1,251 @@
-# AWS account IDs are only valid as Environment values for the IMAC project
-valid_imac_account_environment(resource_tags, value) if {
-	resource_tags["Project"] == "imac"
-	regex.match(aws_account_id_pattern, value)
+############# required_default_tagging_test.rego
+package cdo.terraform.required_default_tagging_test
+
+import data.cdo.terraform.required_default_tagging as check
+
+# Test missing and invalid tags
+test_deny_resource_has_required_tags if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "module.emr_serverless_runtime_role.aws_iam_policy.emr_serverless_execution_custom_policy",
+			"module_address": "module.emr_serverless_runtime_role",
+			"mode": "managed",
+			"type": "aws_iam_policy",
+			"name": "emr_serverless_execution_custom_policy",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {
+					"tags": {},
+					"tags_all": {
+						"ApplicationName": "SageMaker Studio Base",
+						"CreatedBy": "terraform",
+						"Environment": "dev",
+						"Opt_in": "n",
+						"Owner": "Katie Rose",
+						"Project": "IMAC-IDES",
+						"ResponsibleGroup": "cdo",
+						"Service": "sagemaker-studio",
+						"Version": "1.0.0",
+					},
+				},
+			},
+		}],
+	}
+
+	# Missing: BusinessUnit, FISMABoundary, OwnerContact → 1 deny (missing tags rule)
+	# Invalid: Project="IMAC-IDES" (not in allowed list) → 1 deny (invalid values rule)
+	# Total: 2
+	count(res) == 2
 }
 
+# Test all required tags present but with invalid values
+test_deny_resource_has_required_tags_but_invalid_values if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "module.emr_serverless_runtime_role.aws_iam_policy.emr_serverless_execution_custom_policy",
+			"module_address": "module.emr_serverless_runtime_role",
+			"mode": "managed",
+			"type": "aws_iam_policy",
+			"name": "emr_serverless_execution_custom_policy",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {
+					"tags": {},
+					"tags_all": {
+						"ApplicationName": "SageMaker Studio Base",
+						"CreatedBy": "terraform",
+						"Created": "date",
+						"Environment": "dev",
+						"BusinessUnit": "cdo",
+						"FISMABoundary": "dsgsb", # invalid — typo, should be "dsgss"
+						"Opt_in": "n",
+						"Owner": "Katie Rose",
+						"OwnerContact": "", # present but empty
+						"Project": "imac",
+						"ResponsibleGroup": "cdo",
+						"Service": "sagemaker-studio",
+						"Version": "1.0.0",
+					},
+				},
+			},
+		}],
+	}
 
-collect_invalid_tags(resource) := invalid if {
-	resource_tags := collect_resource_tags(resource)
-	invalid := [sprintf("%s=%s", [tag, value]) |
-		some tag in object.keys(required_tags)
-		value := resource_tags[tag]
-		value != null
-		value != ""
-		not value in required_tags[tag]
-		not valid_account_environment(tag, value, resource_tags)
-	]
+	# Invalid: FISMABoundary="dsgsb" → 1 deny (invalid values rule)
+	# Empty:   OwnerContact=""       → 1 deny (empty string rule)
+	# Total: 2
+	count(res) == 2
 }
 
-# Account IDs are only allowed for the Environment tag
-# when Project is "imac".
-valid_account_environment(tag, value, resource_tags) if {
-	tag == "Environment"
-	resource_tags["Project"] == "imac"
-	regex.match(aws_account_id_pattern, value)
+# Test that ASG tagged only via "tag" blocks should PASS
+test_allow_asg_tags_from_tag_blocks if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "aws_autoscaling_group.jenkins_agent_node",
+			"mode": "managed",
+			"type": "aws_autoscaling_group",
+			"name": "jenkins_agent_node",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {"tag": [
+					{"key": "Environment", "value": "prod"},
+					{"key": "BusinessUnit", "value": "cdo"},
+					{"key": "Project", "value": "imac"},
+					{"key": "FISMABoundary", "value": "dsgss"},
+					{"key": "ApplicationName", "value": "IMAC Jenkins"},
+					{"key": "OwnerContact", "value": "imac@oig.hhs.gov"},
+					{"key": "CreatedBy", "value": "terraform"},
+				]},
+			},
+		}],
+	}
+
+	count(res) == 0
+}
+
+# Test that unknown/computed tags do not trigger a deny
+test_unknown_tags_do_not_deny if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "module.iam.aws_iam_role.glue_service_role",
+			"module_address": "module.iam",
+			"mode": "managed",
+			"type": "aws_iam_role",
+			"name": "glue_service_role",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {"name": "prod-oams-iris-glue-service-role"},
+				"after_unknown": {
+					"arn": true,
+					"create_date": true,
+					"id": true,
+					"inline_policy": [{}],
+					"managed_policy_arns": true,
+					"name_prefix": true,
+					"tags": true,
+					"tags_all": true,
+					"unique_id": true,
+				},
+			},
+		}],
+	}
+
+	count(res) == 0
+}
+
+# Test that an AWS account number as Environment value is ALLOWED
+test_allow_account_number_as_environment if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "module.role.module.operator_role[0].aws_iam_role.role",
+			"module_address": "module.role.module.operator_role[0]",
+			"mode": "managed",
+			"type": "aws_iam_role",
+			"name": "role",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {
+					"tags": {},
+					"tags_all": {
+						"ApplicationName": "IMAC Jenkins",
+						"BusinessUnit": "cdo",
+						"CreatedBy": "terraform",
+						"Environment": "966555604991",
+						"FISMABoundary": "dsgss",
+						"OwnerContact": "imac@oig.hhs.gov",
+						"Project": "imac",
+					},
+				},
+			},
+		}],
+	}
+
+	count(res) == 0
+}
+
+# Test that destroy actions are never denied
+test_destroy_action_not_denied if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "aws_s3_bucket.no_tags",
+			"mode": "managed",
+			"type": "aws_s3_bucket",
+			"name": "no_tags",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["delete"],
+				"after": null,
+				"after_unknown": {},
+			},
+		}],
+	}
+
+	count(res) == 0
+}
+
+# Test that a resource with no tags/tags_all/tag fields (untaggable) is not denied
+test_untaggable_resource_not_denied if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "aws_iam_role_policy.inline_policy",
+			"mode": "managed",
+			"type": "aws_iam_role_policy",
+			"name": "inline_policy",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {
+					"name": "my-inline-policy",
+					"policy": "{\"Version\":\"2012-10-17\"}",
+					"role": "my-role",
+				},
+				"after_unknown": {},
+			},
+		}],
+	}
+
+	# No tags/tags_all/tag fields present — collect_resource_tags returns {}
+	# so the resource should be treated as untaggable and not denied
+	count(res) == 0
+}
+
+# Test that ignored resource types are never denied
+test_ignored_resource_type_not_denied if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "aws_iam_role_policy_attachment.no_tags",
+			"mode": "managed",
+			"type": "aws_iam_role_policy_attachment",
+			"name": "no_tags",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {},
+				"after_unknown": {},
+			},
+		}],
+	}
+
+	count(res) == 0
 }
