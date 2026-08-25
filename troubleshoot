@@ -1,4 +1,3 @@
-############# required_default_tagging_test.rego
 package cdo.terraform.required_default_tagging_test
 
 import data.cdo.terraform.required_default_tagging as check
@@ -35,8 +34,8 @@ test_deny_resource_has_required_tags if {
 		}],
 	}
 
-	# Missing: BusinessUnit, FISMABoundary, OwnerContact → 1 deny (missing tags rule)
-	# Invalid: Project="IMAC-IDES" (not in allowed list) → 1 deny (invalid values rule)
+	# Missing: BusinessUnit, FISMABoundary, OwnerContact → 1 deny
+	# Invalid: Project="IMAC-IDES" → 1 deny
 	# Total: 2
 	count(res) == 2
 }
@@ -77,8 +76,8 @@ test_deny_resource_has_required_tags_but_invalid_values if {
 		}],
 	}
 
-	# Invalid: FISMABoundary="dsgsb" → 1 deny (invalid values rule)
-	# Empty:   OwnerContact=""       → 1 deny (empty string rule)
+	# Invalid: FISMABoundary="dsgsb" → 1 deny
+	# Empty: OwnerContact="" → 1 deny
 	# Total: 2
 	count(res) == 2
 }
@@ -126,7 +125,9 @@ test_unknown_tags_do_not_deny if {
 			"provider_name": "registry.terraform.io/hashicorp/aws",
 			"change": {
 				"actions": ["create"],
-				"after": {"name": "prod-oams-iris-glue-service-role"},
+				"after": {
+					"name": "prod-oams-iris-glue-service-role",
+				},
 				"after_unknown": {
 					"arn": true,
 					"create_date": true,
@@ -145,8 +146,14 @@ test_unknown_tags_do_not_deny if {
 	count(res) == 0
 }
 
-# Test that an AWS account number as Environment value is ALLOWED
-test_allow_account_number_as_environment if {
+# =====================================================================
+# UPDATE START
+#
+# Account-number Environment values are only allowed when Project="imac".
+# =====================================================================
+
+# Test that an AWS account number as Environment value is ALLOWED for IMAC
+test_allow_account_number_as_environment_for_imac if {
 	res := check.deny with input as {
 		"format_version": "1.2",
 		"terraform_version": "1.13.0",
@@ -175,8 +182,145 @@ test_allow_account_number_as_environment if {
 		}],
 	}
 
+	# Project=imac + 12-digit Environment account ID is valid
 	count(res) == 0
 }
+
+# Test that an AWS account number as Environment value is DENIED for DWB
+test_deny_account_number_as_environment_for_dwb if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "aws_iam_role.dwb_role",
+			"mode": "managed",
+			"type": "aws_iam_role",
+			"name": "dwb_role",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {
+					"tags": {},
+					"tags_all": {
+						"ApplicationName": "DWB Application",
+						"BusinessUnit": "cdo",
+						"CreatedBy": "terraform",
+						"Environment": "213141505949",
+						"FISMABoundary": "dwb",
+						"OwnerContact": "dwb@oig.hhs.gov",
+						"Project": "dwb",
+					},
+				},
+			},
+		}],
+	}
+
+	# Environment is a 12-digit account ID, but Project is not "imac".
+	# This should trigger the invalid tag values deny rule.
+	count(res) == 1
+}
+
+# Test that an AWS account number as Environment value is DENIED for SIE
+test_deny_account_number_as_environment_for_sie if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "aws_iam_role.sie_role",
+			"mode": "managed",
+			"type": "aws_iam_role",
+			"name": "sie_role",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {
+					"tags": {},
+					"tags_all": {
+						"ApplicationName": "SIE Application",
+						"BusinessUnit": "cdo",
+						"CreatedBy": "terraform",
+						"Environment": "598956749955",
+						"FISMABoundary": "dsgss",
+						"OwnerContact": "sie@oig.hhs.gov",
+						"Project": "sie",
+					},
+				},
+			},
+		}],
+	}
+
+	# Project=sie cannot use an account ID as Environment
+	count(res) == 1
+}
+
+# Test that an AWS account number as Environment value is DENIED for GIS
+test_deny_account_number_as_environment_for_gis if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "aws_iam_role.gis_role",
+			"mode": "managed",
+			"type": "aws_iam_role",
+			"name": "gis_role",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {
+					"tags": {},
+					"tags_all": {
+						"ApplicationName": "GIS Application",
+						"BusinessUnit": "cdo",
+						"CreatedBy": "terraform",
+						"Environment": "779846803742",
+						"FISMABoundary": "dsgss",
+						"OwnerContact": "gis@oig.hhs.gov",
+						"Project": "gis",
+					},
+				},
+			},
+		}],
+	}
+
+	# Project=gis cannot use an account ID as Environment
+	count(res) == 1
+}
+
+# Test that a normal Environment value is still allowed for non-IMAC projects
+test_allow_standard_environment_for_non_imac_project if {
+	res := check.deny with input as {
+		"format_version": "1.2",
+		"terraform_version": "1.13.0",
+		"resource_changes": [{
+			"address": "aws_iam_role.dwb_standard_environment",
+			"mode": "managed",
+			"type": "aws_iam_role",
+			"name": "dwb_standard_environment",
+			"provider_name": "registry.terraform.io/hashicorp/aws",
+			"change": {
+				"actions": ["create"],
+				"after": {
+					"tags": {},
+					"tags_all": {
+						"ApplicationName": "DWB Application",
+						"BusinessUnit": "cdo",
+						"CreatedBy": "terraform",
+						"Environment": "dev",
+						"FISMABoundary": "dwb",
+						"OwnerContact": "dwb@oig.hhs.gov",
+						"Project": "dwb",
+					},
+				},
+			},
+		}],
+	}
+
+	# Normal Environment values remain valid for other projects
+	count(res) == 0
+}
+
+# UPDATE END
+
 
 # Test that destroy actions are never denied
 test_destroy_action_not_denied if {
