@@ -1,14 +1,6 @@
-### Corrupt Python Package Handling
-
-The code automatically checks the health of the shared Conda environment using `pip check` before installing new dependencies.
-If corrupted, missing, or inconsistent Python packages are detected, it automatically force-reinstalls the dependencies defined in 
-the project’s `requirements.txt` files and validates the environment again. This reduces manual intervention and helps prevent random pipeline 
-failures caused by package corruption in the shared environment; if the automatic repair does not resolve the problem, the pipeline fails with
-a clear error so the issue can be investigated.
-
-
-###Jenkins Utility Jobs Guide
-
-The Jenkins Utility Jobs Guide documents the shared self-service automation jobs available to project teams,
-including what each job does, its required parameters, and how to use it. It also provides guidance for
-teams that want to contribute new utility jobs and identifies where to get support.
+pip 24.2 from /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages/pip (python 3.12)
+14:44:35  + PIP_INSTALL='python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir'
+14:44:35  + python -m pip check
+14:44:35  aiobotocore 3.9.0 has requirement botocore<1.43.57,>=1.43.3, but you have botocore 1.43.80.
+14:44:35  + echo 'pip check failed - shared environment is inconsistent, forcing reinstall'
+14:44:35  pip check failed - shared environment is inconsistent, forcing reinstall
