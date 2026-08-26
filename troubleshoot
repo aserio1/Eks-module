@@ -1,395 +1,206 @@
-package cdo.terraform.required_default_tagging_test
+write a quick summary based on this code how the corrupt packages are handled using the currently code, when a python package is 
+corrupt instead of manual intervention this code will handle it.
 
-import data.cdo.terraform.required_default_tagging as check
+#!/usr/bin/env bash
 
-# Test missing and invalid tags
-test_deny_resource_has_required_tags if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "module.emr_serverless_runtime_role.aws_iam_policy.emr_serverless_execution_custom_policy",
-			"module_address": "module.emr_serverless_runtime_role",
-			"mode": "managed",
-			"type": "aws_iam_policy",
-			"name": "emr_serverless_execution_custom_policy",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "SageMaker Studio Base",
-						"CreatedBy": "terraform",
-						"Environment": "dev",
-						"Opt_in": "n",
-						"Owner": "Katie Rose",
-						"Project": "IMAC-IDES",
-						"ResponsibleGroup": "cdo",
-						"Service": "sagemaker-studio",
-						"Version": "1.0.0",
-					},
-				},
-			},
-		}],
-	}
+set -e
 
-	# Missing: BusinessUnit, FISMABoundary, OwnerContact → 1 deny
-	# Invalid: Project="IMAC-IDES" → 1 deny
-	# Total: 2
-	count(res) == 2
-}
+if ! command -v ~/anaconda3/bin/conda &> /dev/null
+then
+    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
+    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
+fi
 
-# Test all required tags present but with invalid values
-test_deny_resource_has_required_tags_but_invalid_values if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "module.emr_serverless_runtime_role.aws_iam_policy.emr_serverless_execution_custom_policy",
-			"module_address": "module.emr_serverless_runtime_role",
-			"mode": "managed",
-			"type": "aws_iam_policy",
-			"name": "emr_serverless_execution_custom_policy",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "SageMaker Studio Base",
-						"CreatedBy": "terraform",
-						"Created": "date",
-						"Environment": "dev",
-						"BusinessUnit": "cdo",
-						"FISMABoundary": "dsgsb", # invalid — typo, should be "dsgss"
-						"Opt_in": "n",
-						"Owner": "Katie Rose",
-						"OwnerContact": "", # present but empty
-						"Project": "imac",
-						"ResponsibleGroup": "cdo",
-						"Service": "sagemaker-studio",
-						"Version": "1.0.0",
-					},
-				},
-			},
-		}],
-	}
+if ! ~/anaconda3/bin/conda info --envs |
+    awk '{print $1}' |
+    grep -Fxq "$ENV_NAME"
+then
+    ~/anaconda3/bin/conda create \
+        -y \
+        --name "$ENV_NAME" \
+        python="$PYTHON_VERSION"
+fi
 
-	# Invalid: FISMABoundary="dsgsb" → 1 deny
-	# Empty: OwnerContact="" → 1 deny
-	# Total: 2
-	count(res) == 2
-}
+echo "Activating Conda environment: $ENV_NAME"
 
-# Test that ASG tagged only via "tag" blocks should PASS
-test_allow_asg_tags_from_tag_blocks if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_autoscaling_group.jenkins_agent_node",
-			"mode": "managed",
-			"type": "aws_autoscaling_group",
-			"name": "jenkins_agent_node",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {"tag": [
-					{"key": "Environment", "value": "prod"},
-					{"key": "BusinessUnit", "value": "cdo"},
-					{"key": "Project", "value": "imac"},
-					{"key": "FISMABoundary", "value": "dsgss"},
-					{"key": "ApplicationName", "value": "IMAC Jenkins"},
-					{"key": "OwnerContact", "value": "imac@oig.hhs.gov"},
-					{"key": "CreatedBy", "value": "terraform"},
-				]},
-			},
-		}],
-	}
+set +x
+source ~/anaconda3/bin/activate "$ENV_NAME"
+set -x
 
-	count(res) == 0
-}
+python --version
+python -m pip --version
 
-# Test that unknown/computed tags do not trigger a deny
-test_unknown_tags_do_not_deny if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "module.iam.aws_iam_role.glue_service_role",
-			"module_address": "module.iam",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "glue_service_role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"name": "prod-oams-iris-glue-service-role",
-				},
-				"after_unknown": {
-					"arn": true,
-					"create_date": true,
-					"id": true,
-					"inline_policy": [{}],
-					"managed_policy_arns": true,
-					"name_prefix": true,
-					"tags": true,
-					"tags_all": true,
-					"unique_id": true,
-				},
-			},
-		}],
-	}
+PIP_INSTALL="python -m pip install \
+-i https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple \
+--trusted-host repo.platform.aws.hhsoig.gov \
+--no-color \
+--no-cache-dir"
 
-	count(res) == 0
-}
+if ! python -m pip check
+then
+    echo "pip check failed - shared environment is inconsistent, forcing reinstall"
 
-# =====================================================================
-# UPDATE START
-#
-# Account-number Environment values are only allowed when Project="imac".
-# =====================================================================
+    for req_file in $REQUIREMENTS
+    do
+        find . -iname "$req_file" | while IFS= read -r requirements_file
+        do
+            eval "$PIP_INSTALL --force-reinstall -r \"$requirements_file\""
+        done
+    done
 
-# Test that an AWS account number as Environment value is ALLOWED for IMAC
-test_allow_account_number_as_environment_for_imac if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "module.role.module.operator_role[0].aws_iam_role.role",
-			"module_address": "module.role.module.operator_role[0]",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "IMAC Jenkins",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "966555604991",
-						"FISMABoundary": "dsgss",
-						"OwnerContact": "imac@oig.hhs.gov",
-						"Project": "imac",
-					},
-				},
-			},
-		}],
-	}
+    if ! python -m pip check
+    then
+        echo "ERROR: environment is still broken after reinstall"
+        exit 1
+    fi
 
-	# Project=imac + 12-digit Environment account ID is valid
-	count(res) == 0
-}
+    echo "Environment repaired"
+fi
 
-# Test that an AWS account number as Environment value is DENIED for DWB
-test_deny_account_number_as_environment_for_dwb if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role.dwb_role",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "dwb_role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "DWB Application",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "213141505949",
-						"FISMABoundary": "dwb",
-						"OwnerContact": "dwb@oig.hhs.gov",
-						"Project": "dwb",
-					},
-				},
-			},
-		}],
-	}
-
-	# Environment is a 12-digit account ID, but Project is not "imac".
-	# This should trigger the invalid tag values deny rule.
-	count(res) == 1
-}
-
-# Test that an AWS account number as Environment value is DENIED for SIE
-test_deny_account_number_as_environment_for_sie if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role.sie_role",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "sie_role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "SIE Application",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "598956749955",
-						"FISMABoundary": "dsgss",
-						"OwnerContact": "sie@oig.hhs.gov",
-						"Project": "sie",
-					},
-				},
-			},
-		}],
-	}
-
-	# Project=sie cannot use an account ID as Environment
-	count(res) == 1
-}
-
-# Test that an AWS account number as Environment value is DENIED for GIS
-test_deny_account_number_as_environment_for_gis if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role.gis_role",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "gis_role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "GIS Application",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "779846803742",
-						"FISMABoundary": "dsgss",
-						"OwnerContact": "gis@oig.hhs.gov",
-						"Project": "gis",
-					},
-				},
-			},
-		}],
-	}
-
-	# Project=gis cannot use an account ID as Environment
-	count(res) == 1
-}
-
-# Test that a normal Environment value is still allowed for non-IMAC projects
-test_allow_standard_environment_for_non_imac_project if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role.dwb_standard_environment",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "dwb_standard_environment",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "DWB Application",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "dev",
-						"FISMABoundary": "dwb",
-						"OwnerContact": "dwb@oig.hhs.gov",
-						"Project": "dwb",
-					},
-				},
-			},
-		}],
-	}
-
-	# Normal Environment values remain valid for other projects
-	count(res) == 0
-}
-
-# UPDATE END
+for req_file in $REQUIREMENTS
+do
+    find . -iname "$req_file" | while IFS= read -r requirements_file
+    do
+        eval "$PIP_INSTALL -r \"$requirements_file\""
+    done
+done
 
 
-# Test that destroy actions are never denied
-test_destroy_action_not_denied if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_s3_bucket.no_tags",
-			"mode": "managed",
-			"type": "aws_s3_bucket",
-			"name": "no_tags",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["delete"],
-				"after": null,
-				"after_unknown": {},
-			},
-		}],
-	}
 
-	count(res) == 0
-}
+##################### Utility guide 
+for this just summarize with two sentences what this guide list is for
 
-# Test that a resource with no tags/tags_all/tag fields (untaggable) is not denied
-test_untaggable_resource_not_denied if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role_policy.inline_policy",
-			"mode": "managed",
-			"type": "aws_iam_role_policy",
-			"name": "inline_policy",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"name": "my-inline-policy",
-					"policy": "{\"Version\":\"2012-10-17\"}",
-					"role": "my-role",
-				},
-				"after_unknown": {},
-			},
-		}],
-	}
+Jenkins Utility Jobs - User Guide
+Created by Joseph, Aseriobiome V (OIG/OMP) (CTR), last modified on Aug 21, 2026
 
-	# No tags/tags_all/tag fields present — collect_resource_tags returns {}
-	# so the resource should be treated as untaggable and not denied
-	count(res) == 0
-}
+Jenkins Utility Jobs Overview
+GitHub Create New Repo
+IMAC Lambda Layer Builder Module
+IMAC Security Hub Scanning Module
+Jenkins Agent Node Instance Refresh
+Jenkins-Agent-SIE-API-IP-Update
+Seed Job
+Self Serve Infra Teardown
+SIA OSS Package Scan
+Jenkins Utility Jobs Overview
+This page catalogs self-service Jenkins utility jobs available to all teams. These are shared, general-purpose automations - that anyone can run without needing to request help from an admin.
 
-# Test that ignored resource types are never denied
-test_ignored_resource_type_not_denied if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role_policy_attachment.no_tags",
-			"mode": "managed",
-			"type": "aws_iam_role_policy_attachment",
-			"name": "no_tags",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {},
-				"after_unknown": {},
-			},
-		}],
-	}
+Who can use these: All project teams. Each utility runs on the requesting team's own dedicated Jenkins agent, so jobs work across different teams' environments as needed.
 
-	count(res) == 0
-}
+Who can contribute: Utilities aren't limited to IMAC - any team can add a new one. To contribute a new utility job:
+
+Go to the imac-jenkins-jobs GitHub repo
+Add your job definition under the project's JSON job definitions, under the Utility folder
+Create a PR for IMAC and post it in this Team's channel for review and approval Pull Requests
+Update this confluence page with the Job's usage in the same format as the entries below
+GitHub Create New Repo
+What it does: Creates a new GitHub repository based on a specified template or existing repo, and applies standard repository settings (branch protection, permissions, etc. — per GitHub Repository Governance). If the repo already exists, no new repo is created — the job simply reapplies those standard settings to it.
+
+Jenkins Job: GitHub Create New Repo
+
+Parameters:
+
+REPO_NAME	Yes	Name of the new repository to create in the CDO org 	<project>-new-service
+REPO_TEMPLATE	No	Template repository to base the new repo on. Defaults to cdo-template-repo	cdo-template-repo
+Owner/Support: IMAC/IMAC Support Requests
+
+IMAC Lambda Layer Builder Module
+Link to the code: imac-common-functions/src/scripts/lambda_layer_builder.py at main · CDO/imac-common-functions
+
+What it does: This Jenkins job uses a Python script acts as a Jenkins job module that builds an IMAC Lambda Layer by fetching a remote server's leaf certificate and bundling it into a secure package with pre-defined intermediate and root CA certificates. Builds, packages, and publishes AWS Lambda layers so they can be shared across multiple Lambda functions.
+
+Parameters:
+
+PROJECT	Yes	Select the project whose AWS account you want to deploy the certificate lambda layer.	data_workbench
+ENVIRONMENT	Yes	Select the project environment you want to deploy the certificate lambda layer.	prod
+TARGET_AWS_ACCOUNT	Yes	Enter the target AWS Account Id where the certificate lambda layer needs to be deployed.	333866270941
+APP_END_POINT	Yes	Enter the application endpoint for which the certificate lambda layer needs to be deployed.	stage-api.swift-insights.aws.hhsoig.gov
+Jenkins Job:   IMAC Lambda Layer Builder Modules
+
+Owner/Support: IMAC/IMAC Support Requests
+
+IMAC Security Hub Scanning Module
+Link to the code: imac-common-functions/src/functions/security_hub_summarizer/security_hub_summarizer.py at main · CDO/imac-common-functions
+
+What it does: This Jenkins job uses a Python script that serves as an AWS Lambda function that generates and formats aggregated security reports (daily or weekly) by fetching findings from AWS Security Hub, filtering them by a specific project tag, and preparing the summary data to be sent via Amazon SNS. Runs AWS Security Hub scans to identify security findings, compliance issues, and misconfigurations across AWS resources.
+
+Parameters:
+
+PROJECT	Yes	Select the project whose AWS account you want to deploy module.	imac
+NOTIFICATION_DL	Yes	Defaults to IMAC email, update to the group email distribution list for your team.	imac@oig.hhs.gov
+Jenkins Job:  IMAC Security Hub Scanning Module
+
+Owner/Support: IMAC/IMAC Support Requests
+
+Jenkins Agent Node Instance Refresh
+Link to code: imac-jte-libraries/utils/resources/start_agent_instance_refresh.sh at main · CDO/imac-jte-libraries
+
+What it does: This Jenkins job acts as a pipeline step that triggers or manages an AWS Auto Scaling Group (ASG) Instance Refresh for application or build agents within a specific environment scope.
+
+Refreshes Jenkins agent EC2 instances by replacing existing nodes with new ones to apply updates, patches, and configuration changes.
+
+Parameters:
+
+PROJECT	Yes	Select the project to deploy the Jenkins agent node instance refresh.	imac
+ACTION	Yes	up = scale instance up to 1, down = scale instance down to 0	up
+Jenkins Job:  Jenkins Agent Node Instance Refresh
+
+Owner/Support: IMAC/IMAC Support Requests
+
+Jenkins-Agent-SIE-API-IP-Update
+Link to code: imac-jte-libraries/utils/resources/update_sie_agent.sh at main · CDO/imac-jte-libraries
+
+What it does: This script is used by the Jenkins job to safely modify the build runner's network settings so that specific staging and cloud API web addresses are pointed to a newly updated backend IP address. By duplicating the system configuration, checking for existing entries, updating or adding the routing rules, and applying the changes with administrative privileges, it ensures the build pipeline can successfully communicate with the staging environment.
+
+Updates the SIE API IP address configuration on Jenkins agents to maintain connectivity with external services.
+
+Parameters:
+
+SIE_STAGE_API_IP	Yes	Insert the public IP for SIE stage-api. Cannot be empty.	3.229.13.100
+Jenkins Job:   Jenkins-Agent-SIE-API-IP-Update
+
+Owner/Support: IMAC/IMAC Support Requests
+
+Seed Job
+What it does: During a production deployment window, run the root-level "Seed" job in Jenkins. This job will read the config.json file and automatically create the folders and jobs for the new project in the Jenkins UI.
+
+Creates and updates Jenkins folders, pipelines, and jobs from source-controlled configuration files to keep the Jenkins environment consistent.
+
+Parameters:
+
+PROJECT	Yes	Select the project to deploy.	imac
+Jenkins Job:  Seed Job
+
+Owner/Support: IMAC/IMAC Support Requests
+
+Self Serve Infra Teardown
+Link to code: imac-jenkins/Jenkinsfile.decommission at 0aca6111beb8f9e02fb220052f3779a375823b73 · CDO/imac-jenkins
+
+What it does: This Jenkins pipeline acts as a self-service utility that automates the decommissioning and permanent removal of cloud infrastructure for a specified project git repository, using Terraform destroy commands with an optional dry-run safety and an approval gate. Safely decommissions infrastructure by destroying selected AWS resources and cleaning up associated configurations.
+
+Parameters:
+
+REPO_URL	Yes	Full git URL of the repo to decommission. e.g. https://git.aws.hhsoig.gov/CDO/sie-config-server	https://git.aws.hhsoig.gov/CDO/sie-load-test.git
+PROJECT	Yes	Project the repo belongs to. Steps will run on this project's node.	sie
+TARGET_ENV	Yes	Environment to destroy. Populated from the selected project's config.	stage
+EMPTY_S3_BUCKETS	No	Empty S3 buckets before destroy. Required if buckets contain objects (force_destroy=false).	
+check box
+DRY_RUN	No	If checked, runs plan -destroy only. No infrastructure will be destroyed.	
+check box
+Jenkins Job:  Self Serve Infra Teardown
+
+Owner/Support: IMAC/IMAC Support Requests
+
+SIA OSS Package Scan
+Link to code: imac-jte-libraries/sia/steps/scan.groovy at main · CDO/imac-jte-libraries
+
+What it does: This Jenkins pipeline step runs a highly secure, offline vulnerability scan and generates a Software Bill of Materials (SBOM) for a software package using Aqua Trivy inside a hardened Docker container.
+
+Scans open-source software dependencies for known vulnerabilities, licensing issues, and outdated packages before deployment.
+
+Parameters:
+
+PACKAGE_ECOSYSTEM	Yes	Required.Select the package ecosystem.	pypi
+PACKAGE_NAME	Yes	Required. Enter package name to be analysed.	xlsxwriter
+PACKAGE_VERSION	Yes	Required. Enter package version to be analysed.	3.2.9
+PROJECT	Yes	Required. Select for which project is this package requested.	oams
