@@ -1,4 +1,4 @@
-write a quick summary based on this code how the corrupt packages are handled using the currently code, when a python package is 
+write a quick summary with two sentences based on this code how the corrupt packages are handled using the currently code, when a python package is 
 corrupt instead of manual intervention this code will handle it.
 
 #!/usr/bin/env bash
