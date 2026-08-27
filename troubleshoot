@@ -12,6 +12,7 @@
 #   input:
 #     selector:
 #       - type: json
+
 package cdo.terraform.required_default_tagging
 
 import rego.v1
@@ -68,154 +69,316 @@ ignored_resource_types := {
 	"time_static",
 }
 
-# allow AWS account IDs as Env values
+# Allow AWS account IDs as Environment values.
 aws_account_id_pattern := `^\d{12}$`
 
-# Required tags and their allowed values
+# =====================================================================
+# UPDATED:
+# Environment and Project values are no longer hardcoded in this policy.
+#
+# They must be pre-fetched from DynamoDB / imac-config and passed into
+# OPA as data.
+#
+# Expected data structure:
+#
+# {
+#   "tagging": {
+#     "projects": [
+#       "imac",
+#       "dwb",
+#       "sie"
+#     ],
+#     "environments": [
+#       "dev",
+#       "test",
+#       "prod",
+#       "213141505949"
+#     ]
+#   }
+# }
+#
+# OPA references:
+#
+#   data.tagging.projects
+#   data.tagging.environments
+# =====================================================================
+
+dynamic_projects := data.tagging.projects
+
+dynamic_environments := data.tagging.environments
+
+
+# Required tags whose allowed values remain controlled by this policy.
+#
+# Environment and Project are intentionally not defined here because
+# their allowed values are dynamically loaded from imac-config.
 required_tags := {
-	"Environment": [
-		"dev", "predev", "test", "qa", "stage", "prod",
-		"dev-data-pipelines", "qa-data-pipelines", "test-data-pipelines", 
-		"stage-data-pipelines", "prod-data-pipelines", "dev-viz-tools",
-		"qa-viz-tools", "test-viz-tools", "prod-viz-tools",
-		"dev-data-aquisition", "test-data-aquisition", "prod-data-aquisition",
-		"dev-imac-lza", "test-imac-lza", "prod-imac-lza",
-		"dev-gis-tools", "qa-gis-tools", "prod-gis-tools",
-		"dev-data-infrastructure", "test-data-infrastructure", "prod-data-infrastructure",
-		"dev-mle-dwb", "prod-mle-dwb",
-		"dev-dme-anomaly", "prod-dme-anomaly",
-		"dev-risk-models", "prod-risk-models",
-		"dev-ml-complaints", "prod-ml-complaints",
-		"dev-ml-critical", "prod-ml-critical",
-		"dev-ml-claim-gpt", "prod-ml-claim-gpt",
-		"dev-cloud-analytics", "test-cloud-analytics", "prod-cloud-analytics",
-	],
 	"BusinessUnit": ["cdo"],
-	"Project": ["cgap", "dwb", "mle", "sie", "gis", "imac", "ides", "oams", "arcgis"],
 	"FISMABoundary": ["dsgss", "dwb"],
 }
 
-# Tags that require values but are not restricted to specific values
+
+# Tags that require values but are not restricted to specific values.
 flexible_required_tags := {
 	"ApplicationName",
 	"OwnerContact",
 	"CreatedBy",
 }
 
-# Union of all required tag keys (used for missing-tag detection)
-all_required_tag_keys := object.keys(required_tags) | flexible_required_tags
 
-# Only check create/update actions
+# Environment and Project are still required even though their
+# allowed values are dynamically loaded.
+dynamic_required_tag_keys := {
+	"Environment",
+	"Project",
+}
+
+
+# Union of all required tag keys.
+all_required_tag_keys :=
+	object.keys(required_tags) |
+	flexible_required_tags |
+	dynamic_required_tag_keys
+
+
+# Only check create/update actions.
 valid_actions := {"create", "update"}
+
 
 # DENY: active, taggable, non-ignored resources with missing required tags.
 deny contains res if {
 	some resource in input.resource_changes
+
 	not ignored_resource_types[resource.type]
 
 	some action in resource.change.actions
 	valid_actions[action]
 
-	# Only enforce on taggable resources — collect_resource_tags returns {} if none
+	# Only enforce on taggable resources.
+	# collect_resource_tags returns {} if none exist.
 	count(collect_resource_tags(resource)) > 0
 
-	# Check for missing required tags
+	# Check for missing required tags.
 	missing_tags := collect_missing_tags(resource)
+
 	count(missing_tags) > 0
 
-	res := sprintf("Resource %s is missing required tags: %v.", [
-		resource.address,
-		missing_tags,
-	])
+	res := sprintf(
+		"Resource %s is missing required tags: %v.",
+		[
+			resource.address,
+			missing_tags,
+		],
+	)
 }
+
 
 # DENY: resources with invalid tag values.
 deny contains res if {
 	some resource in input.resource_changes
+
 	not ignored_resource_types[resource.type]
 
 	some action in resource.change.actions
 	valid_actions[action]
 
-	# Check for invalid tag values
+	# Check for invalid tag values.
 	invalid_tags := collect_invalid_tags(resource)
+
 	count(invalid_tags) > 0
 
-	res := sprintf("Resource '%s' has invalid tag values: %v", [
-		resource.address,
-		invalid_tags,
-	])
+	res := sprintf(
+		"Resource '%s' has invalid tag values: %v",
+		[
+			resource.address,
+			invalid_tags,
+		],
+	)
 }
+
 
 # DENY: required tags present but set to empty string.
 deny contains res if {
 	some resource in input.resource_changes
+
 	not ignored_resource_types[resource.type]
 
 	some action in resource.change.actions
 	valid_actions[action]
 
 	count(collect_resource_tags(resource)) > 0
+
 	not tags_are_unknown(resource)
 
 	resource_tags := collect_resource_tags(resource)
-	empty_tags := [tag |
+
+	empty_tags := [
+		tag |
 		some tag in all_required_tag_keys
 		resource_tags[tag] == ""
 	]
+
 	count(empty_tags) > 0
 
-	res := sprintf("Resource '%s' has empty values for required tags: %v", [
-		resource.address,
-		empty_tags,
-	])
+	res := sprintf(
+		"Resource '%s' has empty values for required tags: %v",
+		[
+			resource.address,
+			empty_tags,
+		],
+	)
 }
 
-# Helper function to get missing required tags
+
+# Helper function to get missing required tags.
 collect_missing_tags(resource) := missing if {
 	not tags_are_unknown(resource)
+
 	resource_tags := collect_resource_tags(resource)
-	missing := [tag |
+
+	missing := [
+		tag |
 		some tag in all_required_tag_keys
 		not resource_tags[tag]
 	]
 }
 
-# Helper function to get invalid tag values
+
+# =====================================================================
+# UPDATED:
+# Invalid tag validation is split into:
+#
+# 1. Static tags:
+#      BusinessUnit
+#      FISMABoundary
+#
+# 2. Dynamic Project values:
+#      data.tagging.projects
+#
+# 3. Dynamic Environment values:
+#      data.tagging.environments
+# =====================================================================
+
 collect_invalid_tags(resource) := invalid if {
 	resource_tags := collect_resource_tags(resource)
-	invalid := [sprintf("%s=%s", [tag, value]) |
+
+	static_invalid := collect_invalid_static_tags(resource_tags)
+
+	project_invalid := collect_invalid_project(resource_tags)
+
+	environment_invalid := collect_invalid_environment(resource_tags)
+
+	invalid := array.concat(
+		array.concat(
+			static_invalid,
+			project_invalid,
+		),
+		environment_invalid,
+	)
+}
+
+
+# Validate static tags against required_tags.
+collect_invalid_static_tags(resource_tags) := invalid if {
+	invalid := [
+		sprintf("%s=%s", [tag, value]) |
 		some tag in object.keys(required_tags)
+
 		value := resource_tags[tag]
+
 		value != null
 		value != ""
+
 		not value in required_tags[tag]
-		not valid_account_environment(tag, value, resource_tags)
 	]
 }
+
+
+# =====================================================================
+# UPDATED:
+# Validate Project using the dynamically loaded project list.
+# =====================================================================
+
+collect_invalid_project(resource_tags) := invalid if {
+	value := resource_tags["Project"]
+
+	value != null
+	value != ""
+
+	not value in dynamic_projects
+
+	invalid := [
+		sprintf("Project=%s", [value]),
+	]
+} else := []
+
+
+# =====================================================================
+# UPDATED:
+# Validate Environment using the dynamically loaded environment list.
+#
+# An Environment value is valid when:
+#
+# 1. It exists in data.tagging.environments
+#
+# OR
+#
+# 2. It is a 12-digit AWS account ID AND Project="imac".
+#
+# The second condition preserves the previous Jira requirement where
+# AWS account IDs can only be Environment values for IMAC.
+# =====================================================================
+
+collect_invalid_environment(resource_tags) := invalid if {
+	value := resource_tags["Environment"]
+
+	value != null
+	value != ""
+
+	not value in dynamic_environments
+
+	not valid_account_environment(
+		"Environment",
+		value,
+		resource_tags,
+	)
+
+	invalid := [
+		sprintf("Environment=%s", [value]),
+	]
+} else := []
+
 
 # Account IDs are only allowed for the Environment tag
 # when Project is "imac".
 valid_account_environment(tag, value, resource_tags) if {
 	tag == "Environment"
+
 	resource_tags["Project"] == "imac"
-	regex.match(aws_account_id_pattern, value)
+
+	regex.match(
+		aws_account_id_pattern,
+		value,
+	)
 }
 
-# Helper function to extract tags from resource
+
+# Helper function to extract tags from resource.
 collect_resource_tags(resource) := tags if {
 	tags := resource.change.after.tags_all
 } else := tags if {
 	tags := resource.change.after.tags
 } else := tags if {
-	# fallback to ASG tag blocks converted to a map
-	tags := {t.key: t.value |
+	# Fallback to ASG tag blocks converted to a map.
+	tags := {
+		t.key: t.value |
 		some t in resource.change.after.tag
 		t.key != null
 	}
 } else := {}
 
-# Helper function to collect computed(unknown) tags
+
+# Helper function to collect computed/unknown tags.
 tags_are_unknown(resource) if {
 	resource.change.after_unknown.tags
 }
@@ -223,17 +386,3 @@ tags_are_unknown(resource) if {
 tags_are_unknown(resource) if {
 	resource.change.after_unknown.tags_all
 }
-
-
-######### TICKET 
-See https://git.aws.hhsoig.gov/CDO/imac-policies/blob/main/policies/cdo/terraform/required_default_tagging/required_default_tagging.rego  
-
-Currently we hardcode the project specific environments as allowed envs as well as the projects.
-
-Instead we should load them up from imac-config.
-
-Pre-fetch from DynamoDB → Pass as Data to opa
-
-Acceptance:
-
-environments and projects dynamicall loaded into OPA
