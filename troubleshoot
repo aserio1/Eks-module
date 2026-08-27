@@ -1,6 +1,239 @@
-pip 24.2 from /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages/pip (python 3.12)
-14:44:35  + PIP_INSTALL='python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir'
-14:44:35  + python -m pip check
-14:44:35  aiobotocore 3.9.0 has requirement botocore<1.43.57,>=1.43.3, but you have botocore 1.43.80.
-14:44:35  + echo 'pip check failed - shared environment is inconsistent, forcing reinstall'
-14:44:35  pip check failed - shared environment is inconsistent, forcing reinstall
+# METADATA
+# title: Check for missing AWS tags
+# description: Check for missing aws tags to AWS resources defined by Terraform region.
+# scope: package
+# entrypoint: true
+# custom:
+#   id: CDO-TFPLAN-0002
+#   avd_id: CDO-TFPLAN-0002
+#   severity: CRITICAL
+#   short_code: required-default-tagging
+#   recommended_actions: Ensure you have the default tags set.
+#   input:
+#     selector:
+#       - type: json
+package cdo.terraform.required_default_tagging
+
+import rego.v1
+
+# Resources we want to ignore
+ignored_resource_types := {
+	"aws_api_gateway_documentation_part",
+	"aws_api_gateway_integration",
+	"aws_api_gateway_resource",
+	"aws_apigatewayv2_integration",
+	"aws_apigatewayv2_route",
+	"aws_appconfig_hosted_configuration_version",
+	"aws_backup_selection",
+	"aws_cloudwatch_event_target",
+	"aws_cloudwatch_log_subscription_filter",
+	"aws_cognito_identity_provider",
+	"aws_iam_role_policy",
+	"aws_iam_policy_attachment",
+	"aws_iam_role_policy_attachment",
+	"aws_kms_alias",
+	"aws_lakeformation_data_lake_setting",
+	"aws_lakeformation_lf_tag",
+	"aws_lakeformation_lf_tag_policy",
+	"aws_lakeformation_permissions",
+	"aws_lakeformation_resource",
+	"aws_lakeformation_resource_lf_tags",
+	"aws_lambda_layer_version",
+	"aws_lambda_permission",
+	"aws_lb_listener_rule",
+	"aws_lb_listener",
+	"aws_lb_target_group_attachment",
+	"aws_s3_bucket_acl",
+	"aws_s3_bucket_lifecycle_configuration",
+	"aws_s3_bucket_policy",
+	"aws_s3_bucket_public_access_block",
+	"aws_s3_bucket_server_side_encryption_configuration",
+	"aws_s3_bucket_versioning",
+	"aws_sagemaker_image_version",
+	"aws_scheduler_schedule",
+	"aws_secretsmanager_secret_version",
+	"aws_security_group_rule",
+	"aws_sns_topic_subscription",
+	"aws_ssoadmin_application_assignment",
+	"aws_vpc_security_group_ingress_rule",
+	"aws_vpc_security_group_egress_rule",
+	"aws_vpc_endpoint_route_table_association",
+	"aws_route_table_association",
+	"aws_subnet_route_table_association",
+	"jenkins_folder",
+	"jenkins_job",
+	"null_resource",
+	"random_password",
+	"terraform_data",
+	"time_static",
+}
+
+# allow AWS account IDs as Env values
+aws_account_id_pattern := `^\d{12}$`
+
+# Required tags and their allowed values
+required_tags := {
+	"Environment": [
+		"dev", "predev", "test", "qa", "stage", "prod",
+		"dev-data-pipelines", "qa-data-pipelines", "test-data-pipelines", 
+		"stage-data-pipelines", "prod-data-pipelines", "dev-viz-tools",
+		"qa-viz-tools", "test-viz-tools", "prod-viz-tools",
+		"dev-data-aquisition", "test-data-aquisition", "prod-data-aquisition",
+		"dev-imac-lza", "test-imac-lza", "prod-imac-lza",
+		"dev-gis-tools", "qa-gis-tools", "prod-gis-tools",
+		"dev-data-infrastructure", "test-data-infrastructure", "prod-data-infrastructure",
+		"dev-mle-dwb", "prod-mle-dwb",
+		"dev-dme-anomaly", "prod-dme-anomaly",
+		"dev-risk-models", "prod-risk-models",
+		"dev-ml-complaints", "prod-ml-complaints",
+		"dev-ml-critical", "prod-ml-critical",
+		"dev-ml-claim-gpt", "prod-ml-claim-gpt",
+		"dev-cloud-analytics", "test-cloud-analytics", "prod-cloud-analytics",
+	],
+	"BusinessUnit": ["cdo"],
+	"Project": ["cgap", "dwb", "mle", "sie", "gis", "imac", "ides", "oams", "arcgis"],
+	"FISMABoundary": ["dsgss", "dwb"],
+}
+
+# Tags that require values but are not restricted to specific values
+flexible_required_tags := {
+	"ApplicationName",
+	"OwnerContact",
+	"CreatedBy",
+}
+
+# Union of all required tag keys (used for missing-tag detection)
+all_required_tag_keys := object.keys(required_tags) | flexible_required_tags
+
+# Only check create/update actions
+valid_actions := {"create", "update"}
+
+# DENY: active, taggable, non-ignored resources with missing required tags.
+deny contains res if {
+	some resource in input.resource_changes
+	not ignored_resource_types[resource.type]
+
+	some action in resource.change.actions
+	valid_actions[action]
+
+	# Only enforce on taggable resources — collect_resource_tags returns {} if none
+	count(collect_resource_tags(resource)) > 0
+
+	# Check for missing required tags
+	missing_tags := collect_missing_tags(resource)
+	count(missing_tags) > 0
+
+	res := sprintf("Resource %s is missing required tags: %v.", [
+		resource.address,
+		missing_tags,
+	])
+}
+
+# DENY: resources with invalid tag values.
+deny contains res if {
+	some resource in input.resource_changes
+	not ignored_resource_types[resource.type]
+
+	some action in resource.change.actions
+	valid_actions[action]
+
+	# Check for invalid tag values
+	invalid_tags := collect_invalid_tags(resource)
+	count(invalid_tags) > 0
+
+	res := sprintf("Resource '%s' has invalid tag values: %v", [
+		resource.address,
+		invalid_tags,
+	])
+}
+
+# DENY: required tags present but set to empty string.
+deny contains res if {
+	some resource in input.resource_changes
+	not ignored_resource_types[resource.type]
+
+	some action in resource.change.actions
+	valid_actions[action]
+
+	count(collect_resource_tags(resource)) > 0
+	not tags_are_unknown(resource)
+
+	resource_tags := collect_resource_tags(resource)
+	empty_tags := [tag |
+		some tag in all_required_tag_keys
+		resource_tags[tag] == ""
+	]
+	count(empty_tags) > 0
+
+	res := sprintf("Resource '%s' has empty values for required tags: %v", [
+		resource.address,
+		empty_tags,
+	])
+}
+
+# Helper function to get missing required tags
+collect_missing_tags(resource) := missing if {
+	not tags_are_unknown(resource)
+	resource_tags := collect_resource_tags(resource)
+	missing := [tag |
+		some tag in all_required_tag_keys
+		not resource_tags[tag]
+	]
+}
+
+# Helper function to get invalid tag values
+collect_invalid_tags(resource) := invalid if {
+	resource_tags := collect_resource_tags(resource)
+	invalid := [sprintf("%s=%s", [tag, value]) |
+		some tag in object.keys(required_tags)
+		value := resource_tags[tag]
+		value != null
+		value != ""
+		not value in required_tags[tag]
+		not valid_account_environment(tag, value, resource_tags)
+	]
+}
+
+# Account IDs are only allowed for the Environment tag
+# when Project is "imac".
+valid_account_environment(tag, value, resource_tags) if {
+	tag == "Environment"
+	resource_tags["Project"] == "imac"
+	regex.match(aws_account_id_pattern, value)
+}
+
+# Helper function to extract tags from resource
+collect_resource_tags(resource) := tags if {
+	tags := resource.change.after.tags_all
+} else := tags if {
+	tags := resource.change.after.tags
+} else := tags if {
+	# fallback to ASG tag blocks converted to a map
+	tags := {t.key: t.value |
+		some t in resource.change.after.tag
+		t.key != null
+	}
+} else := {}
+
+# Helper function to collect computed(unknown) tags
+tags_are_unknown(resource) if {
+	resource.change.after_unknown.tags
+}
+
+tags_are_unknown(resource) if {
+	resource.change.after_unknown.tags_all
+}
+
+
+######### TICKET 
+See https://git.aws.hhsoig.gov/CDO/imac-policies/blob/main/policies/cdo/terraform/required_default_tagging/required_default_tagging.rego  
+
+Currently we hardcode the project specific environments as allowed envs as well as the projects.
+
+Instead we should load them up from imac-config.
+
+Pre-fetch from DynamoDB → Pass as Data to opa
+
+Acceptance:
+
+environments and projects dynamicall loaded into OPA
