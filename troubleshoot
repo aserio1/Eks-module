@@ -1,246 +1,1154 @@
-# METADATA
-# title: Check for missing AWS tags
-# description: Check for missing aws tags to AWS resources defined by Terraform region.
-# scope: package
-# entrypoint: true
-# custom:
-#   id: CDO-TFPLAN-0002
-#   avd_id: CDO-TFPLAN-0002
-#   severity: CRITICAL
-#   short_code: required-default-tagging
-#   recommended_actions: Ensure you have the default tags set.
-#   input:
-#     selector:
-#       - type: json
-package cdo.terraform.required_default_tagging
-
-import rego.v1
-
-# Resources we want to ignore
-ignored_resource_types := {
-	"aws_api_gateway_documentation_part",
-	"aws_api_gateway_integration",
-	"aws_api_gateway_resource",
-	"aws_apigatewayv2_integration",
-	"aws_apigatewayv2_route",
-	"aws_appconfig_hosted_configuration_version",
-	"aws_backup_selection",
-	"aws_cloudwatch_event_target",
-	"aws_cloudwatch_log_subscription_filter",
-	"aws_cognito_identity_provider",
-	"aws_iam_role_policy",
-	"aws_iam_policy_attachment",
-	"aws_iam_role_policy_attachment",
-	"aws_kms_alias",
-	"aws_lakeformation_data_lake_setting",
-	"aws_lakeformation_lf_tag",
-	"aws_lakeformation_lf_tag_policy",
-	"aws_lakeformation_permissions",
-	"aws_lakeformation_resource",
-	"aws_lakeformation_resource_lf_tags",
-	"aws_lambda_layer_version",
-	"aws_lambda_permission",
-	"aws_lb_listener_rule",
-	"aws_lb_listener",
-	"aws_lb_target_group_attachment",
-	"aws_s3_bucket_acl",
-	"aws_s3_bucket_lifecycle_configuration",
-	"aws_s3_bucket_policy",
-	"aws_s3_bucket_public_access_block",
-	"aws_s3_bucket_server_side_encryption_configuration",
-	"aws_s3_bucket_versioning",
-	"aws_sagemaker_image_version",
-	"aws_scheduler_schedule",
-	"aws_secretsmanager_secret_version",
-	"aws_security_group_rule",
-	"aws_sns_topic_subscription",
-	"aws_ssoadmin_application_assignment",
-	"aws_vpc_security_group_ingress_rule",
-	"aws_vpc_security_group_egress_rule",
-	"aws_vpc_endpoint_route_table_association",
-	"aws_route_table_association",
-	"aws_subnet_route_table_association",
-	"jenkins_folder",
-	"jenkins_job",
-	"null_resource",
-	"random_password",
-	"terraform_data",
-	"time_static",
-}
-
-# allow AWS account IDs as Env values
-aws_account_id_pattern := `^\d{12}$`
-
-dynamic_projects := data.tagging.projects
-
-dynamic_environments := data.tagging.environments
-
-# Required tags and their allowed values
-required_tags := {
-	"BusinessUnit": ["cdo"],
-	"FISMABoundary": ["dsgss", "dwb"],
-}
-
-# Tags that require values but are not restricted to specific values
-flexible_required_tags := {
-	"ApplicationName",
-	"OwnerContact",
-	"CreatedBy",
-}
-
-dynamic_required_tag_keys := {
-	"Environment",
-	"Project",
-}
-
-# Union of all required tag keys (used for missing-tag detection)
-all_required_tag_keys := object.keys(required_tags) | flexible_required_tags | dynamic_required_tag_keys
-
-# Only check create/update actions
-valid_actions := {"create", "update"}
-
-# DENY: active, taggable, non-ignored resources with missing required tags.
-deny contains res if {
-	some resource in input.resource_changes
-	not ignored_resource_types[resource.type]
-
-	some action in resource.change.actions
-	valid_actions[action]
-
-	# Only enforce on taggable resources — collect_resource_tags returns {} if none
-	count(collect_resource_tags(resource)) > 0
-
-	# Check for missing required tags
-	missing_tags := collect_missing_tags(resource)
-	count(missing_tags) > 0
-
-	res := sprintf("Resource %s is missing required tags: %v.", [
-		resource.address,
-		missing_tags,
-	])
-}
-
-# DENY: resources with invalid tag values.
-deny contains res if {
-	some resource in input.resource_changes
-	not ignored_resource_types[resource.type]
-
-	some action in resource.change.actions
-	valid_actions[action]
-
-	# Check for invalid tag values
-	invalid_tags := collect_invalid_tags(resource)
-	count(invalid_tags) > 0
-
-	res := sprintf("Resource '%s' has invalid tag values: %v", [
-		resource.address,
-		invalid_tags,
-	])
-}
-
-# DENY: required tags present but set to empty string.
-deny contains res if {
-	some resource in input.resource_changes
-	not ignored_resource_types[resource.type]
-
-	some action in resource.change.actions
-	valid_actions[action]
-
-	count(collect_resource_tags(resource)) > 0
-	not tags_are_unknown(resource)
-
-	resource_tags := collect_resource_tags(resource)
-	empty_tags := [tag |
-		some tag in all_required_tag_keys
-		resource_tags[tag] == ""
-	]
-	count(empty_tags) > 0
-
-	res := sprintf("Resource '%s' has empty values for required tags: %v", [
-		resource.address,
-		empty_tags,
-	])
-}
-
-# Helper function to get missing required tags
-collect_missing_tags(resource) := missing if {
-	not tags_are_unknown(resource)
-	resource_tags := collect_resource_tags(resource)
-	missing := [tag |
-		some tag in all_required_tag_keys
-		not resource_tags[tag]
-	]
-}
-
-# Helper function to get invalid tag values
-collect_invalid_tags(resource) := invalid if {
-	resource_tags := collect_resource_tags(resource)
-
-	static_invalid := collect_invalid_static_tags(resource_tags)
-	project_invalid := collect_invalid_project(resource_tags)
-	environment_invalid := collect_invalid_environment(resource_tags)
-
-	invalid := array.concat(
-		array.concat(static_invalid, project_invalid),
-		environment_invalid,
-	)
-}
-
-collect_invalid_static_tags(resource_tags) := invalid if {
-	invalid := [sprintf("%s=%s", [tag, value]) |
-		some tag in object.keys(required_tags)
-		value := resource_tags[tag]
-		value != null
-		value != ""
-		not value in required_tags[tag]
-	]
-}
-
-collect_invalid_project(resource_tags) := invalid if {
-	value := resource_tags["Project"]
-	value != null
-	value != ""
-	not value in dynamic_projects
-
-	invalid := [sprintf("Project=%s", [value])]
-} else := []
-
-collect_invalid_environment(resource_tags) := invalid if {
-	value := resource_tags["Environment"]
-	value != null
-	value != ""
-	not value in dynamic_environments
-	not valid_account_environment("Environment", value, resource_tags)
-
-	invalid := [sprintf("Environment=%s", [value])]
-} else := []
-
-# Account IDs are only allowed for the Environment tag
-# when Project is "imac".
-valid_account_environment(tag, value, resource_tags) if {
-	tag == "Environment"
-	resource_tags["Project"] == "imac"
-	regex.match(aws_account_id_pattern, value)
-}
-
-# Helper function to extract tags from resource
-collect_resource_tags(resource) := tags if {
-	tags := resource.change.after.tags_all
-} else := tags if {
-	tags := resource.change.after.tags
-} else := tags if {
-	# fallback to ASG tag blocks converted to a map
-	tags := {t.key: t.value |
-		some t in resource.change.after.tag
-		t.key != null
-	}
-} else := {}
-
-# Helper function to collect computed(unknown) tags
-tags_are_unknown(resource) if {
-	resource.change.after_unknown.tags
-}
-
-tags_are_unknown(resource) if {
-	resource.change.after_unknown.tags_all
-}
+35  tags_are_unknown(resource) if {
+10:18:35  	resource.change.after_unknown.tags_all
+10:18:35  }
+10:18:35  
+10:18:35  package cdo.terraform.required_default_tagging_test
+10:18:35  
+10:18:35  import data.cdo.terraform.required_default_tagging as check
+10:18:35  
+10:18:35  # Test missing and invalid tags
+10:18:35  test_deny_resource_has_required_tags if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "module.emr_serverless_runtime_role.aws_iam_policy.emr_serverless_execution_custom_policy",
+10:18:35  			"module_address": "module.emr_serverless_runtime_role",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_policy",
+10:18:35  			"name": "emr_serverless_execution_custom_policy",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {
+10:18:35  					"tags": {},
+10:18:35  					"tags_all": {
+10:18:35  						"ApplicationName": "SageMaker Studio Base",
+10:18:35  						"CreatedBy": "terraform",
+10:18:35  						"Environment": "dev",
+10:18:35  						"Opt_in": "n",
+10:18:35  						"Owner": "Katie Rose",
+10:18:35  						"Project": "IMAC-IDES",
+10:18:35  						"ResponsibleGroup": "cdo",
+10:18:35  						"Service": "sagemaker-studio",
+10:18:35  						"Version": "1.0.0",
+10:18:35  					},
+10:18:35  				},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	# Missing: BusinessUnit, FISMABoundary, OwnerContact → 1 deny
+10:18:35  	# Invalid: Project="IMAC-IDES" → 1 deny
+10:18:35  	# Total: 2
+10:18:35  	count(res) == 2
+10:18:35  }
+10:18:35  
+10:18:35  # Test all required tags present but with invalid values
+10:18:35  test_deny_resource_has_required_tags_but_invalid_values if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "module.emr_serverless_runtime_role.aws_iam_policy.emr_serverless_execution_custom_policy",
+10:18:35  			"module_address": "module.emr_serverless_runtime_role",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_policy",
+10:18:35  			"name": "emr_serverless_execution_custom_policy",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {
+10:18:35  					"tags": {},
+10:18:35  					"tags_all": {
+10:18:35  						"ApplicationName": "SageMaker Studio Base",
+10:18:35  						"CreatedBy": "terraform",
+10:18:35  						"Created": "date",
+10:18:35  						"Environment": "dev",
+10:18:35  						"BusinessUnit": "cdo",
+10:18:35  						"FISMABoundary": "dsgsb", # invalid — typo, should be "dsgss"
+10:18:35  						"Opt_in": "n",
+10:18:35  						"Owner": "Katie Rose",
+10:18:35  						"OwnerContact": "", # present but empty
+10:18:35  						"Project": "imac",
+10:18:35  						"ResponsibleGroup": "cdo",
+10:18:35  						"Service": "sagemaker-studio",
+10:18:35  						"Version": "1.0.0",
+10:18:35  					},
+10:18:35  				},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	# Invalid: FISMABoundary="dsgsb" → 1 deny
+10:18:35  	# Empty: OwnerContact="" → 1 deny
+10:18:35  	# Total: 2
+10:18:35  	count(res) == 2
+10:18:35  }
+10:18:35  
+10:18:35  # Test that ASG tagged only via "tag" blocks should PASS
+10:18:35  test_allow_asg_tags_from_tag_blocks if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "aws_autoscaling_group.jenkins_agent_node",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_autoscaling_group",
+10:18:35  			"name": "jenkins_agent_node",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {"tag": [
+10:18:35  					{"key": "Environment", "value": "prod"},
+10:18:35  					{"key": "BusinessUnit", "value": "cdo"},
+10:18:35  					{"key": "Project", "value": "imac"},
+10:18:35  					{"key": "FISMABoundary", "value": "dsgss"},
+10:18:35  					{"key": "ApplicationName", "value": "IMAC Jenkins"},
+10:18:35  					{"key": "OwnerContact", "value": "imac@oig.hhs.gov"},
+10:18:35  					{"key": "CreatedBy", "value": "terraform"},
+10:18:35  				]},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	count(res) == 0
+10:18:35  }
+10:18:35  
+10:18:35  # Test that unknown/computed tags do not trigger a deny
+10:18:35  test_unknown_tags_do_not_deny if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "module.iam.aws_iam_role.glue_service_role",
+10:18:35  			"module_address": "module.iam",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_role",
+10:18:35  			"name": "glue_service_role",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {
+10:18:35  					"name": "prod-oams-iris-glue-service-role",
+10:18:35  				},
+10:18:35  				"after_unknown": {
+10:18:35  					"arn": true,
+10:18:35  					"create_date": true,
+10:18:35  					"id": true,
+10:18:35  					"inline_policy": [{}],
+10:18:35  					"managed_policy_arns": true,
+10:18:35  					"name_prefix": true,
+10:18:35  					"tags": true,
+10:18:35  					"tags_all": true,
+10:18:35  					"unique_id": true,
+10:18:35  				},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	count(res) == 0
+10:18:35  }
+10:18:35  
+10:18:35  # Test that an AWS account number as Environment value is ALLOWED for IMAC
+10:18:35  test_allow_account_number_as_environment_for_imac if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "module.role.module.operator_role[0].aws_iam_role.role",
+10:18:35  			"module_address": "module.role.module.operator_role[0]",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_role",
+10:18:35  			"name": "role",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {
+10:18:35  					"tags": {},
+10:18:35  					"tags_all": {
+10:18:35  						"ApplicationName": "IMAC Jenkins",
+10:18:35  						"BusinessUnit": "cdo",
+10:18:35  						"CreatedBy": "terraform",
+10:18:35  						"Environment": "966555604991",
+10:18:35  						"FISMABoundary": "dsgss",
+10:18:35  						"OwnerContact": "imac@oig.hhs.gov",
+10:18:35  						"Project": "imac",
+10:18:35  					},
+10:18:35  				},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	# Project=imac + 12-digit Environment account ID is valid
+10:18:35  	count(res) == 0
+10:18:35  }
+10:18:35  
+10:18:35  # Test that an AWS account number as Environment value is DENIED for DWB
+10:18:35  test_deny_account_number_as_environment_for_dwb if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "aws_iam_role.dwb_role",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_role",
+10:18:35  			"name": "dwb_role",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {
+10:18:35  					"tags": {},
+10:18:35  					"tags_all": {
+10:18:35  						"ApplicationName": "DWB Application",
+10:18:35  						"BusinessUnit": "cdo",
+10:18:35  						"CreatedBy": "terraform",
+10:18:35  						"Environment": "213141505949",
+10:18:35  						"FISMABoundary": "dwb",
+10:18:35  						"OwnerContact": "dwb@oig.hhs.gov",
+10:18:35  						"Project": "dwb",
+10:18:35  					},
+10:18:35  				},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	# Environment is a 12-digit account ID, but Project is not "imac".
+10:18:35  	# This should trigger the invalid tag values deny rule.
+10:18:35  	count(res) == 1
+10:18:35  }
+10:18:35  
+10:18:35  # Test that an AWS account number as Environment value is DENIED for SIE
+10:18:35  test_deny_account_number_as_environment_for_sie if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "aws_iam_role.sie_role",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_role",
+10:18:35  			"name": "sie_role",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {
+10:18:35  					"tags": {},
+10:18:35  					"tags_all": {
+10:18:35  						"ApplicationName": "SIE Application",
+10:18:35  						"BusinessUnit": "cdo",
+10:18:35  						"CreatedBy": "terraform",
+10:18:35  						"Environment": "598956749955",
+10:18:35  						"FISMABoundary": "dsgss",
+10:18:35  						"OwnerContact": "sie@oig.hhs.gov",
+10:18:35  						"Project": "sie",
+10:18:35  					},
+10:18:35  				},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	# Project=sie cannot use an account ID as Environment
+10:18:35  	count(res) == 1
+10:18:35  }
+10:18:35  
+10:18:35  # Test that an AWS account number as Environment value is DENIED for GIS
+10:18:35  test_deny_account_number_as_environment_for_gis if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "aws_iam_role.gis_role",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_role",
+10:18:35  			"name": "gis_role",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {
+10:18:35  					"tags": {},
+10:18:35  					"tags_all": {
+10:18:35  						"ApplicationName": "GIS Application",
+10:18:35  						"BusinessUnit": "cdo",
+10:18:35  						"CreatedBy": "terraform",
+10:18:35  						"Environment": "779846803742",
+10:18:35  						"FISMABoundary": "dsgss",
+10:18:35  						"OwnerContact": "gis@oig.hhs.gov",
+10:18:35  						"Project": "gis",
+10:18:35  					},
+10:18:35  				},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	# Project=gis cannot use an account ID as Environment
+10:18:35  	count(res) == 1
+10:18:35  }
+10:18:35  
+10:18:35  # Test that a normal Environment value is still allowed for non-IMAC projects
+10:18:35  test_allow_standard_environment_for_non_imac_project if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "aws_iam_role.dwb_standard_environment",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_role",
+10:18:35  			"name": "dwb_standard_environment",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {
+10:18:35  					"tags": {},
+10:18:35  					"tags_all": {
+10:18:35  						"ApplicationName": "DWB Application",
+10:18:35  						"BusinessUnit": "cdo",
+10:18:35  						"CreatedBy": "terraform",
+10:18:35  						"Environment": "dev",
+10:18:35  						"FISMABoundary": "dwb",
+10:18:35  						"OwnerContact": "dwb@oig.hhs.gov",
+10:18:35  						"Project": "dwb",
+10:18:35  					},
+10:18:35  				},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	# Normal Environment values remain valid for other projects
+10:18:35  	count(res) == 0
+10:18:35  }
+10:18:35  
+10:18:35  # UPDATE END
+10:18:35  
+10:18:35  [31m[0m
+10:18:35  [31m[0m# Test that destroy actions are never denied
+10:18:35  test_destroy_action_not_denied if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "aws_s3_bucket.no_tags",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_s3_bucket",
+10:18:35  			"name": "no_tags",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["delete"],
+10:18:35  				"after": null,
+10:18:35  				"after_unknown": {},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	count(res) == 0
+10:18:35  }
+10:18:35  
+10:18:35  # Test that a resource with no tags/tags_all/tag fields (untaggable) is not denied
+10:18:35  test_untaggable_resource_not_denied if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "aws_iam_role_policy.inline_policy",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_role_policy",
+10:18:35  			"name": "inline_policy",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {
+10:18:35  					"name": "my-inline-policy",
+10:18:35  					"policy": "{\"Version\":\"2012-10-17\"}",
+10:18:35  					"role": "my-role",
+10:18:35  				},
+10:18:35  				"after_unknown": {},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	# No tags/tags_all/tag fields present — collect_resource_tags returns {}
+10:18:35  	# so the resource should be treated as untaggable and not denied
+10:18:35  	count(res) == 0
+10:18:35  }
+10:18:35  
+10:18:35  # Test that ignored resource types are never denied
+10:18:35  test_ignored_resource_type_not_denied if {
+10:18:35  	res := check.deny with input as {
+10:18:35  		"format_version": "1.2",
+10:18:35  		"terraform_version": "1.13.0",
+10:18:35  		"resource_changes": [{
+10:18:35  			"address": "aws_iam_role_policy_attachment.no_tags",
+10:18:35  			"mode": "managed",
+10:18:35  			"type": "aws_iam_role_policy_attachment",
+10:18:35  			"name": "no_tags",
+10:18:35  			"provider_name": "registry.terraform.io/hashicorp/aws",
+10:18:35  			"change": {
+10:18:35  				"actions": ["create"],
+10:18:35  				"after": {},
+10:18:35  				"after_unknown": {},
+10:18:35  			},
+10:18:35  		}],
+10:18:35  	}
+10:18:35  
+10:18:35  	count(res) == 0
+10:18:35  }
+10:18:35  
+10:18:36  [Pipeline] echo
+10:18:36  Step 2: Run OPA Basic Validation (Recursive)...
+10:18:36  [Pipeline] sh
+10:18:36  + opa check .
+10:18:36  [Pipeline] echo
+10:18:36  Step 3: Run Regal Linting (Recursive)...
+10:18:36  [Pipeline] sh
+10:18:37  + regal lint --no-color --format=compact --fail-level=error .
+10:18:41  ┌─────────────────────────────────────────────────────────────────────────────────────────────────┬───────────────────────────────────────────────────────────────┐
+10:18:41  │                                            LOCATION                                             │                          DESCRIPTION                          │
+10:18:41  ├─────────────────────────────────────────────────────────────────────────────────────────────────┼───────────────────────────────────────────────────────────────┤
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps.rego:1:1        │ File should be formatted with `opa fmt`                       │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps.rego:152:2      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps.rego:160:9      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps.rego:180:9      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps.rego:161:9      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps.rego:181:9      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:83:1  │ Line too long                                                 │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:26:1  │ Line too long                                                 │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:72:1  │ Line too long                                                 │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:30:20 │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:53:20 │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:75:20 │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:86:20 │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:38:1                       │ Prefer pattern matching in function arguments                 │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:60:1                       │ Line too long                                                 │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:166:1                      │ Line too long                                                 │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:75:9                       │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:95:9                       │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:112:9                      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:133:9                      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:152:9                      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:173:9                      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:190:9                      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:78:10                      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:98:10                      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:115:10                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:136:10                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:155:10                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:176:10                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:193:10                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:81:12                      │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:101:12                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:118:12                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:139:12                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:158:12                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:179:12                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails.rego:196:12                     │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:59:20                 │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:81:20                 │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:103:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:125:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:147:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:169:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:191:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:213:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:235:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:257:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:277:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:320:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:342:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:364:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:384:20                │ Prefer `some .. in` for iteration                             │
+10:18:41  │ cdo/pipelines/github_settings/github_settings.rego:19:5                                         │ Redundant existence check                                     │
+10:18:41  │ cdo/pipelines/github_settings/github_settings.rego:1:1                                          │ File should be formatted with `opa fmt`                       │
+10:18:41  │ cdo/pipelines/github_settings/github_settings.rego:53:1                                         │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings.rego:45:1                                         │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:1:1                                     │ File should be formatted with `opa fmt`                       │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:305:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:332:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:414:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:170:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:72:1                                    │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:95:1                                    │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:120:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:55:1                                    │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:514:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:197:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:251:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:278:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:224:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:359:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:386:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:489:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:464:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:439:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:145:1                                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/github_settings/github_settings_test.rego:1:1                                     │ Max file length exceeded                                      │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:39:1                         │ Prefer set or object rule over comprehension                  │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:45:1                         │ Prefer set or object rule over comprehension                  │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:1:1                          │ File should be formatted with `opa fmt`                       │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:162:1                        │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:206:1                        │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:218:1                        │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:170:1                        │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:195:1                        │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:154:1                        │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:23:2                    │ Assignment can be deferred                                    │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:646:2                   │ Assignment can be deferred                                    │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:535:2                   │ Assignment can be deferred                                    │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:40:2                    │ Assignment can be deferred                                    │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:1:1                     │ File should be formatted with `opa fmt`                       │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:21:1                    │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:24:1                    │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:169:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:37:1                    │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:641:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:53:1                    │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:72:1                    │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:82:1                    │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:199:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:212:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:244:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:259:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:275:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:305:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:319:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:349:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:363:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:398:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:445:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:583:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:685:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:706:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:665:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:372:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:102:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:227:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:140:1                   │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:1:1                     │ Max file length exceeded                                      │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps.rego:28:1                                       │ Prefer set or object rule over comprehension                  │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps.rego:1:1                                        │ File should be formatted with `opa fmt`                       │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps.rego:48:1                                       │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:1:1                                   │ File should be formatted with `opa fmt`                       │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:80:1                                  │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:36:1                                  │ Line too long                                                 │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation.rego:64:17                                        │ Reference ignores import of data.defined_pipelines            │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation.rego:73:17                                        │ Reference ignores import of data.defined_pipelines            │
+10:18:41  │ cdo/terraform/required_default_tagging/required_default_tagging.rego:183:13                     │ Prefer using `array.flatten` over nested `array.concat` calls │
+10:18:41  │ cdo/terraform/required_default_tagging/required_default_tagging.rego:1:1                        │ File should be formatted with `opa fmt`                       │
+10:18:41  │ cdo/terraform/required_default_tagging/required_default_tagging.rego:190:2                      │ Unconditional assignment in rule body                         │
+10:18:41  │ cdo/terraform/required_default_tagging/required_default_tagging_test.rego:1:1                   │ File should be formatted with `opa fmt`                       │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:22:8                    │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:25:8                    │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation_test.rego:46:8                                    │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:55:8                    │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation_test.rego:62:8                                    │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:74:8                    │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation_test.rego:78:8                                    │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:84:8                    │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation_test.rego:94:8                                    │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:110:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation_test.rego:110:8                                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:117:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:126:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation_test.rego:126:8                                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:142:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation_test.rego:142:8                                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:157:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:170:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:185:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:201:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:214:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:229:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:246:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:261:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:277:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:291:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:307:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:321:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:335:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:351:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:365:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:381:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:400:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:417:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:431:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:447:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:485:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:493:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:501:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:510:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:519:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:534:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:537:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:551:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:565:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:585:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:602:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:621:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:645:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:648:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:656:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:671:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:687:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:708:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:719:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:730:8                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:38:14                                 │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:49:14                                 │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:60:14                                 │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:71:14                                 │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:82:14                                 │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:93:14                                 │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:104:14                                │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:120:14                                │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:136:14                                │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps_test.rego:158:14                                │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:251:16                       │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:256:16                       │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation.rego:64:17                                        │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation.rego:73:17                                        │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/restricted_steps/restricted_steps.rego:36:19                                      │ Unresolved Reference                                          │
+10:18:41  │ cdo/terraform/required_default_tagging/required_default_tagging.rego:74:21                      │ Unresolved Reference                                          │
+10:18:41  │ cdo/terraform/required_default_tagging/required_default_tagging.rego:76:25                      │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps.rego:77:41                        │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:39:54                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/required_security_steps/required_security_steps_test.rego:40:54                   │ Unresolved Reference                                          │
+10:18:41  │ cdo/pipelines/seed_validation/seed_validation.rego:3:1                                          │ Unresolved import                                             │
+10:18:41  └─────────────────────────────────────────────────────────────────────────────────────────────────┴───────────────────────────────────────────────────────────────┘
+10:18:41   18 files linted , 208 violations found.
+10:18:41  [Pipeline] }
+10:18:41  [Pipeline] // dir
+10:18:41  [Pipeline] }
+10:18:42  ERROR: script returned exit code 3
+10:18:42  [Pipeline] // catchError
+10:18:42  [Pipeline] }
+10:18:42  [Pipeline] // stage
+10:18:42  [Pipeline] }
+10:18:42  [Pipeline] // ws
+10:18:42  [Pipeline] }
+10:18:42  [Pipeline] // node
+10:18:42  [JTE][Step - policies/test_rego.call()]
+10:18:42  [Pipeline] node
+10:18:42  Running on imac in /home/jenkins/workspace/IMAC_IMAC_Policies_PR-119
+10:18:43  [Pipeline] {
+10:18:43  [Pipeline] ws
+10:18:43  Running in /home/jenkins/workspace/IMAC/IMAC Policies/PR-119/2
+10:18:43  [Pipeline] {
+10:18:43  [Pipeline] stage
+10:18:43  [Pipeline] { (Rego Testing)
+10:18:43  [Pipeline] dir
+10:18:43  Running in /home/jenkins/workspace/IMAC/IMAC Policies/PR-119/2/policies
+10:18:43  [Pipeline] {
+10:18:43  [Pipeline] echo
+10:18:43  Recursively run'ning OPA tests in 'policies'...
+10:18:43  [Pipeline] sh
+10:18:44  + opa test --verbose .
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:31:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_split_dast_deny_isolated: PASS (5.486473ms)
+10:18:44  
+10:18:44  cdo/pipelines/seed_validation/seed_validation_test.rego:133:
+10:18:44  data.cdo.pipelines.seed_validation_test.test_field_mismatches_content: PASS (5.547916ms)
+10:18:44  
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:19:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_split_sast_deny_isolated: PASS (19.18106ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:46:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_combined_deny_aggregates_both: PASS (20.047936ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:107:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_unverified_invocation_suspends_sast_deny: PASS (1.224004ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:114:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_unverified_invocation_suspends_dast_deny: PASS (3.26695ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:123:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_unverified_invocation_produces_warn: PASS (765.401µs)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:131:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_warn_silent_when_invocation_verified: PASS (860.969µs)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:154:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_unverified_invocation_does_not_change_applicability: PASS (1.508181ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:167:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_missing_sast_denied: PASS (1.532159ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:176:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_sast_present_no_dast_needed_passes: PASS (1.626943ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:192:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_frontend_requires_dast: PASS (1.294119ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:64:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_nonblocking_still_reports_same_violation: PASS (26.877053ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:220:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_api_gateway_requires_dast: PASS (1.540984ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:237:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_sie_api_gateway_full_compliance_passes: PASS (1.773801ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:252:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_http_listener_requires_dast: PASS (1.349158ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:205:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_frontend_with_dast_passes: PASS (10.314762ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:282:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_sast_loaded_not_invoked_denied: PASS (1.089014ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:298:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_dast_invoked_without_url_denied: PASS (1.244737ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:312:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_dast_invoked_empty_url_denied: PASS (1.327319ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:326:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_no_url_check_when_dast_not_required: PASS (981.844µs)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:342:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_override_suppresses_false_positive: PASS (935.323µs)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:356:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_without_override_signal_wins: PASS (1.315241ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:371:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_override_forces_dast_on: PASS (1.57249ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:387:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_duplicate_override_entries_no_crash: PASS (1.062966ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:408:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_detector_ran_no_surface_no_dast: PASS (886.59µs)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:268:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_dast_loaded_not_invoked_denied: PASS (2.089342ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:438:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_app_missing_both_steps: PASS (3.071442ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:482:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_sast_exemption_suppresses_deny: PASS (2.044149ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:490:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_sast_exemption_combined_deny_clean: PASS (2.680172ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:422:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_missing_signals_fail_safe_requires_dast: PASS (16.185808ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:498:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_sast_exemption_produces_warn: PASS (2.075679ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:506:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_job_scoped_does_not_leak_to_primary: PASS (2.223386ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:526:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_repo_scoped_matches_all_jenkinsfiles: PASS (4.52538ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:515:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_other_repo_unaffected: PASS (12.816424ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:558:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_duplicate_entries_no_crash: PASS (1.573651ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:572:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_dast_off_suppresses_signal: PASS (1.457168ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:590:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_dast_forced_on: PASS (1.743727ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:544:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_sast_true_beats_false: PASS (13.513054ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:630:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_imac_migration_shape: PASS (3.594243ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:663:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_precedence_over_legacy: PASS (2.000293ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:609:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_combined_sast_and_dast_exemption: PASS (9.142999ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:693:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_coexistence_legacy_and_migrated: PASS (1.084377ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:716:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_exemption_plus_unverified_two_warns: PASS (1.457579ms)
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:727:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_absent_key_backwards_compatible: PASS (1.169843ms)
+10:18:44  
+10:18:44  cdo/pipelines/required_steps/required_steps_test.rego:7:
+10:18:44  data.cdo.pipelines.required_steps_test.test_pass: PASS (880.008µs)
+10:18:44  
+10:18:44  cdo/pipelines/required_security_steps/required_security_steps_test.rego:676:
+10:18:44  data.cdo.pipelines.required_security_steps_test.test_secov_legacy_honored_when_no_match: PASS (7.079145ms)
+10:18:44  
+10:18:44  cdo/pipelines/required_steps/required_steps_test.rego:35:
+10:18:44  data.cdo.pipelines.required_steps_test.test_fail_multiple_missing_steps: PASS (1.170161ms)
+10:18:44  cdo/pipelines/required_steps/required_steps_test.rego:54:
+10:18:44  data.cdo.pipelines.required_steps_test.test_pass_all_tech: PASS (1.073299ms)
+10:18:44  cdo/pipelines/required_steps/required_steps_test.rego:74:
+10:18:44  data.cdo.pipelines.required_steps_test.test_missing_steps_terraform: PASS (725.911µs)
+10:18:44  
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:32:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_authorized_pipeline_passes: PASS (1.095111ms)
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:43:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_unauthorized_destroy_denied: PASS (1.01882ms)
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:54:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_unauthorized_plan_destroy_denied: PASS (1.072119ms)
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:65:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_unauthorized_both_restricted_denied: PASS (1.234747ms)
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:76:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_non_restricted_calls_always_pass: PASS (734.107µs)
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:87:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_authorized_no_destructive_calls_passes: PASS (1.938619ms)
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:98:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_empty_allowlist_denies_all_restricted_calls: PASS (1.50787ms)
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:109:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_partial_match_wrong_jenkinsfile_denied: PASS (1.226968ms)
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:125:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_partial_match_wrong_name_denied: PASS (1.335804ms)
+10:18:44  cdo/pipelines/restricted_steps/restricted_steps_test.rego:141:
+10:18:44  data.cdo.pipelines.restricted_steps_test.test_multiple_allowlist_entries_each_authorized: PASS (1.474857ms)
+10:18:44  
+10:18:44  cdo/pipelines/required_steps/required_steps_test.rego:23:
+10:18:44  data.cdo.pipelines.required_steps_test.test_fail: PASS (20.668961ms)
+10:18:44  
+10:18:44  cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:7:
+10:18:44  data.cdo.imac_config.project_account_allowlist_steps_test.test_pass_multiple_projects_all_allowed: PASS (1.958753ms)
+10:18:44  cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:25:
+10:18:44  data.cdo.imac_config.project_account_allowlist_steps_test.test_fail_unauthorized_account_in_project: PASS (4.138784ms)
+10:18:44  cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:71:
+10:18:44  data.cdo.imac_config.project_account_allowlist_steps_test.test_fail_closed_unknown_project: PASS (1.997688ms)
+10:18:44  cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:82:
+10:18:44  data.cdo.imac_config.project_account_allowlist_steps_test.test_fail_malformed_account_ref: PASS (1.403968ms)
+10:18:44  cdo/imac_config/project_account_allowlist_steps/project_account_allowlist_steps_test.rego:39:
+10:18:44  data.cdo.imac_config.project_account_allowlist_steps_test.test_fail_unauthorized_account_in_multiple_projects: PASS (15.178776ms)
+10:18:44  
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:6:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_deny_resource_has_required_tags: FAIL (16.359942ms)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:86:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_allow_asg_tags_from_tag_blocks: PASS (4.71915ms)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:115:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_unknown_tags_do_not_deny: PASS (2.139336ms)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:44:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_deny_resource_has_required_tags_but_invalid_values: PASS (32.601865ms)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:184:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_dwb: FAIL (3.77939ms)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:218:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_sie: FAIL (3.153357ms)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:150:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_allow_account_number_as_environment_for_imac: PASS (23.911912ms)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:251:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_gis: FAIL (4.310777ms)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:320:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_destroy_action_not_denied: PASS (819.462µs)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:284:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_allow_standard_environment_for_non_imac_project: PASS (14.942604ms)
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:342:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_untaggable_resource_not_denied: PASS (14.944979ms)
+10:18:44  
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:7:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_pass_base_shared_layer_scoped: PASS (23.054002ms)
+10:18:44  
+10:18:44  cdo/terraform/required_default_tagging/required_default_tagging_test.rego:370:
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_ignored_resource_type_not_denied: PASS (24.80829ms)
+10:18:44  
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:25:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_pass_project_layer_scoped: PASS (5.241701ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:43:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_wildcard_resource_for_non_read_action: PASS (6.851576ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:65:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_sensitive_action_in_base_layer: PASS (7.294387ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:109:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_missing_account_scope_in_base_layer: PASS (3.560434ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:87:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_missing_project_scope_in_project_layer: PASS (8.124109ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:131:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_unknown_action_classification: PASS (3.403469ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:153:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_cloudtrail_delete_trail: PASS (23.318218ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:175:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_organizations_wildcard_action: PASS (21.191235ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:219:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_service_wildcard_action_in_jenkins: PASS (5.455401ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:241:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_unknown_non_wildcard_action_still_denied: PASS (17.486364ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:263:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_service_wildcard_uses_specific_message: PASS (3.366084ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:197:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_service_wildcard_action_in_infrastructure: PASS (26.02344ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:286:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_pass_permissions_boundary_allow_admin_access_exception: PASS (2.904424ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:326:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_permissions_boundary_global_wildcard_with_different_sid: PASS (3.669835ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:348:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_malformed_iam_action: PASS (2.819918ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:370:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_malformed_iam_action_uses_specific_message: PASS (2.818525ms)
+10:18:44  cdo/imac_iam_config/iam_policy_guardrails/iam_policy_guardrails_test.rego:304:
+10:18:44  data.cdo.imac_iam_config.iam_policy_guardrails_test.test_fail_global_wildcard_outside_permissions_boundary_exception: PASS (13.635029ms)
+10:18:44  
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:9:
+10:18:44  data.cdo.pipelines.github_settings_test.test_allow_fully_compliant_config: PASS (1.135995ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:44:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_missing_branch_protection: PASS (697.185µs)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:58:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_branch_not_protected_api_message: PASS (949.99µs)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:78:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_missing_pr_review_settings: PASS (1.384076ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:98:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_insufficient_pr_approval_count: PASS (2.23666ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:392:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_allow_squash_merge_disabled: PASS (12.086621ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:123:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_dismiss_stale_approvals_disabled: PASS (11.702931ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:176:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_missing_status_checks: PASS (5.87598ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:148:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_require_code_owners_disabled: PASS (16.553799ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:200:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_status_checks_not_strict: PASS (8.01293ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:254:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_conversation_resolution_disabled: PASS (1.980251ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:230:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_missing_conversation_resolution: PASS (2.01887ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:284:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_missing_linear_history_setting: PASS (1.928735ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:308:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_linear_history_disabled: PASS (2.069095ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:338:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_missing_admin_enforcement: PASS (1.953196ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:362:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_admin_enforcement_disabled: PASS (1.887286ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:442:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_merge_commit_enabled: PASS (2.141198ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:467:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_allow_update_branch_disabled: PASS (2.181674ms)
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:417:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_rebase_merge_enabled: PASS (11.299705ms)
+10:18:44  
+10:18:44  cdo/pipelines/deprecated_steps/deprecated_steps_test.rego:52:
+10:18:44  data.cdo.pipelines.deprecated_steps_test.test_fail_all_deprecated_steps: PASS (6.482124ms)
+10:18:44  
+10:18:44  cdo/pipelines/github_settings/github_settings_test.rego:492:
+10:18:44  data.cdo.pipelines.github_settings_test.test_deny_delete_branch_on_merge_disabled: PASS (15.399764ms)
+10:18:44  
+10:18:44  cdo/pipelines/deprecated_steps/deprecated_steps_test.rego:7:
+10:18:44  data.cdo.pipelines.deprecated_steps_test.test_pass: PASS (5.381021ms)
+10:18:44  cdo/pipelines/deprecated_steps/deprecated_steps_test.rego:27:
+10:18:44  data.cdo.pipelines.deprecated_steps_test.test_fail_multiple_deprecated_steps: PASS (1.84177ms)
+10:18:44  cdo/pipelines/deprecated_steps/deprecated_steps_test.rego:43:
+10:18:44  data.cdo.pipelines.deprecated_steps_test.test_pass_unknown_steps: PASS (1.579588ms)
+10:18:44  
+10:18:44  cdo/pipelines/seed_validation/seed_validation_test.rego:69:
+10:18:44  data.cdo.pipelines.seed_validation_test.test_deny_unknown_pipeline: PASS (1.103056ms)
+10:18:44  
+10:18:44  cdo/pipelines/deprecated_steps/deprecated_steps_test.rego:16:
+10:18:44  data.cdo.pipelines.deprecated_steps_test.test_fail_single_deprecated_step: PASS (1.575733ms)
+10:18:44  
+10:18:44  cdo/pipelines/seed_validation/seed_validation_test.rego:37:
+10:18:44  data.cdo.pipelines.seed_validation_test.test_allow_top_level_pipeline: PASS (3.423961ms)
+10:18:44  cdo/pipelines/seed_validation/seed_validation_test.rego:53:
+10:18:44  data.cdo.pipelines.seed_validation_test.test_allow_subfolder_pipeline: PASS (1.762187ms)
+10:18:44  cdo/pipelines/seed_validation/seed_validation_test.rego:101:
+10:18:44  data.cdo.pipelines.seed_validation_test.test_deny_jenkinsfile_mismatch: PASS (1.793722ms)
+10:18:44  cdo/pipelines/seed_validation/seed_validation_test.rego:117:
+10:18:44  data.cdo.pipelines.seed_validation_test.test_deny_wrong_folder: PASS (1.019081ms)
+10:18:44  cdo/pipelines/seed_validation/seed_validation_test.rego:85:
+10:18:44  data.cdo.pipelines.seed_validation_test.test_deny_repo_mismatch: PASS (23.888955ms)
+10:18:44  --------------------------------------------------------------------------------
+10:18:44  FAILURES
+10:18:44  --------------------------------------------------------------------------------
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_deny_resource_has_required_tags: FAIL (16.359942ms)
+10:18:44  
+10:18:44    query:1                                                                Enter data.cdo.terraform.required_default_tagging_test.test_deny_resource_has_required_tags = _  
+10:18:44    cdo/...red_default_tagging/required_default_tagging_test.rego:6        | Enter data.cdo.terraform.required_default_tagging_test.test_deny_resource_has_required_tags  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:103           | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:105           | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local939__]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:105           | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local939__]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:166           | | | Enter data.cdo.terraform.required_default_tagging.collect_missing_tags  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:167           | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:240           | | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:241           | | | | | | Fail resource.change.after_unknown.tags  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:244           | | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:245           | | | | | | Fail resource.change.after_unknown.tags_all  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:167           | | | | | Fail data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:170           | | | | Enter tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local477__]; not resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | Enter resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | | Fail resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:170           | | | | Redo tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local477__]; not resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | Enter resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | | Fail resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:170           | | | | Redo tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local477__]; not resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | Enter resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | | Fail resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:170           | | | | Redo tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local477__]; not resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:171           | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:124           | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:126           | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local941__]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:126           | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local941__]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:176           | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_tags  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:189           | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_static_tags  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:191           | | | | | Enter __local945__ = data.cdo.terraform.required_default_tagging.required_tags; object.keys(__local945__, __local714__); tag = __local714__[__local488__]; value = resource_tags[tag]; neq(value, null); neq(value, ""); __local946__ = data.cdo.terraform.required_default_tagging.required_tags[tag]; not internal.member_2(value, __local946__); sprintf("%s=%s", [tag, value], __local713__)  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:192           | | | | | | Fail value = resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:192           | | | | | | Fail value = resource_tags[tag]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:199           | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_project  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:203           | | | | | Fail __local947__ = data.cdo.terraform.required_default_tagging.dynamic_projects  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:208           | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_environment  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:212           | | | | | Fail __local948__ = data.cdo.terraform.required_default_tagging.dynamic_environments  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:133           | | | Fail gt(__local699__, 0)  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:142           | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:144           | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local943__]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:144           | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local943__]  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:150           | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:240           | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:241           | | | | | Fail resource.change.after_unknown.tags  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:244           | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:245           | | | | | Fail resource.change.after_unknown.tags_all  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:150           | | | | Fail data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:154           | | | Enter tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local470__]; resource_tags[tag] = ""  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:155           | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:155           | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:155           | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:155           | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:155           | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:155           | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:155           | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...red_default_tagging/required_default_tagging.rego:157           | | | Fail gt(__local704__, 0)  
+10:18:44    cdo/...red_default_tagging/required_default_tagging_test.rego:40       | | Fail __local717__ = 2  
+10:18:44    query:1                                                                | Fail data.cdo.terraform.required_default_tagging_test.test_deny_resource_has_required_tags = _  
+10:18:44  
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_dwb: FAIL (3.77939ms)
+10:18:44  
+10:18:44    query:1                                                                Enter data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_dwb = _  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging_test.rego:184       | Enter data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_dwb  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:103            | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:105            | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local939__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:105            | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local939__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:166            | | | Enter data.cdo.terraform.required_default_tagging.collect_missing_tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:167            | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:240            | | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:241            | | | | | | Fail resource.change.after_unknown.tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:244            | | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:245            | | | | | | Fail resource.change.after_unknown.tags_all  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:167            | | | | | Fail data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:170            | | | | Enter tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local477__]; not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:115            | | | Fail gt(__local696__, 0)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:124            | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:126            | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local941__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:126            | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local941__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:176            | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:189            | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_static_tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:191            | | | | | Enter __local945__ = data.cdo.terraform.required_default_tagging.required_tags; object.keys(__local945__, __local714__); tag = __local714__[__local488__]; value = resource_tags[tag]; neq(value, null); neq(value, ""); __local946__ = data.cdo.terraform.required_default_tagging.required_tags[tag]; not internal.member_2(value, __local946__); sprintf("%s=%s", [tag, value], __local713__)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:195            | | | | | | Fail not internal.member_2(value, __local946__)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:195            | | | | | | Fail not internal.member_2(value, __local946__)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:199            | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_project  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:203            | | | | | Fail __local947__ = data.cdo.terraform.required_default_tagging.dynamic_projects  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:208            | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_environment  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:212            | | | | | Fail __local948__ = data.cdo.terraform.required_default_tagging.dynamic_environments  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:133            | | | Fail gt(__local699__, 0)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:142            | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:144            | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local943__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:144            | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local943__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:150            | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:240            | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:241            | | | | | Fail resource.change.after_unknown.tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:244            | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:245            | | | | | Fail resource.change.after_unknown.tags_all  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:150            | | | | Fail data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:154            | | | Enter tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local470__]; resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:157            | | | Fail gt(__local704__, 0)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging_test.rego:214       | | Fail __local722__ = 1  
+10:18:44    query:1                                                                | Fail data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_dwb = _  
+10:18:44  
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_sie: FAIL (3.153357ms)
+10:18:44  
+10:18:44    query:1                                                                Enter data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_sie = _  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging_test.rego:218       | Enter data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_sie  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:103            | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:105            | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local939__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:105            | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local939__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:166            | | | Enter data.cdo.terraform.required_default_tagging.collect_missing_tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:167            | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:240            | | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:241            | | | | | | Fail resource.change.after_unknown.tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:244            | | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:245            | | | | | | Fail resource.change.after_unknown.tags_all  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:167            | | | | | Fail data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:170            | | | | Enter tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local477__]; not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:115            | | | Fail gt(__local696__, 0)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:124            | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:126            | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local941__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:126            | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local941__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:176            | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:189            | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_static_tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:191            | | | | | Enter __local945__ = data.cdo.terraform.required_default_tagging.required_tags; object.keys(__local945__, __local714__); tag = __local714__[__local488__]; value = resource_tags[tag]; neq(value, null); neq(value, ""); __local946__ = data.cdo.terraform.required_default_tagging.required_tags[tag]; not internal.member_2(value, __local946__); sprintf("%s=%s", [tag, value], __local713__)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:195            | | | | | | Fail not internal.member_2(value, __local946__)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:195            | | | | | | Fail not internal.member_2(value, __local946__)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:199            | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_project  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:203            | | | | | Fail __local947__ = data.cdo.terraform.required_default_tagging.dynamic_projects  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:208            | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_environment  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:212            | | | | | Fail __local948__ = data.cdo.terraform.required_default_tagging.dynamic_environments  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:133            | | | Fail gt(__local699__, 0)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:142            | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:144            | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local943__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:144            | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local943__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:150            | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:240            | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:241            | | | | | Fail resource.change.after_unknown.tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:244            | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:245            | | | | | Fail resource.change.after_unknown.tags_all  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:150            | | | | Fail data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:154            | | | Enter tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local470__]; resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:157            | | | Fail gt(__local704__, 0)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging_test.rego:247       | | Fail __local723__ = 1  
+10:18:44    query:1                                                                | Fail data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_sie = _  
+10:18:44  
+10:18:44  data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_gis: FAIL (4.310777ms)
+10:18:44  
+10:18:44    query:1                                                                Enter data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_gis = _  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging_test.rego:251       | Enter data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_gis  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:103            | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:105            | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local939__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:105            | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local939__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:166            | | | Enter data.cdo.terraform.required_default_tagging.collect_missing_tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:167            | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:240            | | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:241            | | | | | | Fail resource.change.after_unknown.tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:244            | | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:245            | | | | | | Fail resource.change.after_unknown.tags_all  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:167            | | | | | Fail data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:170            | | | | Enter tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local477__]; not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:171            | | | | | Fail not resource_tags[tag]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:115            | | | Fail gt(__local696__, 0)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:124            | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:126            | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local941__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:126            | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local941__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:176            | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:189            | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_static_tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:191            | | | | | Enter __local945__ = data.cdo.terraform.required_default_tagging.required_tags; object.keys(__local945__, __local714__); tag = __local714__[__local488__]; value = resource_tags[tag]; neq(value, null); neq(value, ""); __local946__ = data.cdo.terraform.required_default_tagging.required_tags[tag]; not internal.member_2(value, __local946__); sprintf("%s=%s", [tag, value], __local713__)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:195            | | | | | | Fail not internal.member_2(value, __local946__)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:195            | | | | | | Fail not internal.member_2(value, __local946__)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:199            | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_project  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:203            | | | | | Fail __local947__ = data.cdo.terraform.required_default_tagging.dynamic_projects  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:208            | | | | Enter data.cdo.terraform.required_default_tagging.collect_invalid_environment  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:212            | | | | | Fail __local948__ = data.cdo.terraform.required_default_tagging.dynamic_environments  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:133            | | | Fail gt(__local699__, 0)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:142            | | Enter data.cdo.terraform.required_default_tagging.deny  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:144            | | | Enter data.cdo.terraform.required_default_tagging.ignored_resource_types[__local943__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:144            | | | | Fail data.cdo.terraform.required_default_tagging.ignored_resource_types[__local943__]  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:150            | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:240            | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:241            | | | | | Fail resource.change.after_unknown.tags  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:244            | | | | Enter data.cdo.terraform.required_default_tagging.tags_are_unknown  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:245            | | | | | Fail resource.change.after_unknown.tags_all  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:150            | | | | Fail data.cdo.terraform.required_default_tagging.tags_are_unknown(resource)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:154            | | | Enter tag = data.cdo.terraform.required_default_tagging.all_required_tag_keys[__local470__]; resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:155            | | | | Fail resource_tags[tag] = ""  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging.rego:157            | | | Fail gt(__local704__, 0)  
+10:18:44    cdo/...ed_default_tagging/required_default_tagging_test.rego:280       | | Fail __local724__ = 1  
+10:18:44    query:1                                                                | Fail data.cdo.terraform.required_default_tagging_test.test_deny_account_number_as_environment_for_gis = _  
+10:18:44  
+10:18:44  --------------------------------------------------------------------------------
+10:18:44  PASS: 123/127
+10:18:44  FAIL: 4/127
