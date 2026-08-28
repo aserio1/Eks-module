@@ -68,30 +68,9 @@ ignored_resource_types := {
 	"time_static",
 }
 
-# allow AWS account IDs as Env values
-aws_account_id_pattern := `^\d{12}$`
-
 # Required tags and their allowed values
 required_tags := {
-	"Environment": [
-		"dev", "predev", "test", "qa", "stage", "prod",
-		"dev-data-pipelines", "qa-data-pipelines", "test-data-pipelines", 
-		"stage-data-pipelines", "prod-data-pipelines", "dev-viz-tools",
-		"qa-viz-tools", "test-viz-tools", "prod-viz-tools",
-		"dev-data-aquisition", "test-data-aquisition", "prod-data-aquisition",
-		"dev-imac-lza", "test-imac-lza", "prod-imac-lza",
-		"dev-gis-tools", "qa-gis-tools", "prod-gis-tools",
-		"dev-data-infrastructure", "test-data-infrastructure", "prod-data-infrastructure",
-		"dev-mle-dwb", "prod-mle-dwb",
-		"dev-dme-anomaly", "prod-dme-anomaly",
-		"dev-risk-models", "prod-risk-models",
-		"dev-ml-complaints", "prod-ml-complaints",
-		"dev-ml-critical", "prod-ml-critical",
-		"dev-ml-claim-gpt", "prod-ml-claim-gpt",
-		"dev-cloud-analytics", "test-cloud-analytics", "prod-cloud-analytics",
-	],
 	"BusinessUnit": ["cdo"],
-	"Project": ["cgap", "dwb", "mle", "sie", "gis", "imac", "ides", "oams", "arcgis"],
 	"FISMABoundary": ["dsgss", "dwb"],
 }
 
@@ -102,8 +81,13 @@ flexible_required_tags := {
 	"CreatedBy",
 }
 
+dynamic_required_tags := {
+	"Environment",
+	"Project",
+}
+
 # Union of all required tag keys (used for missing-tag detection)
-all_required_tag_keys := object.keys(required_tags) | flexible_required_tags
+all_required_tag_keys := object.keys(required_tags) | flexible_required_tags | dynamic_required_tags
 
 # Only check create/update actions
 valid_actions := {"create", "update"}
@@ -159,10 +143,12 @@ deny contains res if {
 	not tags_are_unknown(resource)
 
 	resource_tags := collect_resource_tags(resource)
+
 	empty_tags := [tag |
 		some tag in all_required_tag_keys
 		resource_tags[tag] == ""
 	]
+
 	count(empty_tags) > 0
 
 	res := sprintf("Resource '%s' has empty values for required tags: %v", [
@@ -174,7 +160,9 @@ deny contains res if {
 # Helper function to get missing required tags
 collect_missing_tags(resource) := missing if {
 	not tags_are_unknown(resource)
+
 	resource_tags := collect_resource_tags(resource)
+
 	missing := [tag |
 		some tag in all_required_tag_keys
 		not resource_tags[tag]
@@ -184,22 +172,48 @@ collect_missing_tags(resource) := missing if {
 # Helper function to get invalid tag values
 collect_invalid_tags(resource) := invalid if {
 	resource_tags := collect_resource_tags(resource)
-	invalid := [sprintf("%s=%s", [tag, value]) |
+
+	invalid_static := [sprintf("%s=%s", [tag, value]) |
 		some tag in object.keys(required_tags)
+
 		value := resource_tags[tag]
 		value != null
 		value != ""
-		not value in required_tags[tag]
-		not valid_account_environment(tag, value, resource_tags)
-	]
-}
 
-# Account IDs are only allowed for the Environment tag
-# when Project is "imac".
-valid_account_environment(tag, value, resource_tags) if {
-	tag == "Environment"
-	resource_tags["Project"] == "imac"
-	regex.match(aws_account_id_pattern, value)
+		not value in required_tags[tag]
+	]
+
+	invalid_project := [sprintf("Project=%s", [project]) |
+		project := resource_tags["Project"]
+
+		project != null
+		project != ""
+
+		not project in data.tagging.projects
+	]
+
+	invalid_environment := [sprintf("Environment=%s", [environment]) |
+		project := resource_tags["Project"]
+		environment := resource_tags["Environment"]
+
+		project != null
+		project != ""
+
+		environment != null
+		environment != ""
+
+		project_environments := data.tagging.environments[project]
+
+		not environment in project_environments
+	]
+
+	invalid := array.concat(
+		array.concat(
+			invalid_static,
+			invalid_project,
+		),
+		invalid_environment,
+	)
 }
 
 # Helper function to extract tags from resource
@@ -223,14 +237,3 @@ tags_are_unknown(resource) if {
 tags_are_unknown(resource) if {
 	resource.change.after_unknown.tags_all
 }
-
-##########################CODE
-Currently we hardcode the project specific environments as allowed envs as well as the projects.
-
-Instead we should load them up from imac-config.
-
-Pre-fetch from DynamoDB → Pass as Data to opa
-
-Acceptance:
-
-environments and projects dynamically loaded into OPA
