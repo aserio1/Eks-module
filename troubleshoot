@@ -1,3 +1,7 @@
-The OPA required tagging policy was updated to remove the hardcoded Project and Environment values and instead validate them using dynamically supplied OPA data through data.tagging.projects and data.tagging.environments[project].
+here are the questions i got how is  data Generate data dynamically, data tagging project has to come from somewhere, collect settings from repository and give OPA to consume and validates. where is this code dynamically doing it. because right now it is using a test or mock data. show in this code where it will dynamically take data from imac-config and populate. where is the dynamic
+and this 
+Heads up, I think this might break the IMAC account-ID case. The old valid_account_environment rule let IMAC use a 12-digit account ID as Environment, but now it only passes if the value's already in data.tagging.environments[project]. Since account IDs aren't really a fixed list, any IMAC resource with an ID that isn't pre-listed would get denied.
 
-The test file was also updated with mock_tagging data so the existing unit tests can simulate the project and environment information that will come from imac-config/DynamoDB in the actual pipeline. This change meets the Jira requirement to manage project-specific environments centrally in imac-config rather than maintaining those values directly in the OPA policy.
+The test passes, but only because the mock data hardcodes that exact ID (966555604991)
+
+Could we either (a) bring back the regex.match fallback for IMAC, or (b) confirm the prod data always has every valid IMAC account ID? Also minor: looks like invalid_environment skips bad environments when the project is invalid intended?
