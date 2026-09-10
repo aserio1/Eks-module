@@ -1,7 +1,59 @@
-here are the questions i got how is  data Generate data dynamically, data tagging project has to come from somewhere, collect settings from repository and give OPA to consume and validates. where is this code dynamically doing it. because right now it is using a test or mock data. show in this code where it will dynamically take data from imac-config and populate. where is the dynamic
-and this 
-Heads up, I think this might break the IMAC account-ID case. The old valid_account_environment rule let IMAC use a 12-digit account ID as Environment, but now it only passes if the value's already in data.tagging.environments[project]. Since account IDs aren't really a fixed list, any IMAC resource with an ID that isn't pre-listed would get denied.
+aws dynamodb get-item --table-name ImacConfigTable --key '{"Name": {"S":"IMAC_CONFIG"}}' --region us-east-1 &> out.txt
 
-The test passes, but only because the mock data hardcodes that exact ID (966555604991)
 
-Could we either (a) bring back the regex.match fallback for IMAC, or (b) confirm the prod data always has every valid IMAC account ID? Also minor: looks like invalid_environment skips bad environments when the project is invalid intended?
+
+@AfterStep({ hookContext.step.equals("plan_infrastructure")})
+void call(){
+    String policyCheckScript = resource("infra_policy_check.sh")
+
+    node(jte.keywords.project) {
+
+        ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
+            stage("Governance: Infra Policy check") {
+                dir("infrastructure/terraform") {
+                    def enforceDate = '2026-05-01'
+                    // We use Unix epoch timestamps (numbers of seconds since January 1, 1970) to perform our date comparisons in Groovy.
+                    def currentDateEpoch = sh(returnStdout: true, script: 'date +%s', label: '[Get Current Timestamp]').trim().toLong()
+                    def enforceDateEpoch = sh(returnStdout: true, script: "date -d '${enforceDate}' +%s", label: '[Get Enforcement Timestamp]').trim().toLong()
+
+                    // Grab current environment from plan step output
+                    def aws_profile = ""
+                    if (fileExists('.aws_profile.txt')) {
+                        aws_profile = readFile(file: '.aws_profile.txt').trim()
+                    } else {
+                        error("The .aws_profile.txt file was not found! Cannot proceed with infrastructure policy check.")
+                    }
+
+                    println "WARNING: Terraform Plan policy checks enforcement begins ${enforceDate}!"
+                    def policyCheckScriptStatus = withEnv([
+                        "AWS_PROFILE=${aws_profile}"
+                    ]) {
+                        sh(
+                            label: '[Execute Infrastructure Policy Check] - ${aws_profile}.tfplan',
+                            script: policyCheckScript, 
+                            returnStatus: true
+                        )
+                    }
+                    if (policyCheckScriptStatus == 1) {
+                        if (currentDateEpoch >= enforceDateEpoch) {
+                            // fail the pipeline
+                            error "Pipeline fails due to Terraform Plan policy checks enforcement date being reached."
+                        } else {
+                            // fail only the stage
+                            println "Starting ${enforceDate}, these checks will cause pipeline failures."
+                            catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                                sh(
+                                    label: '[Fail Stage (Pre-Enforcement Warning)]',
+                                    script: "exit $policyCheckScriptStatus"
+                                )
+                            }
+                        }
+                    } else if (policyCheckScriptStatus != 0) {
+                        // Check exit status anything else than exit code 1
+                        error "Script failed with exit code: $policyCheckScriptStatus."
+                    }
+                }
+            }
+        }
+    }
+}
