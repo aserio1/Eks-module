@@ -1,6 +1,7 @@
 #!/bin/bash
 
 REPO_URL="https://git.aws.hhsoig.gov/CDO/imac-policies.git"
+REPO_BRANCH="feature-IMAC-1241"
 POLICIES_ROOT_DIR="opa"
 POLICIES_DIR="policies"
 POLICIES_BUNDLE="${POLICIES_ROOT_DIR}/${POLICIES_DIR}"
@@ -13,6 +14,7 @@ echo "[GOVERNANCE] Starting OPA policy evaluation..."
 echo "[GOVERNANCE] Policies Bundle: $POLICIES_BUNDLE"
 echo "[GOVERNANCE] Input File: $INPUT_FILE"
 echo "[GOVERNANCE] Decision Path: $DECISION"
+echo "[GOVERNANCE] Policies Branch: $REPO_BRANCH"
 
 
 # Convert the Terraform plan to JSON so that OPA can read the plan
@@ -25,19 +27,34 @@ fi
 
 # Download the imac-policies/policies/cdo/terraform
 if [[ ! -d "${POLICIES_ROOT_DIR}" ]]; then
-    git clone --depth 1 --no-checkout ${REPO_URL} ${POLICIES_ROOT_DIR}
-    cd ${POLICIES_ROOT_DIR}
+    git clone \
+        --depth 1 \
+        --branch "${REPO_BRANCH}" \
+        --no-checkout \
+        "${REPO_URL}" \
+        "${POLICIES_ROOT_DIR}"
+
+    cd "${POLICIES_ROOT_DIR}"
+
     # Initialize in cone mode before setting sparse-checkout path
     git sparse-checkout init --cone
+
     # Checkout only the required policies
     git sparse-checkout set "${POLICIES_DIR}/${DECISION}" && git checkout
+
     # Remove the _test.rego files, otherwise opa exec will run the tests as well
-    find . -name *_test.rego | xargs rm -f
+    find . -name '*_test.rego' | xargs rm -f
+
     cd ..
 fi
 
 # Execute the OPA policy on the Terraform plan
-opa exec --decision ${DECISION} --bundle ${POLICIES_BUNDLE} ${INPUT_FILE} --format json --fail-non-empty
+opa exec \
+    --decision "${DECISION}" \
+    --bundle "${POLICIES_BUNDLE}" \
+    "${INPUT_FILE}" \
+    --format json \
+    --fail-non-empty
 
 # Check the exist status of the 'opa' command
 if [ $? -eq 0 ]; then
@@ -48,8 +65,3 @@ else
 fi
 
 echo "[GOVERNANCE] OPA policy evaluation complete."
-
-
-
-#### here
-feature-IMAC-1241
