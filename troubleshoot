@@ -1,2 +1,3 @@
-"err":"exec error: there were 1 failures and 0 errors counted in the results list, and --fail-non-empty is set","level":"error","msg":"Unexpected error.","time":"2026-09-11T13:19:55Z"}
-08:19:55  [GOVERNANCE] OPA policy check FAILED: cdo/terraform/required_default_tagging/deny
+So at this point, the failure is actually confirming the reviewer's concern: the Rego side is ready to consume dynamic data, but infra_policy_check.sh still needs the code that gets the real data from imac-config/DynamoDB and passes it to OPA.
+
+If you show me how imac-config stores the project/environment values in DynamoDB—the table name plus an example item/output from aws dynamodb scan or query—I can update your infra_policy_check.sh with the exact dynamic fetch rather than guessing the DynamoDB structure.
