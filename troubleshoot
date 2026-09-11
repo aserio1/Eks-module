@@ -1,238 +1,344 @@
-[GOVERNANCE] Starting OPA policy evaluation...
-14:20:48  [GOVERNANCE] infra_policy_check.sh version: IMAC-1241-data-json-v3
-14:20:48  [GOVERNANCE] Policies Bundle: opa/policies
-14:20:48  [GOVERNANCE] Input File: dev-tfplan.json
-14:20:48  [GOVERNANCE] Decision Path: cdo/terraform/required_default_tagging/deny
-14:20:48  [GOVERNANCE] Policies Branch: feature-IMAC-1241
-14:20:55  Cloning into 'opa'...
-14:20:56  Your branch is up to date with 'origin/feature-IMAC-1241'.
-14:20:56  [GOVERNANCE] Loading tagging configuration from dev-ImacConfigTable...
-14:20:57  [GOVERNANCE] IMAC_CONFIG retrieved successfully.
-14:20:57  [GOVERNANCE] OPA tagging data generated successfully.
-14:20:58  [GOVERNANCE] Projects loaded: 12
-14:20:58  [GOVERNANCE] Project environment mappings loaded: 12
-14:20:58  [GOVERNANCE] Generated OPA tagging data:
-14:20:58  {
-14:20:58    "projects": [
-14:20:58      "cgap",
-14:20:58      "data_workbench",
-14:20:58      "gis",
-14:20:58      "ides",
-14:20:58      "imac",
-14:20:58      "ml-engineering",
-14:20:58      "oams",
-14:20:58      "salt",
-14:20:58      "sia",
-14:20:58      "sie",
-14:20:58      "swift-insights-explorer",
-14:20:58      "utility"
-14:20:58    ],
-14:20:58    "environments": {
-14:20:58      "oams": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "data_workbench": [
-14:20:58        "assume_role_principals",
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "utility": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "salt": [
-14:20:58        "assume_role_principals",
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "imac": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "sie": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "swift-insights-explorer": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "ml-engineering": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "sia": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "ides": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "cgap": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ],
-14:20:58      "gis": [
-14:20:58        "cloud9_instance_profile",
-14:20:58        "description",
-14:20:58        "environments",
-14:20:58        "name",
-14:20:58        "owner"
-14:20:58      ]
-14:20:58    }
-14:20:58  }
-14:20:58  [GOVERNANCE] Verifying what OPA sees as data.tagging...
-14:20:58  [GOVERNANCE] OPA tagging data loaded successfully.
-14:20:58  [GOVERNANCE] Verifying data.tagging.projects...
-14:20:58  [
-14:20:58    "cgap",
-14:20:58    "data_workbench",
-14:20:58    "gis",
-14:20:58    "ides",
-14:20:58    "imac",
-14:20:58    "ml-engineering",
-14:20:58    "oams",
-14:20:58    "salt",
-14:20:58    "sia",
-14:20:58    "sie",
-14:20:58    "swift-insights-explorer",
-14:20:58    "utility"
-14:20:58  ]
-14:20:58  [GOVERNANCE] Verifying data.tagging.environments...
-14:20:58  {
-14:20:58    "cgap": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "data_workbench": [
-14:20:58      "assume_role_principals",
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "gis": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "ides": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "imac": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "ml-engineering": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "oams": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "salt": [
-14:20:58      "assume_role_principals",
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "sia": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "sie": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "swift-insights-explorer": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ],
-14:20:58    "utility": [
-14:20:58      "cloud9_instance_profile",
-14:20:58      "description",
-14:20:58      "environments",
-14:20:58      "name",
-14:20:58      "owner"
-14:20:58    ]
-14:20:58  }
-14:20:58  [GOVERNANCE] Executing OPA policy...
-14:20:58  {
-14:20:58    "result": [
-14:20:58      {
-14:20:58        "decision_id": "5cb1b3fb-8279-42bb-a64f-b726ca19bdc6",
-14:20:58        "path": "dev-tfplan.json",
-14:20:58        "result": [
-14:20:58          "Resource 'aws_s3_bucket.jenkins_binaries' has invalid tag values: [\"Environment=dev\"]"
-14:20:58        ]
-14:20:58      }
-14:20:58    ]
-14:20:58  }
-14:20:58  {"err":"exec error: there were 1 failures and 0 errors counted in the results list, and --fail-non-empty is set","level":"error","msg":"Unexpected error.","time":"2026-09-11T19:20:58Z"}
-14:20:58  [GOVERNANCE] OPA policy check FAILED: cdo/terraform/required_default_tagging/deny
+#!/bin/bash
+
+REPO_URL="https://git.aws.hhsoig.gov/CDO/imac-policies.git"
+REPO_BRANCH="feature-IMAC-1241"
+
+POLICIES_ROOT_DIR="opa"
+POLICIES_DIR="policies"
+POLICIES_BUNDLE="${POLICIES_ROOT_DIR}/${POLICIES_DIR}"
+
+DECISION="cdo/terraform/required_default_tagging/deny"
+
+TF_PLAN_FILE="${AWS_PROFILE}.tfplan" # generated by plan_infrastructure()
+INPUT_FILE="${AWS_PROFILE}-tfplan.json"
+
+IMAC_CONFIG_TABLE="dev-ImacConfigTable"
+IMAC_CONFIG_KEY="IMAC_CONFIG"
+IMAC_CONFIG_REGION="us-east-1"
+
+
+echo "[GOVERNANCE] Starting OPA policy evaluation..."
+echo "[GOVERNANCE] infra_policy_check.sh version: IMAC-1241-data-json-v4"
+echo "[GOVERNANCE] Policies Bundle: $POLICIES_BUNDLE"
+echo "[GOVERNANCE] Input File: $INPUT_FILE"
+echo "[GOVERNANCE] Decision Path: $DECISION"
+echo "[GOVERNANCE] Policies Branch: $REPO_BRANCH"
+
+
+###############################################################################
+# Convert the Terraform plan to JSON so that OPA can read the plan
+###############################################################################
+
+if [[ -f "${TF_PLAN_FILE}" ]]; then
+    terraform show -json "${TF_PLAN_FILE}" > "${INPUT_FILE}"
+else
+    echo "WARNING: No ${TF_PLAN_FILE} found. Skipping policy check..."
+    exit 0
+fi
+
+
+###############################################################################
+# Download the imac-policies/policies/cdo/terraform
+###############################################################################
+
+if [[ ! -d "${POLICIES_ROOT_DIR}" ]]; then
+    git clone \
+        --depth 1 \
+        --branch "${REPO_BRANCH}" \
+        --no-checkout \
+        "${REPO_URL}" \
+        "${POLICIES_ROOT_DIR}"
+
+    cd "${POLICIES_ROOT_DIR}"
+
+    # Initialize in cone mode before setting sparse-checkout path
+    git sparse-checkout init --cone
+
+    # Checkout only the required policies
+    git sparse-checkout set "${POLICIES_DIR}/${DECISION}" && git checkout
+
+    # Remove the _test.rego files, otherwise opa exec will run the tests as well
+    find . -name '*_test.rego' | xargs rm -f
+
+    cd ..
+fi
+
+
+###############################################################################
+# Load dynamic Project and Environment configuration from imac-config
+###############################################################################
+
+echo "[GOVERNANCE] Loading tagging configuration from ${IMAC_CONFIG_TABLE}..."
+
+CONFIG_JSON=$(aws dynamodb get-item \
+    --table-name "${IMAC_CONFIG_TABLE}" \
+    --key "{\"Name\":{\"S\":\"${IMAC_CONFIG_KEY}\"}}" \
+    --region "${IMAC_CONFIG_REGION}" \
+    --query 'Item.CONFIG_JSON.S' \
+    --output text)
+
+
+if [[ -z "${CONFIG_JSON}" || "${CONFIG_JSON}" == "None" ]]; then
+    echo "[GOVERNANCE] ERROR: IMAC_CONFIG was not returned from DynamoDB."
+    exit 1
+fi
+
+
+###############################################################################
+# CONFIG_JSON is stored as an escaped JSON string in DynamoDB.
+#
+# This performs the same cleanup as the existing Groovy code:
+#
+# configStr = configStr.replaceAll("\\\\\\\"","\\\"")
+# configStr = configStr[1..-2]
+###############################################################################
+
+CONFIG_JSON=$(printf '%s' "${CONFIG_JSON}" | sed 's/\\"/"/g')
+
+# Remove surrounding quotes if the value still contains them
+CONFIG_JSON="${CONFIG_JSON#\"}"
+CONFIG_JSON="${CONFIG_JSON%\"}"
+
+
+###############################################################################
+# Verify that the retrieved configuration is valid JSON
+###############################################################################
+
+if ! printf '%s' "${CONFIG_JSON}" | jq empty >/dev/null 2>&1; then
+    echo "[GOVERNANCE] ERROR: CONFIG_JSON returned from DynamoDB is not valid JSON."
+    exit 1
+fi
+
+echo "[GOVERNANCE] IMAC_CONFIG retrieved successfully."
+
+
+###############################################################################
+# Generate OPA data
+#
+# DynamoDB/imac-config structure:
+#
+# projects:
+#   project-name:
+#     name: ...
+#     owner: ...
+#     description: ...
+#     environments:
+#       dev:
+#         account: ...
+#         name: dev
+#       qa:
+#         account: ...
+#         name: qa
+#       prod:
+#         account: ...
+#         name: prod
+#
+# OPA structure:
+#
+# data.tagging.projects
+# data.tagging.environments
+#
+# Example:
+#
+# projects.imac.environments:
+#   dev: {...}
+#   test: {...}
+#   prod: {...}
+#
+# becomes:
+#
+# data.tagging.environments.imac:
+#   ["dev", "test", "prod"]
+###############################################################################
+
+TAGGING_DATA_FILE="${POLICIES_BUNDLE}/data.json"
+
+
+printf '%s' "${CONFIG_JSON}" | jq '
+{
+    tagging: {
+        projects: (
+            .projects
+            | keys
+        ),
+
+        environments: (
+            .projects
+            | with_entries(
+                .value = (.value.environments | keys)
+            )
+        )
+    }
+}
+' > "${TAGGING_DATA_FILE}"
+
+
+###############################################################################
+# Ensure tagging data was generated successfully
+###############################################################################
+
+if [[ ! -s "${TAGGING_DATA_FILE}" ]]; then
+    echo "[GOVERNANCE] ERROR: Failed to generate OPA tagging data."
+    exit 1
+fi
+
+echo "[GOVERNANCE] OPA tagging data generated successfully."
+
+
+###############################################################################
+# Validate required OPA tagging structure
+###############################################################################
+
+PROJECT_COUNT=$(jq '.tagging.projects | length' "${TAGGING_DATA_FILE}")
+ENVIRONMENT_COUNT=$(jq '.tagging.environments | length' "${TAGGING_DATA_FILE}")
+
+
+if [[ "${PROJECT_COUNT}" -eq 0 ]]; then
+    echo "[GOVERNANCE] ERROR: No projects were loaded from imac-config."
+    exit 1
+fi
+
+
+if [[ "${ENVIRONMENT_COUNT}" -eq 0 ]]; then
+    echo "[GOVERNANCE] ERROR: No environments were loaded from imac-config."
+    exit 1
+fi
+
+
+echo "[GOVERNANCE] Projects loaded: ${PROJECT_COUNT}"
+echo "[GOVERNANCE] Project environment mappings loaded: ${ENVIRONMENT_COUNT}"
+
+
+###############################################################################
+# Validate that every project has an environments object
+###############################################################################
+
+INVALID_ENVIRONMENT_PROJECTS=$(printf '%s' "${CONFIG_JSON}" | jq -r '
+    .projects
+    | to_entries[]
+    | select(
+        (.value.environments == null)
+        or
+        (.value.environments | type != "object")
+    )
+    | .key
+')
+
+
+if [[ -n "${INVALID_ENVIRONMENT_PROJECTS}" ]]; then
+    echo "[GOVERNANCE] ERROR: The following projects do not contain a valid environments object:"
+    echo "${INVALID_ENVIRONMENT_PROJECTS}"
+    exit 1
+fi
+
+
+###############################################################################
+# Show generated OPA tagging data
+###############################################################################
+
+echo "[GOVERNANCE] Generated OPA tagging data:"
+
+jq '.tagging' "${TAGGING_DATA_FILE}"
+
+
+###############################################################################
+# Verify that OPA can load data.tagging from the bundle
+###############################################################################
+
+echo "[GOVERNANCE] Verifying what OPA sees as data.tagging..."
+
+OPA_TAGGING_DATA=$(opa eval \
+    --bundle "${POLICIES_BUNDLE}" \
+    --format json \
+    'data.tagging')
+
+
+OPA_EVAL_STATUS=$?
+
+
+if [[ ${OPA_EVAL_STATUS} -ne 0 ]]; then
+    echo "[GOVERNANCE] ERROR: OPA could not load data.tagging from the bundle."
+    exit 1
+fi
+
+
+OPA_TAGGING_VALUE=$(echo "${OPA_TAGGING_DATA}" | jq -r '
+    .result[0].expressions[0].value // empty
+')
+
+
+if [[ -z "${OPA_TAGGING_VALUE}" ]]; then
+    echo "[GOVERNANCE] ERROR: data.tagging was not loaded by OPA."
+    exit 1
+fi
+
+
+echo "[GOVERNANCE] OPA tagging data loaded successfully."
+
+
+###############################################################################
+# Verify projects are available to OPA
+###############################################################################
+
+echo "[GOVERNANCE] Verifying data.tagging.projects..."
+
+opa eval \
+    --bundle "${POLICIES_BUNDLE}" \
+    --format pretty \
+    'data.tagging.projects'
+
+
+if [[ $? -ne 0 ]]; then
+    echo "[GOVERNANCE] ERROR: OPA could not load data.tagging.projects."
+    exit 1
+fi
+
+
+###############################################################################
+# Verify environments are available to OPA
+###############################################################################
+
+echo "[GOVERNANCE] Verifying data.tagging.environments..."
+
+opa eval \
+    --bundle "${POLICIES_BUNDLE}" \
+    --format pretty \
+    'data.tagging.environments'
+
+
+if [[ $? -ne 0 ]]; then
+    echo "[GOVERNANCE] ERROR: OPA could not load data.tagging.environments."
+    exit 1
+fi
+
+
+###############################################################################
+# Execute the OPA policy on the Terraform plan
+###############################################################################
+
+echo "[GOVERNANCE] Executing OPA policy..."
+
+opa exec \
+    --decision "${DECISION}" \
+    --bundle "${POLICIES_BUNDLE}" \
+    "${INPUT_FILE}" \
+    --format json \
+    --fail-non-empty
+
+
+OPA_STATUS=$?
+
+
+###############################################################################
+# Check the exit status of the OPA command
+###############################################################################
+
+if [[ ${OPA_STATUS} -eq 0 ]]; then
+    echo "[GOVERNANCE] OPA policy check PASSED: $DECISION"
+else
+    echo "[GOVERNANCE] OPA policy check FAILED: $DECISION"
+    exit 1
+fi
+
+
+echo "[GOVERNANCE] OPA policy evaluation complete."
