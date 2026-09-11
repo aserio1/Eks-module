@@ -1,18 +1,3 @@
-policies/cdo/terraform/required_default_tagging/required_default_tagging.rego
-
-let's ensure we have data.tagging populated in the rego itself - add the below to the rego and run your test again:
-
-deny contains msg if {
-    not data.tagging
-    msg := "tagging data was not provided to policy evaluation"
-}
-
-deny contains msg if {
-    count(data.tagging) == 0
-    msg := "tagging data is empty"
-}
-
-###################
 # METADATA
 # title: Check for missing AWS tags
 # description: Check for missing aws tags to AWS resources defined by Terraform region.
@@ -108,6 +93,16 @@ all_required_tag_keys := object.keys(required_tags) | flexible_required_tags | d
 
 # Only check create/update actions
 valid_actions := {"create", "update"}
+
+deny contains msg if {
+	not data.tagging
+	msg := "tagging data was not provided to policy evaluation"
+}
+
+deny contains msg if {
+	count(data.tagging) == 0
+	msg := "tagging data is empty"
+}
 
 # DENY: active, taggable, non-ignored resources with missing required tags.
 deny contains res if {
