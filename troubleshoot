@@ -1,3 +1,22 @@
-So at this point, the failure is actually confirming the reviewer's concern: the Rego side is ready to consume dynamic data, but infra_policy_check.sh still needs the code that gets the real data from imac-config/DynamoDB and passes it to OPA.
+def call() {
+  node(jte.keywords.project) {
+    def isScannerAgent = env.NODE_NAME?.contains('sia') ?: false
 
-If you show me how imac-config stores the project/environment values in DynamoDB—the table name plus an example item/output from aws dynamodb scan or query—I can update your infra_policy_check.sh with the exact dynamic fetch rather than guessing the DynamoDB structure.
+    def envVars = isScannerAgent ? [] : ["AWS_PROFILE=dev"]
+
+    withEnv(envVars) {
+      def command = "aws dynamodb get-item --table-name dev-ImacConfigTable --key '{\"Name\": {\"S\":\"IMAC_CONFIG\"}}' --region us-east-1 || true"
+      
+      def output = sh(returnStdout: true, script: "#!/bin/sh -e\n" + command)
+      
+      def dbItem = readJSON(text: output)
+
+      def configStr =  dbItem["Item"]["CONFIG_JSON"]["S"]
+
+      configStr = configStr.replaceAll("\\\\\\\"","\\\"")
+      configStr = configStr[1..-2]
+      
+      return readJSON(text: configStr)
+    }
+  }
+}
