@@ -1,3 +1,4 @@
+############ INFRA 
 #!/bin/bash
 
 REPO_URL="https://git.aws.hhsoig.gov/CDO/imac-policies.git"
@@ -63,7 +64,10 @@ fi
 
 echo "[GOVERNANCE] Loading tagging configuration from ${IMAC_CONFIG_TABLE}..."
 
-CONFIG_JSON=$(aws dynamodb get-item \
+# AWS_PROFILE is intentionally removed only for this command.
+# The Jenkins agent instance role is used to access the DynamoDB table.
+CONFIG_JSON=$(env -u AWS_PROFILE -u AWS_DEFAULT_PROFILE \
+    aws dynamodb get-item \
     --table-name "${IMAC_CONFIG_TABLE}" \
     --key "{\"Name\":{\"S\":\"${IMAC_CONFIG_KEY}\"}}" \
     --region "${IMAC_CONFIG_REGION}" \
@@ -169,401 +173,10 @@ fi
 
 
 echo "[GOVERNANCE] OPA policy evaluation complete."
-################ infra_policy_check.sh 
 
 
-################### required_default_tagging_test.rego
-package cdo.terraform.required_default_tagging_test
+#######################################################################  required_default_tagging.rego
 
-import data.cdo.terraform.required_default_tagging as check
-
-# Test missing and invalid tags
-test_deny_resource_has_required_tags if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "module.emr_serverless_runtime_role.aws_iam_policy.emr_serverless_execution_custom_policy",
-			"module_address": "module.emr_serverless_runtime_role",
-			"mode": "managed",
-			"type": "aws_iam_policy",
-			"name": "emr_serverless_execution_custom_policy",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "SageMaker Studio Base",
-						"CreatedBy": "terraform",
-						"Environment": "dev",
-						"Opt_in": "n",
-						"Owner": "Katie Rose",
-						"Project": "IMAC-IDES",
-						"ResponsibleGroup": "cdo",
-						"Service": "sagemaker-studio",
-						"Version": "1.0.0",
-					},
-				},
-			},
-		}],
-	}
-
-	# Missing: BusinessUnit, FISMABoundary, OwnerContact → 1 deny
-	# Invalid: Project="IMAC-IDES" → 1 deny
-	# Total: 2
-	count(res) == 2
-}
-
-# Test all required tags present but with invalid values
-test_deny_resource_has_required_tags_but_invalid_values if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "module.emr_serverless_runtime_role.aws_iam_policy.emr_serverless_execution_custom_policy",
-			"module_address": "module.emr_serverless_runtime_role",
-			"mode": "managed",
-			"type": "aws_iam_policy",
-			"name": "emr_serverless_execution_custom_policy",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "SageMaker Studio Base",
-						"CreatedBy": "terraform",
-						"Created": "date",
-						"Environment": "dev",
-						"BusinessUnit": "cdo",
-						"FISMABoundary": "dsgsb", # invalid — typo, should be "dsgss"
-						"Opt_in": "n",
-						"Owner": "Katie Rose",
-						"OwnerContact": "", # present but empty
-						"Project": "imac",
-						"ResponsibleGroup": "cdo",
-						"Service": "sagemaker-studio",
-						"Version": "1.0.0",
-					},
-				},
-			},
-		}],
-	}
-
-	# Invalid: FISMABoundary="dsgsb" → 1 deny
-	# Empty: OwnerContact="" → 1 deny
-	# Total: 2
-	count(res) == 2
-}
-
-# Test that ASG tagged only via "tag" blocks should PASS
-test_allow_asg_tags_from_tag_blocks if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_autoscaling_group.jenkins_agent_node",
-			"mode": "managed",
-			"type": "aws_autoscaling_group",
-			"name": "jenkins_agent_node",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {"tag": [
-					{"key": "Environment", "value": "prod"},
-					{"key": "BusinessUnit", "value": "cdo"},
-					{"key": "Project", "value": "imac"},
-					{"key": "FISMABoundary", "value": "dsgss"},
-					{"key": "ApplicationName", "value": "IMAC Jenkins"},
-					{"key": "OwnerContact", "value": "imac@oig.hhs.gov"},
-					{"key": "CreatedBy", "value": "terraform"},
-				]},
-			},
-		}],
-	}
-
-	count(res) == 0
-}
-
-# Test that unknown/computed tags do not trigger a deny
-test_unknown_tags_do_not_deny if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "module.iam.aws_iam_role.glue_service_role",
-			"module_address": "module.iam",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "glue_service_role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"name": "prod-oams-iris-glue-service-role",
-				},
-				"after_unknown": {
-					"arn": true,
-					"create_date": true,
-					"id": true,
-					"inline_policy": [{}],
-					"managed_policy_arns": true,
-					"name_prefix": true,
-					"tags": true,
-					"tags_all": true,
-					"unique_id": true,
-				},
-			},
-		}],
-	}
-
-	count(res) == 0
-}
-
-# Test that an AWS account number as Environment value is ALLOWED for IMAC
-test_allow_account_number_as_environment_for_imac if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "module.role.module.operator_role[0].aws_iam_role.role",
-			"module_address": "module.role.module.operator_role[0]",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "IMAC Jenkins",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "966555604991",
-						"FISMABoundary": "dsgss",
-						"OwnerContact": "imac@oig.hhs.gov",
-						"Project": "imac",
-					},
-				},
-			},
-		}],
-	}
-
-	# Project=imac + 12-digit Environment account ID is valid
-	count(res) == 0
-}
-
-# Test that an AWS account number as Environment value is DENIED for DWB
-test_deny_account_number_as_environment_for_dwb if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role.dwb_role",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "dwb_role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "DWB Application",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "213141505949",
-						"FISMABoundary": "dwb",
-						"OwnerContact": "dwb@oig.hhs.gov",
-						"Project": "dwb",
-					},
-				},
-			},
-		}],
-	}
-
-	# Environment is a 12-digit account ID, but Project is not "imac".
-	# This should trigger the invalid tag values deny rule.
-	count(res) == 1
-}
-
-# Test that an AWS account number as Environment value is DENIED for SIE
-test_deny_account_number_as_environment_for_sie if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role.sie_role",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "sie_role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "SIE Application",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "598956749955",
-						"FISMABoundary": "dsgss",
-						"OwnerContact": "sie@oig.hhs.gov",
-						"Project": "sie",
-					},
-				},
-			},
-		}],
-	}
-
-	# Project=sie cannot use an account ID as Environment
-	count(res) == 1
-}
-
-# Test that an AWS account number as Environment value is DENIED for GIS
-test_deny_account_number_as_environment_for_gis if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role.gis_role",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "gis_role",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "GIS Application",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "779846803742",
-						"FISMABoundary": "dsgss",
-						"OwnerContact": "gis@oig.hhs.gov",
-						"Project": "gis",
-					},
-				},
-			},
-		}],
-	}
-
-	# Project=gis cannot use an account ID as Environment
-	count(res) == 1
-}
-
-# Test that a normal Environment value is still allowed for non-IMAC projects
-test_allow_standard_environment_for_non_imac_project if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role.dwb_standard_environment",
-			"mode": "managed",
-			"type": "aws_iam_role",
-			"name": "dwb_standard_environment",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"tags": {},
-					"tags_all": {
-						"ApplicationName": "DWB Application",
-						"BusinessUnit": "cdo",
-						"CreatedBy": "terraform",
-						"Environment": "dev",
-						"FISMABoundary": "dwb",
-						"OwnerContact": "dwb@oig.hhs.gov",
-						"Project": "dwb",
-					},
-				},
-			},
-		}],
-	}
-
-	# Normal Environment values remain valid for other projects
-	count(res) == 0
-}
-
-# UPDATE END
-
-
-# Test that destroy actions are never denied
-test_destroy_action_not_denied if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_s3_bucket.no_tags",
-			"mode": "managed",
-			"type": "aws_s3_bucket",
-			"name": "no_tags",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["delete"],
-				"after": null,
-				"after_unknown": {},
-			},
-		}],
-	}
-
-	count(res) == 0
-}
-
-# Test that a resource with no tags/tags_all/tag fields (untaggable) is not denied
-test_untaggable_resource_not_denied if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role_policy.inline_policy",
-			"mode": "managed",
-			"type": "aws_iam_role_policy",
-			"name": "inline_policy",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {
-					"name": "my-inline-policy",
-					"policy": "{\"Version\":\"2012-10-17\"}",
-					"role": "my-role",
-				},
-				"after_unknown": {},
-			},
-		}],
-	}
-
-	# No tags/tags_all/tag fields present — collect_resource_tags returns {}
-	# so the resource should be treated as untaggable and not denied
-	count(res) == 0
-}
-
-# Test that ignored resource types are never denied
-test_ignored_resource_type_not_denied if {
-	res := check.deny with input as {
-		"format_version": "1.2",
-		"terraform_version": "1.13.0",
-		"resource_changes": [{
-			"address": "aws_iam_role_policy_attachment.no_tags",
-			"mode": "managed",
-			"type": "aws_iam_role_policy_attachment",
-			"name": "no_tags",
-			"provider_name": "registry.terraform.io/hashicorp/aws",
-			"change": {
-				"actions": ["create"],
-				"after": {},
-				"after_unknown": {},
-			},
-		}],
-	}
-
-	count(res) == 0
-}
-
-######################## required_default_tagging.rego
 # METADATA
 # title: Check for missing AWS tags
 # description: Check for missing aws tags to AWS resources defined by Terraform region.
@@ -581,6 +194,7 @@ test_ignored_resource_type_not_denied if {
 package cdo.terraform.required_default_tagging
 
 import rego.v1
+
 
 # Resources we want to ignore
 ignored_resource_types := {
@@ -634,32 +248,16 @@ ignored_resource_types := {
 	"time_static",
 }
 
-# allow AWS account IDs as Env values
+
 aws_account_id_pattern := `^\d{12}$`
+
 
 # Required tags and their allowed values
 required_tags := {
-	"Environment": [
-		"dev", "predev", "test", "qa", "stage", "prod",
-		"dev-data-pipelines", "qa-data-pipelines", "test-data-pipelines", 
-		"stage-data-pipelines", "prod-data-pipelines", "dev-viz-tools",
-		"qa-viz-tools", "test-viz-tools", "prod-viz-tools",
-		"dev-data-aquisition", "test-data-aquisition", "prod-data-aquisition",
-		"dev-imac-lza", "test-imac-lza", "prod-imac-lza",
-		"dev-gis-tools", "qa-gis-tools", "prod-gis-tools",
-		"dev-data-infrastructure", "test-data-infrastructure", "prod-data-infrastructure",
-		"dev-mle-dwb", "prod-mle-dwb",
-		"dev-dme-anomaly", "prod-dme-anomaly",
-		"dev-risk-models", "prod-risk-models",
-		"dev-ml-complaints", "prod-ml-complaints",
-		"dev-ml-critical", "prod-ml-critical",
-		"dev-ml-claim-gpt", "prod-ml-claim-gpt",
-		"dev-cloud-analytics", "test-cloud-analytics", "prod-cloud-analytics",
-	],
 	"BusinessUnit": ["cdo"],
-	"Project": ["cgap", "dwb", "mle", "sie", "gis", "imac", "ides", "oams", "arcgis"],
 	"FISMABoundary": ["dsgss", "dwb"],
 }
+
 
 # Tags that require values but are not restricted to specific values
 flexible_required_tags := {
@@ -668,173 +266,730 @@ flexible_required_tags := {
 	"CreatedBy",
 }
 
-# Union of all required tag keys (used for missing-tag detection)
-all_required_tag_keys := object.keys(required_tags) | flexible_required_tags
+
+# Tags whose values are dynamically loaded from imac-config
+dynamic_required_tags := {
+	"Environment",
+	"Project",
+}
+
+
+# Union of all required tag keys
+all_required_tag_keys := object.keys(required_tags) |
+	flexible_required_tags |
+	dynamic_required_tags
+
 
 # Only check create/update actions
-valid_actions := {"create", "update"}
+valid_actions := {
+	"create",
+	"update",
+}
 
-# DENY: active, taggable, non-ignored resources with missing required tags.
+
+###############################################################################
+# Dynamic tagging data validation
+###############################################################################
+
+deny contains msg if {
+	not data.tagging
+
+	msg := "tagging data was not provided to policy evaluation"
+}
+
+
+deny contains msg if {
+	count(data.tagging) == 0
+
+	msg := "tagging data is empty"
+}
+
+
+###############################################################################
+# Missing required tags
+###############################################################################
+
 deny contains res if {
 	some resource in input.resource_changes
+
 	not ignored_resource_types[resource.type]
 
 	some action in resource.change.actions
 	valid_actions[action]
 
-	# Only enforce on taggable resources — collect_resource_tags returns {} if none
 	count(collect_resource_tags(resource)) > 0
 
-	# Check for missing required tags
 	missing_tags := collect_missing_tags(resource)
+
 	count(missing_tags) > 0
 
-	res := sprintf("Resource %s is missing required tags: %v.", [
-		resource.address,
-		missing_tags,
-	])
+	res := sprintf(
+		"Resource %s is missing required tags: %v.",
+		[
+			resource.address,
+			missing_tags,
+		],
+	)
 }
 
-# DENY: resources with invalid tag values.
+
+###############################################################################
+# Invalid required tag values
+###############################################################################
+
 deny contains res if {
 	some resource in input.resource_changes
+
 	not ignored_resource_types[resource.type]
 
 	some action in resource.change.actions
 	valid_actions[action]
 
-	# Check for invalid tag values
 	invalid_tags := collect_invalid_tags(resource)
+
 	count(invalid_tags) > 0
 
-	res := sprintf("Resource '%s' has invalid tag values: %v", [
-		resource.address,
-		invalid_tags,
-	])
+	res := sprintf(
+		"Resource '%s' has invalid tag values: %v",
+		[
+			resource.address,
+			invalid_tags,
+		],
+	)
 }
 
-# DENY: required tags present but set to empty string.
+
+###############################################################################
+# Required tags with empty values
+###############################################################################
+
 deny contains res if {
 	some resource in input.resource_changes
+
 	not ignored_resource_types[resource.type]
 
 	some action in resource.change.actions
 	valid_actions[action]
 
 	count(collect_resource_tags(resource)) > 0
+
 	not tags_are_unknown(resource)
 
 	resource_tags := collect_resource_tags(resource)
+
 	empty_tags := [tag |
 		some tag in all_required_tag_keys
 		resource_tags[tag] == ""
 	]
+
 	count(empty_tags) > 0
 
-	res := sprintf("Resource '%s' has empty values for required tags: %v", [
-		resource.address,
-		empty_tags,
-	])
+	res := sprintf(
+		"Resource '%s' has empty values for required tags: %v",
+		[
+			resource.address,
+			empty_tags,
+		],
+	)
 }
 
-# Helper function to get missing required tags
+
+###############################################################################
+# Helper: collect missing required tags
+###############################################################################
+
 collect_missing_tags(resource) := missing if {
 	not tags_are_unknown(resource)
+
 	resource_tags := collect_resource_tags(resource)
+
 	missing := [tag |
 		some tag in all_required_tag_keys
 		not resource_tags[tag]
 	]
 }
 
-# Helper function to get invalid tag values
+
+###############################################################################
+# Helper: collect invalid tag values
+###############################################################################
+
 collect_invalid_tags(resource) := invalid if {
 	resource_tags := collect_resource_tags(resource)
-	invalid := [sprintf("%s=%s", [tag, value]) |
+
+	invalid_static := [sprintf("%s=%s", [tag, value]) |
 		some tag in object.keys(required_tags)
+
 		value := resource_tags[tag]
+
 		value != null
 		value != ""
+
 		not value in required_tags[tag]
-		not valid_account_environment(tag, value, resource_tags)
 	]
+
+
+	invalid_project := [sprintf("Project=%s", [project]) |
+		project := resource_tags["Project"]
+
+		project != null
+		project != ""
+
+		not project in data.tagging.projects
+	]
+
+
+	invalid_environment := [sprintf("Environment=%s", [environment]) |
+		project := resource_tags["Project"]
+		environment := resource_tags["Environment"]
+
+		project != null
+		project != ""
+
+		environment != null
+		environment != ""
+
+		project in data.tagging.projects
+
+		not valid_environment(project, environment)
+	]
+
+
+	invalid := array.flatten([
+		invalid_static,
+		invalid_project,
+		invalid_environment,
+	])
 }
 
-# Account IDs are only allowed for the Environment tag
-# when Project is "imac".
-valid_account_environment(tag, value, resource_tags) if {
-	tag == "Environment"
-	resource_tags["Project"] == "imac"
-	regex.match(aws_account_id_pattern, value)
+
+###############################################################################
+# Helper: validate Environment for a Project
+###############################################################################
+
+valid_environment(project, environment) if {
+	project_environments := data.tagging.environments[project]
+
+	environment in project_environments
 }
 
-# Helper function to extract tags from resource
+
+# IMAC may use the AWS account ID as Environment
+valid_environment(project, environment) if {
+	project == "imac"
+
+	regex.match(
+		aws_account_id_pattern,
+		environment,
+	)
+}
+
+
+###############################################################################
+# Helper: extract resource tags
+###############################################################################
+
 collect_resource_tags(resource) := tags if {
 	tags := resource.change.after.tags_all
 } else := tags if {
 	tags := resource.change.after.tags
 } else := tags if {
-	# fallback to ASG tag blocks converted to a map
 	tags := {t.key: t.value |
 		some t in resource.change.after.tag
+
 		t.key != null
 	}
 } else := {}
 
-# Helper function to collect computed(unknown) tags
+
+###############################################################################
+# Helper: determine whether Terraform tag values are unknown
+###############################################################################
+
 tags_are_unknown(resource) if {
 	resource.change.after_unknown.tags
 }
+
 
 tags_are_unknown(resource) if {
 	resource.change.after_unknown.tags_all
 }
 
-############## AGENTS
-oams
-data_workbench
-utility
-salt
-imac
-sie
-swift-insights-explorer
-ml-engineering
-sia
-ides
-cgap
-gis
 
-####### ERRORS  
-  Running on sie agent
-WARNING: Terraform Plan policy checks enforcement begins 2026-05-01!
-12:56:15  [Pipeline] withEnv
-12:56:15  [Pipeline] {
-12:56:16  [Pipeline] sh ([Execute Infrastructure Policy Check] - ${aws_profile}.tfplan)
-12:56:16  [GOVERNANCE] Starting OPA policy evaluation...
-12:56:16  [GOVERNANCE] Policies Bundle: opa/policies
-12:56:16  [GOVERNANCE] Input File: dev-tfplan.json
-12:56:16  [GOVERNANCE] Decision Path: cdo/terraform/required_default_tagging/deny
-12:56:16  [GOVERNANCE] Policies Branch: main
-12:56:20  Cloning into 'opa'...
-12:56:22  Your branch is up to date with 'origin/main'.
-12:56:22  [GOVERNANCE] Loading tagging configuration from dev-ImacConfigTable...
-12:56:23  
-12:56:23  aws: [ERROR]: An error occurred (ResourceNotFoundException) when calling the GetItem operation: Requested resource not found
-12:56:23  [GOVERNANCE] ERROR: IMAC_CONFIG was not returned from DynamoDB.
+################################################   required_default_tagging_test.rego
 
-Running on IMAC agent 
- WARNING: Terraform Plan policy checks enforcement begins 2026-05-01!
-09:47:20  [Pipeline] withEnv
-09:47:20  [Pipeline] {
-09:47:20  [Pipeline] sh ([Execute Infrastructure Policy Check] - ${aws_profile}.tfplan)
-09:47:21  [GOVERNANCE] Starting OPA policy evaluation...
-09:47:21  [GOVERNANCE] Policies Bundle: opa/policies
-09:47:21  [GOVERNANCE] Input File: prod-tfplan.json
-09:47:21  [GOVERNANCE] Decision Path: cdo/terraform/required_default_tagging/deny
-09:47:21  WARNING: No prod.tfplan found. Skipping policy check...
+package cdo.terraform.required_default_tagging_test
 
-######## CAUSE 
-I know why the above failed - when other teams are running the plan_infrastructure() step the AWS_PROFILE gets set to their dev account which is different from the account where we have the DynamoDB - that's why u get resource not found - instead we need to run with no AWS_PROFILE set - so that it uses the instance role which is in the correct account
- 
-you can recreate your PR I had to revert and ensure that u reset the AWS_PROFILE to nothing before calling aws to retrieve the DynamoDB - and we need to test your PR again with SIE to ensure it is working after u put that in
- 
+import rego.v1
+
+import data.cdo.terraform.required_default_tagging as check
+
+
+###############################################################################
+# Mock of the data generated from imac-config during pipeline execution
+###############################################################################
+
+mock_tagging := {
+	"projects": [
+		"cgap",
+		"data_workbench",
+		"gis",
+		"ides",
+		"imac",
+		"ml-engineering",
+		"oams",
+		"salt",
+		"sia",
+		"sie",
+		"swift-insights-explorer",
+		"utility",
+	],
+
+	"environments": {
+		"cgap": [
+			"dev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"data_workbench": [
+			"dev",
+			"predev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"gis": [
+			"dev",
+			"predev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"ides": [
+			"dev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"imac": [
+			"dev",
+			"predev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"ml-engineering": [
+			"dev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"oams": [
+			"dev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"salt": [
+			"dev",
+			"prod",
+		],
+
+		"sia": [
+			"dev",
+			"prod",
+		],
+
+		"sie": [
+			"dev",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"swift-insights-explorer": [
+			"dev",
+			"qa",
+			"prod",
+		],
+
+		"utility": [
+			"dev",
+			"prod",
+		],
+	},
+}
+
+
+###############################################################################
+# Valid dynamic Project and Environment
+###############################################################################
+
+test_valid_dynamic_project_environment if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.test",
+					"type": "aws_s3_bucket",
+					"change": {
+						"actions": ["create"],
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "dev",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "sie",
+							},
+						},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# IMAC account ID is valid as Environment
+###############################################################################
+
+test_imac_account_id_environment_allowed if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.imac",
+					"type": "aws_s3_bucket",
+					"change": {
+						"actions": ["create"],
+						"after": {
+							"tags": {
+								"ApplicationName": "imac",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "966555604991",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "imac",
+							},
+						},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# Account ID is invalid for non-IMAC projects
+###############################################################################
+
+test_non_imac_account_id_environment_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.sie",
+					"type": "aws_s3_bucket",
+					"change": {
+						"actions": ["create"],
+						"after": {
+							"tags": {
+								"ApplicationName": "sie",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "966555604991",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "sie",
+							},
+						},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 1
+
+	"Resource 'aws_s3_bucket.sie' has invalid tag values: [\"Environment=966555604991\"]" in result
+}
+
+
+###############################################################################
+# Invalid Project
+###############################################################################
+
+test_invalid_project_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.invalid_project",
+					"type": "aws_s3_bucket",
+					"change": {
+						"actions": ["create"],
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "dev",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "invalid-project",
+							},
+						},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 1
+
+	"Resource 'aws_s3_bucket.invalid_project' has invalid tag values: [\"Project=invalid-project\"]" in result
+}
+
+
+###############################################################################
+# Environment does not belong to the selected Project
+###############################################################################
+
+test_invalid_environment_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.invalid_environment",
+					"type": "aws_s3_bucket",
+					"change": {
+						"actions": ["create"],
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "does-not-exist",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "sie",
+							},
+						},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 1
+
+	"Resource 'aws_s3_bucket.invalid_environment' has invalid tag values: [\"Environment=does-not-exist\"]" in result
+}
+
+
+###############################################################################
+# Missing required tag
+###############################################################################
+
+test_missing_required_tag_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.missing_owner",
+					"type": "aws_s3_bucket",
+					"change": {
+						"actions": ["create"],
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "dev",
+								"FISMABoundary": "dsgss",
+								"Project": "sie",
+							},
+						},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) > 0
+}
+
+
+###############################################################################
+# Empty required tag
+###############################################################################
+
+test_empty_required_tag_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.empty_owner",
+					"type": "aws_s3_bucket",
+					"change": {
+						"actions": ["create"],
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "dev",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "",
+								"Project": "sie",
+							},
+						},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) > 0
+}
+
+
+###############################################################################
+# Destroy actions are ignored
+###############################################################################
+
+test_destroy_action_ignored if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.destroy",
+					"type": "aws_s3_bucket",
+					"change": {
+						"actions": ["delete"],
+						"after": {},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# Ignored resource types are ignored
+###############################################################################
+
+test_ignored_resource_type if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "null_resource.test",
+					"type": "null_resource",
+					"change": {
+						"actions": ["create"],
+						"after": {
+							"triggers": {},
+						},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# Resources without tags are ignored
+###############################################################################
+
+test_untaggable_resource_ignored if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_example.test",
+					"type": "aws_example",
+					"change": {
+						"actions": ["create"],
+						"after": {},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# Missing tagging data
+###############################################################################
+
+test_missing_dynamic_tagging_data if {
+	result := check.deny
+		with input as {
+			"resource_changes": [],
+		}
+		with data.tagging as null
+
+	"tagging data was not provided to policy evaluation" in result
+}
+
+
+###############################################################################
+# Empty tagging data
+###############################################################################
+
+test_empty_dynamic_tagging_data if {
+	result := check.deny
+		with input as {
+			"resource_changes": [],
+		}
+		with data.tagging as {}
+
+	"tagging data is empty" in result
+}
+
+
