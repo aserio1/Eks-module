@@ -832,3 +832,9 @@ Running on IMAC agent
 09:47:21  [GOVERNANCE] Input File: prod-tfplan.json
 09:47:21  [GOVERNANCE] Decision Path: cdo/terraform/required_default_tagging/deny
 09:47:21  WARNING: No prod.tfplan found. Skipping policy check...
+
+######## CAUSE 
+I know why the above failed - when other teams are running the plan_infrastructure() step the AWS_PROFILE gets set to their dev account which is different from the account where we have the DynamoDB - that's why u get resource not found - instead we need to run with no AWS_PROFILE set - so that it uses the instance role which is in the correct account
+ 
+you can recreate your PR I had to revert and ensure that u reset the AWS_PROFILE to nothing before calling aws to retrieve the DynamoDB - and we need to test your PR again with SIE to ensure it is working after u put that in
+ 
