@@ -1,4 +1,9 @@
-I know why the above failed - when other teams are running the plan_infrastructure() step the AWS_PROFILE gets set to their dev account which is different from the account where we have the DynamoDB - that's why u get resource not found - instead we need to run with no AWS_PROFILE set - so that it uses the instance role which is in the correct account
- 
-you can recreate your PR I had to revert and ensure that u reset the AWS_PROFILE to nothing before calling aws to retrieve the DynamoDB - and we need to test your PR again with SIE to ensure it is working after u put that in
- 
+The code is good now because the DynamoDB lookup no longer uses the AWS_PROFILE set by each team's plan_infrastructure() pipeline.
+
+Previously, when SIE ran with AWS_PROFILE=dev, the DynamoDB request was sent to the SIE dev AWS account, where dev-ImacConfigTable does not exist, causing the ResourceNotFoundException.
+
+With the update:
+
+AWS_PROFILE= AWS_DEFAULT_PROFILE= aws dynamodb get-item ...
+
+the DynamoDB command ignores the team's profile and uses the Jenkins agent instance role, which has access to the correct account containing the DynamoDB table. At the same time, the original AWS_PROFILE remains available to identify the correct Terraform plan, such as dev.tfplan.
