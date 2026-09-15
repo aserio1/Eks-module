@@ -1,9 +1,20 @@
-The code is good now because the DynamoDB lookup no longer uses the AWS_PROFILE set by each team's plan_infrastructure() pipeline.
+policies/cdo/terraform/required_default_tagging/required_default_tagging.rego
+# Dynamic tagging data validation
+###############################################################################
 
-Previously, when SIE ran with AWS_PROFILE=dev, the DynamoDB request was sent to the SIE dev AWS account, where dev-ImacConfigTable does not exist, causing the ResourceNotFoundException.
+deny contains msg if {
+Member
+These guards don't cover a malformed payload. If data.tagging exists but projects or environments is missing, Project/Environment validation silently passes. Add deny rules for not data.tagging.projects and not data.tagging.environments.
 
-With the update:
+policies/cdo/terraform/required_default_tagging/required_default_tagging_test.rego
+# Mock tagging data
+###############################################################################
 
-AWS_PROFILE= AWS_DEFAULT_PROFILE= aws dynamodb get-item ...
+mock_tagging := {
+Member
+@Claudio-SidiKemvo Claudio-SidiKemvo 1 hour ago
+Same concern as the arcgis thread but broader: old allowed values dwb, mle, and suffixed Environments like dev-imac-lza don't exist in imac-config's new lists. Existing resources tagged with these will probably fail on their next update?
 
-the DynamoDB command ignores the team's profile and uses the Jenkins agent instance role, which has access to the correct account containing the DynamoDB table. At the same time, the original AWS_PROFILE remains available to identify the correct Terraform plan, such as dev.tfplan.
+Member
+@Cosmina-Chindris Cosmina-Chindris 1 hour ago
+@Claudio-SidiKemvo dev-imac-lza is defined in the imac-config environments for imac: https://git.aws.hhsoig.gov/CDO/imac-config/blob/main/src/project/imac.json - but u bring a good point that @Aseriobiome-Joseph should check if the hard-coded list contained environments outside of the ones from imac-config to preserve the existing behavior
