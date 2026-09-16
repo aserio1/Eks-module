@@ -1,1178 +1,159 @@
-##################### rego
-
-# METADATA
-# title: Check for missing AWS tags
-# description: Check for missing aws tags to AWS resources defined by Terraform region.
-# scope: package
-# entrypoint: true
-# custom:
-#   id: CDO-TFPLAN-0002
-#   avd_id: CDO-TFPLAN-0002
-#   severity: CRITICAL
-#   short_code: required-default-tagging
-#   recommended_actions: Ensure you have the default tags set.
-#   input:
-#     selector:
-#       - type: json
-
-package cdo.terraform.required_default_tagging
-
-import rego.v1
-
-
-###############################################################################
-# Resources to ignore
-###############################################################################
-
-ignored_resource_types := {
-	"aws_api_gateway_documentation_part",
-	"aws_api_gateway_integration",
-	"aws_api_gateway_resource",
-	"aws_apigatewayv2_integration",
-	"aws_apigatewayv2_route",
-	"aws_appconfig_hosted_configuration_version",
-	"aws_backup_selection",
-	"aws_cloudwatch_event_target",
-	"aws_cloudwatch_log_subscription_filter",
-	"aws_cognito_identity_provider",
-	"aws_iam_role_policy",
-	"aws_iam_policy_attachment",
-	"aws_iam_role_policy_attachment",
-	"aws_kms_alias",
-	"aws_lakeformation_data_lake_setting",
-	"aws_lakeformation_lf_tag",
-	"aws_lakeformation_lf_tag_policy",
-	"aws_lakeformation_permissions",
-	"aws_lakeformation_resource",
-	"aws_lakeformation_resource_lf_tags",
-	"aws_lambda_layer_version",
-	"aws_lambda_permission",
-	"aws_lb_listener_rule",
-	"aws_lb_listener",
-	"aws_lb_target_group_attachment",
-	"aws_s3_bucket_acl",
-	"aws_s3_bucket_lifecycle_configuration",
-	"aws_s3_bucket_policy",
-	"aws_s3_bucket_public_access_block",
-	"aws_s3_bucket_server_side_encryption_configuration",
-	"aws_s3_bucket_versioning",
-	"aws_sagemaker_image_version",
-	"aws_scheduler_schedule",
-	"aws_secretsmanager_secret_version",
-	"aws_security_group_rule",
-	"aws_sns_topic_subscription",
-	"aws_ssoadmin_application_assignment",
-	"aws_vpc_security_group_ingress_rule",
-	"aws_vpc_security_group_egress_rule",
-	"aws_vpc_endpoint_route_table_association",
-	"aws_route_table_association",
-	"aws_subnet_route_table_association",
-	"jenkins_folder",
-	"jenkins_job",
-	"null_resource",
-	"random_password",
-	"terraform_data",
-	"time_static",
-}
-
-
-###############################################################################
-# Legacy Project aliases
-#
-# Project and Environment values are loaded dynamically from imac-config.
-# These aliases provide backwards compatibility for existing resources that
-# still use legacy short Project names.
-###############################################################################
-
-project_aliases := {
-	"dwb": "data_workbench",
-	"mle": "ml-engineering",
-}
-
-
-###############################################################################
-# AWS account ID Environment exception
-###############################################################################
-
-aws_account_id_pattern := `^\d{12}$`
-
-
-###############################################################################
-# Required tags
-###############################################################################
-
-required_tags := {
-	"BusinessUnit": ["cdo"],
-	"FISMABoundary": ["dsgss", "dwb"],
-}
-
-
-flexible_required_tags := {
-	"ApplicationName",
-	"OwnerContact",
-	"CreatedBy",
-}
-
-
-dynamic_required_tags := {
-	"Environment",
-	"Project",
-}
-
-
-all_required_tag_keys := object.keys(required_tags) |
-	flexible_required_tags |
-	dynamic_required_tags
-
-
-###############################################################################
-# Actions to validate
-###############################################################################
-
-valid_actions := {
-	"create",
-	"update",
-}
-
-
-###############################################################################
-# Dynamic tagging data validation
-###############################################################################
-
-# data.tagging must exist.
-deny contains msg if {
-	not data.tagging
-
-	msg := "tagging data was not provided to policy evaluation"
-}
-
-
-# data.tagging must not be empty.
-deny contains msg if {
-	data.tagging
-	count(data.tagging) == 0
-
-	msg := "tagging data is empty"
-}
-
-
-# projects must be supplied by the dynamic configuration.
-deny contains msg if {
-	data.tagging
-	count(data.tagging) > 0
-	not data.tagging.projects
-
-	msg := "tagging projects data was not provided to policy evaluation"
-}
-
-
-# environments must be supplied by the dynamic configuration.
-deny contains msg if {
-	data.tagging
-	count(data.tagging) > 0
-	not data.tagging.environments
-
-	msg := "tagging environments data was not provided to policy evaluation"
-}
-
-
-###############################################################################
-# Missing required tags
-###############################################################################
-
-deny contains res if {
-	some resource in input.resource_changes
-
-	not ignored_resource_types[resource.type]
-
-	some action in resource.change.actions
-	valid_actions[action]
-
-	count(collect_resource_tags(resource)) > 0
-
-	missing_tags := collect_missing_tags(resource)
-
-	count(missing_tags) > 0
-
-	res := sprintf(
-		"Resource %s is missing required tags: %v.",
-		[
-			resource.address,
-			missing_tags,
-		],
-	)
-}
-
-
-###############################################################################
-# Invalid required tag values
-###############################################################################
-
-deny contains res if {
-	some resource in input.resource_changes
-
-	not ignored_resource_types[resource.type]
-
-	some action in resource.change.actions
-	valid_actions[action]
-
-	invalid_tags := collect_invalid_tags(resource)
-
-	count(invalid_tags) > 0
-
-	res := sprintf(
-		"Resource '%s' has invalid tag values: %v",
-		[
-			resource.address,
-			invalid_tags,
-		],
-	)
-}
-
-
-###############################################################################
-# Empty required tag values
-###############################################################################
-
-deny contains res if {
-	some resource in input.resource_changes
-
-	not ignored_resource_types[resource.type]
-
-	some action in resource.change.actions
-	valid_actions[action]
-
-	count(collect_resource_tags(resource)) > 0
-
-	not tags_are_unknown(resource)
-
-	resource_tags := collect_resource_tags(resource)
-
-	empty_tags := [tag |
-		some tag in all_required_tag_keys
-
-		resource_tags[tag] == ""
-	]
-
-	count(empty_tags) > 0
-
-	res := sprintf(
-		"Resource '%s' has empty values for required tags: %v",
-		[
-			resource.address,
-			empty_tags,
-		],
-	)
-}
-
-
-###############################################################################
-# Project resolution
-#
-# Projects normally come directly from imac-config.
-#
-# Legacy short names such as dwb and mle are resolved to their canonical
-# imac-config Project name before Environment validation.
-###############################################################################
-
-resolved_project(project) := project if {
-	project in data.tagging.projects
-}
-
-
-resolved_project(project) := canonical_project if {
-	canonical_project := project_aliases[project]
-
-	canonical_project in data.tagging.projects
-}
-
-
-###############################################################################
-# Environment validation
-###############################################################################
-
-# Validate Environment using the dynamically loaded environments belonging
-# to the canonical Project.
-valid_environment(project, environment) if {
-	project_environments := data.tagging.environments[project]
-
-	environment in project_environments
-}
-
-
-# IMAC can additionally use a 12-digit AWS account ID as Environment.
-valid_environment(project, environment) if {
-	project == "imac"
-
-	regex.match(
-		aws_account_id_pattern,
-		environment,
-	)
-}
-
-
-###############################################################################
-# Collect missing tags
-###############################################################################
-
-collect_missing_tags(resource) := missing if {
-	not tags_are_unknown(resource)
-
-	resource_tags := collect_resource_tags(resource)
-
-	missing := [tag |
-		some tag in all_required_tag_keys
-
-		not resource_tags[tag]
-	]
-}
-
-
-###############################################################################
-# Collect invalid tag values
-###############################################################################
-
-collect_invalid_tags(resource) := invalid if {
-	resource_tags := collect_resource_tags(resource)
-
-
-	###########################################################################
-	# Static tag validation
-	###########################################################################
-
-	invalid_static := [sprintf("%s=%s", [tag, value]) |
-		some tag in object.keys(required_tags)
-
-		value := resource_tags[tag]
-
-		value != null
-		value != ""
-
-		not value in required_tags[tag]
-	]
-
-
-	###########################################################################
-	# Dynamic Project validation
-	#
-	# A Project is valid when:
-	#   1. It exists directly in imac-config, or
-	#   2. It is a supported legacy alias whose canonical Project exists
-	#      in imac-config.
-	###########################################################################
-
-	invalid_project := [sprintf("Project=%s", [project]) |
-		project := resource_tags["Project"]
-
-		project != null
-		project != ""
-
-		data.tagging.projects
-
-		not resolved_project(project)
-	]
-
-
-	###########################################################################
-	# Dynamic Environment validation
-	#
-	# Resolve the Project first. This means legacy short names still use
-	# Environment values dynamically loaded for their canonical Project.
-	###########################################################################
-
-	invalid_environment := [sprintf("Environment=%s", [environment]) |
-		project := resource_tags["Project"]
-		environment := resource_tags["Environment"]
-
-		project != null
-		project != ""
-
-		environment != null
-		environment != ""
-
-		data.tagging.projects
-		data.tagging.environments
-
-		canonical_project := resolved_project(project)
-
-		not valid_environment(canonical_project, environment)
-	]
-
-
-	invalid := array.flatten([
-		invalid_static,
-		invalid_project,
-		invalid_environment,
-	])
-}
-
-
-###############################################################################
-# Collect resource tags
-###############################################################################
-
-collect_resource_tags(resource) := tags if {
-	tags := resource.change.after.tags_all
-} else := tags if {
-	tags := resource.change.after.tags
-} else := tags if {
-	tags := {t.key: t.value |
-		some t in resource.change.after.tag
-
-		t.key != null
-	}
-} else := {}
-
-
-###############################################################################
-# Detect unknown/computed tags
-###############################################################################
-
-tags_are_unknown(resource) if {
-	resource.change.after_unknown.tags
-}
-
-
-tags_are_unknown(resource) if {
-	resource.change.after_unknown.tags_all
-}
-
-
-
-#################################### test
-
-package cdo.terraform.required_default_tagging_test
-
-import rego.v1
-
-import data.cdo.terraform.required_default_tagging as check
-
-
-###############################################################################
-# Mock tagging data
-#
-# Represents the dynamic data supplied to OPA from imac-config.
-#
-# dwb and mle are intentionally not included as Projects because they are
-# legacy aliases handled by the policy.
-###############################################################################
-
-mock_tagging := {
-	"projects": [
-		"cgap",
-		"data_workbench",
-		"gis",
-		"ides",
-		"imac",
-		"ml-engineering",
-		"oams",
-		"salt",
-		"sia",
-		"sie",
-		"swift-insights-explorer",
-		"utility",
-	],
-
-	"environments": {
-		"cgap": [
-			"dev",
-			"test",
-			"qa",
-			"stage",
-			"prod",
-		],
-
-		"data_workbench": [
-			"dev",
-			"predev",
-			"test",
-			"qa",
-			"stage",
-			"prod",
-		],
-
-		"gis": [
-			"dev",
-			"predev",
-			"test",
-			"qa",
-			"stage",
-			"prod",
-		],
-
-		"ides": [
-			"dev",
-			"test",
-			"qa",
-			"stage",
-			"prod",
-		],
-
-		"imac": [
-			"dev",
-			"predev",
-			"test",
-			"qa",
-			"stage",
-			"prod",
-			"dev-imac-lza",
-		],
-
-		"ml-engineering": [
-			"dev",
-			"test",
-			"qa",
-			"stage",
-			"prod",
-		],
-
-		"oams": [
-			"dev",
-			"test",
-			"qa",
-			"stage",
-			"prod",
-		],
-
-		"salt": [
-			"dev",
-			"prod",
-		],
-
-		"sia": [
-			"dev",
-			"prod",
-		],
-
-		"sie": [
-			"dev",
-			"qa",
-			"stage",
-			"prod",
-		],
-
-		"swift-insights-explorer": [
-			"dev",
-			"qa",
-			"prod",
-		],
-
-		"utility": [
-			"dev",
-			"prod",
-		],
-	},
-}
-
-
-###############################################################################
-# Valid dynamic Project and Environment
-###############################################################################
-
-test_valid_dynamic_project_environment if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.test",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["create"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "test",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "dev",
-								"FISMABoundary": "dsgss",
-								"OwnerContact": "owner@example.com",
-								"Project": "sie",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) == 0
-}
-
-
-###############################################################################
-# Valid IMAC environment from dynamic configuration
-###############################################################################
-
-test_valid_imac_lza_environment if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.imac_lza",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["update"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "imac",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "dev-imac-lza",
-								"FISMABoundary": "dsgss",
-								"OwnerContact": "owner@example.com",
-								"Project": "imac",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) == 0
-}
-
-
-###############################################################################
-# Legacy DWB Project alias
-#
-# Project=dwb resolves to data_workbench.
-# Environment is then validated against the dynamically loaded
-# data_workbench environments.
-###############################################################################
-
-test_legacy_dwb_project_alias_allowed if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.dwb",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["update"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "dwb-test",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "dev",
-								"FISMABoundary": "dwb",
-								"OwnerContact": "owner@example.com",
-								"Project": "dwb",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) == 0
-}
-
-
-###############################################################################
-# Legacy MLE Project alias
-#
-# Project=mle resolves to ml-engineering.
-###############################################################################
-
-test_legacy_mle_project_alias_allowed if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.mle",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["update"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "mle-test",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "qa",
-								"FISMABoundary": "dsgss",
-								"OwnerContact": "owner@example.com",
-								"Project": "mle",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) == 0
-}
-
-
-###############################################################################
-# Invalid DWB Environment
-#
-# This proves the DWB alias does not bypass dynamic Environment validation.
-###############################################################################
-
-test_legacy_dwb_invalid_environment_denied if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.dwb_invalid",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["update"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "dwb-test",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "invalid-environment",
-								"FISMABoundary": "dwb",
-								"OwnerContact": "owner@example.com",
-								"Project": "dwb",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	"Resource 'aws_s3_bucket.dwb_invalid' has invalid tag values: [\"Environment=invalid-environment\"]" in result
-}
-
-
-###############################################################################
-# Invalid MLE Environment
-###############################################################################
-
-test_legacy_mle_invalid_environment_denied if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.mle_invalid",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["update"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "mle-test",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "invalid-environment",
-								"FISMABoundary": "dsgss",
-								"OwnerContact": "owner@example.com",
-								"Project": "mle",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	"Resource 'aws_s3_bucket.mle_invalid' has invalid tag values: [\"Environment=invalid-environment\"]" in result
-}
-
-
-###############################################################################
-# IMAC AWS account ID Environment
-###############################################################################
-
-test_imac_account_id_environment_allowed if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.imac",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["create"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "imac",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "966555604991",
-								"FISMABoundary": "dsgss",
-								"OwnerContact": "owner@example.com",
-								"Project": "imac",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) == 0
-}
-
-
-###############################################################################
-# Non-IMAC Project cannot use AWS account ID Environment
-###############################################################################
-
-test_non_imac_account_id_environment_denied if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.sie",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["create"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "sie",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "966555604991",
-								"FISMABoundary": "dsgss",
-								"OwnerContact": "owner@example.com",
-								"Project": "sie",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	"Resource 'aws_s3_bucket.sie' has invalid tag values: [\"Environment=966555604991\"]" in result
-}
-
-
-###############################################################################
-# Invalid Project
-###############################################################################
-
-test_invalid_project_denied if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.invalid_project",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["create"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "test",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "dev",
-								"FISMABoundary": "dsgss",
-								"OwnerContact": "owner@example.com",
-								"Project": "invalid-project",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	"Resource 'aws_s3_bucket.invalid_project' has invalid tag values: [\"Project=invalid-project\"]" in result
-}
-
-
-###############################################################################
-# Invalid Environment
-###############################################################################
-
-test_invalid_environment_denied if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.invalid_environment",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["create"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "test",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "does-not-exist",
-								"FISMABoundary": "dsgss",
-								"OwnerContact": "owner@example.com",
-								"Project": "sie",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	"Resource 'aws_s3_bucket.invalid_environment' has invalid tag values: [\"Environment=does-not-exist\"]" in result
-}
-
-
-###############################################################################
-# Missing required tag
-###############################################################################
-
-test_missing_required_tag_denied if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.missing_owner",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["create"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "test",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "dev",
-								"FISMABoundary": "dsgss",
-								"Project": "sie",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) > 0
-}
-
-
-###############################################################################
-# Empty required tag
-###############################################################################
-
-test_empty_required_tag_denied if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.empty_owner",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["create"],
-
-						"after": {
-							"tags": {
-								"ApplicationName": "test",
-								"BusinessUnit": "cdo",
-								"CreatedBy": "terraform",
-								"Environment": "dev",
-								"FISMABoundary": "dsgss",
-								"OwnerContact": "",
-								"Project": "sie",
-							},
-						},
-
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) > 0
-}
-
-
-###############################################################################
-# Destroy action ignored
-###############################################################################
-
-test_destroy_action_ignored if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_s3_bucket.destroy",
-					"type": "aws_s3_bucket",
-
-					"change": {
-						"actions": ["delete"],
-						"after": {},
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) == 0
-}
-
-
-###############################################################################
-# Ignored resource type
-###############################################################################
-
-test_ignored_resource_type if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "null_resource.test",
-					"type": "null_resource",
-
-					"change": {
-						"actions": ["create"],
-						"after": {
-							"triggers": {},
-						},
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) == 0
-}
-
-
-###############################################################################
-# Untaggable resource ignored
-###############################################################################
-
-test_untaggable_resource_ignored if {
-	result := check.deny
-		with input as {
-			"resource_changes": [
-				{
-					"address": "aws_example.test",
-					"type": "aws_example",
-
-					"change": {
-						"actions": ["create"],
-						"after": {},
-						"after_unknown": {},
-					},
-				},
-			],
-		}
-		with data.tagging as mock_tagging
-
-	count(result) == 0
-}
-
-
-###############################################################################
-# Missing dynamic tagging data
-###############################################################################
-
-test_missing_dynamic_tagging_data if {
-	result := check.deny
-		with input as {
-			"resource_changes": [],
-		}
-
-	"tagging data was not provided to policy evaluation" in result
-}
-
-
-###############################################################################
-# Empty dynamic tagging data
-###############################################################################
-
-test_empty_dynamic_tagging_data if {
-	result := check.deny
-		with input as {
-			"resource_changes": [],
-		}
-		with data.tagging as {}
-
-	"tagging data is empty" in result
-}
-
-
-###############################################################################
-# Missing Projects in dynamic tagging data
-###############################################################################
-
-test_missing_dynamic_projects_data if {
-	result := check.deny
-		with input as {
-			"resource_changes": [],
-		}
-		with data.tagging as {
-			"environments": {
-				"imac": [
-					"dev",
-					"prod",
-				],
-			},
-		}
-
-	"tagging projects data was not provided to policy evaluation" in result
-}
-
-
-###############################################################################
-# Missing Environments in dynamic tagging data
-###############################################################################
-
-test_missing_dynamic_environments_data if {
-	result := check.deny
-		with input as {
-			"resource_changes": [],
-		}
-		with data.tagging as {
-			"projects": [
-				"imac",
-			],
-		}
-
-	"tagging environments data was not provided to policy evaluation" in result
-}
+9  }
+13:58:09  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/deprecated_steps/deny
+13:58:09  [GOVERNANCE] OPA pipeline policy evaluation complete.
+13:58:09  [Pipeline] }
+13:58:10  [Pipeline] // withEnv
+13:58:10  [Pipeline] }
+13:58:10  [Pipeline] // catchError
+13:58:10  [Pipeline] echo
+13:58:10  [GOVERNANCE] Deprecated steps check complete.
+13:58:10  [Pipeline] echo
+13:58:10  [GOVERNANCE] Restricted steps check: generate pre-requisites...
+13:58:10  [Pipeline] sh
+13:58:10  [GOVERNANCE] detect_restricted_steps scanning: jenkins/Jenkinsfile
+13:58:10  [GOVERNANCE] detect_restricted_steps found calls: []
+13:58:10  [GOVERNANCE] Restricted steps input written to: restricted_input.json
+13:58:10  {
+13:58:10    "pipeline": {
+13:58:10      "folder": "Data Workbench",
+13:58:10      "subfolder": "Data Workbench Platform",
+13:58:10      "name": "DWB Access",
+13:58:10      "repo": "https://git.aws.hhsoig.gov/CDO/dwb-access.git",
+13:58:10      "jenkinsfile": "jenkins/Jenkinsfile",
+13:58:10      "pipeline_config": "jenkins/jenkins.groovy"
+13:58:10    },
+13:58:10    "jenkins": {
+13:58:10      "calls": []
+13:58:10    }
+13:58:10  }
+13:58:10  [Pipeline] echo
+13:58:11  [GOVERNANCE] Restricted steps check: Running OPA policy...
+13:58:11  [Pipeline] catchError
+13:58:11  [Pipeline] {
+13:58:11  [Pipeline] withEnv
+13:58:11  [Pipeline] {
+13:58:11  [Pipeline] sh
+13:58:11  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+13:58:11  [GOVERNANCE] Using decision: cdo/pipelines/restricted_steps/deny
+13:58:11  [GOVERNANCE] Using input JSON: restricted_input.json
+13:58:11  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/restricted_steps/deny
+13:58:12  {
+13:58:12    "result": [
+13:58:12      {
+13:58:12        "decision_id": "2c743c0c-6512-48a1-8ed5-3d99ac829ee5",
+13:58:12        "path": "restricted_input.json",
+13:58:12        "result": []
+13:58:12      }
+13:58:12    ]
+13:58:12  }
+13:58:12  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/restricted_steps/deny
+13:58:12  [GOVERNANCE] OPA pipeline policy evaluation complete.
+13:58:12  [Pipeline] }
+13:58:12  [Pipeline] // withEnv
+13:58:12  [Pipeline] }
+13:58:12  [Pipeline] // catchError
+13:58:12  [Pipeline] echo
+13:58:12  [GOVERNANCE] Restricted steps check complete.
+13:58:12  [Pipeline] echo
+13:58:12  [GOVERNANCE] Security steps check (SAST/DAST): generate pre-requisites...
+13:58:12  [Pipeline] catchError
+13:58:12  [Pipeline] {
+13:58:13  [Pipeline] withEnv
+13:58:13  [Pipeline] {
+13:58:13  [Pipeline] sh
+13:58:13  [GOVERNANCE] detect_sast_dast scanning repo at: /home/jenkins/workspace/Data Workbench/Data Workbench Platform/DWB Access/main/36
+13:58:13  [GOVERNANCE] JENKINSFILE_PATH received: jenkins/Jenkinsfile (resolved: jenkins/Jenkinsfile)
+13:58:13  [GOVERNANCE] signals: is_frontend=false has_api_gateway=false has_http_listener=false target_url_output=<none>
+13:58:13  [GOVERNANCE] security steps INVOKED in jenkins/Jenkinsfile: ["sast"]
+13:58:14  [GOVERNANCE] dast target URL from Jenkinsfile: <none>
+13:58:14  [GOVERNANCE] dast blocking mode: true
+13:58:14  [GOVERNANCE] security libraries LOADED in jenkins/jenkins.groovy: ["sast"]
+13:58:14  [GOVERNANCE] SAST/DAST input written to: dast_input.json
+13:58:14  [Pipeline] }
+13:58:14  [Pipeline] // withEnv
+13:58:14  [Pipeline] }
+13:58:14  [Pipeline] // catchError
+13:58:14  [Pipeline] fileExists
+13:58:14  [Pipeline] sh
+13:58:15  + date +%s
+13:58:15  [Pipeline] sh
+13:58:15  + date -d 2026-11-01 +%s
+13:58:15  [Pipeline] echo
+13:58:15  [GOVERNANCE] Security steps grace period active until 2026-11-01. SAST/DAST violations are warnings only (stage marked, build not failed).
+13:58:15  [Pipeline] echo
+13:58:15  [GOVERNANCE] Security steps check (SAST/DAST): Running OPA policies...
+13:58:15  [Pipeline] catchError
+13:58:15  [Pipeline] {
+13:58:16  [Pipeline] withEnv
+13:58:16  [Pipeline] {
+13:58:16  [Pipeline] sh
+13:58:16  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+13:58:16  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/warn
+13:58:16  [GOVERNANCE] Using input JSON: dast_input.json
+13:58:16  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/warn
+13:58:16  {
+13:58:16    "result": [
+13:58:16      {
+13:58:16        "decision_id": "50957f90-8f33-4a9e-9843-c07c6c64ef86",
+13:58:16        "path": "dast_input.json",
+13:58:16        "result": []
+13:58:16      }
+13:58:16    ]
+13:58:16  }
+13:58:16  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/required_security_steps/warn
+13:58:16  [GOVERNANCE] OPA pipeline policy evaluation complete.
+13:58:17  [Pipeline] }
+13:58:17  [Pipeline] // withEnv
+13:58:17  [Pipeline] }
+13:58:17  [Pipeline] // catchError
+13:58:17  [Pipeline] catchError
+13:58:17  [Pipeline] {
+13:58:17  [Pipeline] withEnv
+13:58:17  [Pipeline] {
+13:58:17  [Pipeline] sh
+13:58:18  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+13:58:18  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/sast_deny
+13:58:18  [GOVERNANCE] Using input JSON: dast_input.json
+13:58:18  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/sast_deny
+13:58:18  {
+13:58:18    "result": [
+13:58:18      {
+13:58:18        "decision_id": "074c8068-44eb-44be-a2f7-7f0627114f59",
+13:58:18        "path": "dast_input.json",
+13:58:18        "result": []
+13:58:18      }
+13:58:18    ]
+13:58:18  }
+13:58:18  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/required_security_steps/sast_deny
+13:58:18  [GOVERNANCE] OPA pipeline policy evaluation complete.
+13:58:18  [Pipeline] }
+13:58:19  [Pipeline] // withEnv
+13:58:19  [Pipeline] }
+13:58:19  [Pipeline] // catchError
+13:58:19  [Pipeline] readJSON
+13:58:19  [Pipeline] echo
+13:58:19  [GOVERNANCE] DAST in grace period. Violations are warnings only.
+13:58:19  [Pipeline] catchError
+13:58:19  [Pipeline] {
+13:58:19  [Pipeline] withEnv
+13:58:19  [Pipeline] {
+13:58:20  [Pipeline] sh
+13:58:20  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+13:58:20  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/dast_deny
+13:58:20  [GOVERNANCE] Using input JSON: dast_input.json
+13:58:20  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/dast_deny
+13:58:20  {
+13:58:20    "result": [
+13:58:20      {
+13:58:20        "decision_id": "b2fc506b-82b1-4060-af3e-a2420524670e",
+13:58:20        "path": "dast_input.json",
+13:58:20        "result": []
+13:58:20      }
+13:58:20    ]
+13:58:20  }
+13:58:20  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/required_security_steps/dast_deny
+13:58:20  [GOVERNANCE] OPA pipeline policy evaluation complete.
+13:58:21  [Pipeline] }
+13:58:21  [Pipeline] // withEnv
+13:58:21  [Pipeline] }
+13:58:21  [Pipeline] // catchError
