@@ -1,10 +1,16 @@
- + IFS=
-14:00:11  + read -r requirements_file
-14:00:11  + for req_file in $REQUIREMENTS
-14:00:11  + IFS=
-14:00:11  + read -r requirements_file
-14:00:11  + find . -iname requirements-dev.txt
-14:00:11  + python -m pip check
-14:00:12  aiobotocore 3.9.1 has requirement botocore<1.43.76,>=1.43.66, but you have botocore 1.43.56.
-14:00:13  + echo 'ERROR: environment is still broken after reinstall'
-14:00:13  ERROR: environment is still broken after reinstall
+python -m pip uninstall -y botocore
+
+python -m pip install \
+  --force-reinstall \
+  "botocore>=1.43.66,<1.43.76"
+
+python -m pip check
+
+
+
+
+python -m pip uninstall -y botocore
+
+python -m pip install --force-reinstall "botocore==1.43.75"
+
+python -m pip check
