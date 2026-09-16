@@ -1,16 +1,15 @@
-python -m pip uninstall -y botocore
+Brief Overview
 
-python -m pip install \
-  --force-reinstall \
-  "botocore>=1.43.66,<1.43.76"
+This work improves the OPA required AWS tagging policy by moving Project and Environment validation away from hardcoded values and making imac-config the primary source of truth.
 
-python -m pip check
+The updated solution:
 
+Dynamically loads Projects and Environments from imac-config stored in DynamoDB and passes them to OPA as data.json.
+Uses the Jenkins instance role for DynamoDB access by clearing AWS_PROFILE only for the DynamoDB request, preventing pipelines such as SIE from looking for the configuration table in the wrong AWS account.
+Validates Project and Environment dynamically so changes made in imac-config automatically flow into OPA without requiring policy updates.
+Supports legacy Project names such as dwb → data_workbench and mle → ml-engineering, while still validating their environments against the dynamically loaded canonical project configuration.
+Preserves the IMAC exception allowing a 12-digit AWS account ID as the Environment value.
+Fails safely on bad configuration data by denying evaluation when data.tagging, projects, or environments is missing or malformed.
+Adds unit-test coverage for dynamic configuration, legacy aliases, invalid environments, missing configuration data, IMAC account IDs, and environments such as dev-imac-lza.
 
-
-
-python -m pip uninstall -y botocore
-
-python -m pip install --force-reinstall "botocore==1.43.75"
-
-python -m pip check
+Overall: the tagging policy is now more centralized and maintainable—imac-config controls the valid Projects and Environments, while OPA enforces those values and maintains only the necessary backward-compatibility exceptions.
