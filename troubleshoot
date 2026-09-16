@@ -1,1 +1,206 @@
-Load dynamically and add exceptions as needed, with short names that are not in the imac-config like dwb, mle
+######################### required_default_tagging.rego
+
+package cdo.terraform.required_default_tagging
+
+import rego.v1
+
+
+###############################################################################
+# Dynamic Project aliases
+#
+# Projects and Environments are loaded dynamically from imac-config.
+# These aliases provide backwards compatibility for legacy short Project names
+# that are still used by existing resources but are not present in imac-config.
+###############################################################################
+
+project_aliases := {
+    "dwb": "data_workbench",
+    "mle": "ml-engineering",
+}
+
+
+###############################################################################
+# AWS account ID Environment exception
+###############################################################################
+
+aws_account_id_pattern := `^\d{12}$`
+
+
+###############################################################################
+# Required tags
+###############################################################################
+
+required_tags := {
+    "BusinessUnit": ["cdo"],
+    "FISMABoundary": ["dsgss", "dwb"],
+}
+
+flexible_required_tags := {
+    "ApplicationName",
+    "OwnerContact",
+    "CreatedBy",
+}
+
+dynamic_required_tags := {
+    "Environment",
+    "Project",
+}
+
+all_required_tag_keys := object.keys(required_tags) |
+    flexible_required_tags |
+    dynamic_required_tags
+
+
+###############################################################################
+# Dynamic tagging data validation
+###############################################################################
+
+deny contains msg if {
+    not data.tagging
+
+    msg := "tagging data was not provided to policy evaluation"
+}
+
+
+deny contains msg if {
+    count(data.tagging) == 0
+
+    msg := "tagging data is empty"
+}
+
+
+deny contains msg if {
+    data.tagging
+    not data.tagging.projects
+
+    msg := "tagging projects data was not provided to policy evaluation"
+}
+
+
+deny contains msg if {
+    data.tagging
+    not data.tagging.environments
+
+    msg := "tagging environments data was not provided to policy evaluation"
+}
+
+
+###############################################################################
+# Project resolution
+#
+# First try the Project exactly as supplied.
+# If it is not present in imac-config, try the legacy alias mapping.
+###############################################################################
+
+resolved_project(project) := project if {
+    project in data.tagging.projects
+}
+
+
+resolved_project(project) := canonical_project if {
+    canonical_project := project_aliases[project]
+
+    canonical_project in data.tagging.projects
+}
+
+
+###############################################################################
+# Environment validation
+###############################################################################
+
+# Normal Project/Environment validation is always based on the dynamically
+# loaded environment list from imac-config.
+valid_environment(project, environment) if {
+    project_environments := data.tagging.environments[project]
+
+    environment in project_environments
+}
+
+
+# IMAC can additionally use a 12-digit AWS account ID as Environment.
+valid_environment(project, environment) if {
+    project == "imac"
+
+    regex.match(aws_account_id_pattern, environment)
+}
+
+
+###############################################################################
+# Collect invalid required tag values
+###############################################################################
+
+collect_invalid_tags(resource) := invalid if {
+    resource_tags := collect_resource_tags(resource)
+
+
+    ###########################################################################
+    # Fixed-value required tags
+    ###########################################################################
+
+    invalid_static := [sprintf("%s=%s", [tag, value]) |
+        some tag in object.keys(required_tags)
+
+        value := resource_tags[tag]
+
+        value != null
+        value != ""
+
+        not value in required_tags[tag]
+    ]
+
+
+    ###########################################################################
+    # Project validation
+    #
+    # Accept:
+    #   - Projects loaded dynamically from imac-config
+    #   - Legacy aliases whose canonical Project exists in imac-config
+    ###########################################################################
+
+    invalid_project := [sprintf("Project=%s", [project]) |
+        project := resource_tags["Project"]
+
+        project != null
+        project != ""
+
+        data.tagging.projects
+
+        not resolved_project(project)
+    ]
+
+
+    ###########################################################################
+    # Environment validation
+    #
+    # Resolve legacy Project names first, then validate the Environment
+    # against the canonical Project's dynamically loaded environments.
+    ###########################################################################
+
+    invalid_environment := [sprintf("Environment=%s", [environment]) |
+        project := resource_tags["Project"]
+        environment := resource_tags["Environment"]
+
+        project != null
+        project != ""
+
+        environment != null
+        environment != ""
+
+        data.tagging.projects
+        data.tagging.environments
+
+        canonical_project := resolved_project(project)
+
+        not valid_environment(canonical_project, environment)
+    ]
+
+
+    invalid := array.flatten([
+        invalid_static,
+        invalid_project,
+        invalid_environment,
+    ])
+}
+
+
+#######################################  
