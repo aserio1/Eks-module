@@ -1,206 +1,1144 @@
-######################### required_default_tagging.rego
+#############################  required_default_tagging.rego
 
+# METADATA
+# title: Check for missing AWS tags
+# description: Check for missing aws tags to AWS resources defined by Terraform region.
+# scope: package
+# entrypoint: true
+# custom:
+#   id: CDO-TFPLAN-0002
+#   avd_id: CDO-TFPLAN-0002
+#   severity: CRITICAL
+#   short_code: required-default-tagging
+#   recommended_actions: Ensure you have the default tags set.
+#   input:
+#     selector:
+#       - type: json
 package cdo.terraform.required_default_tagging
 
 import rego.v1
 
 
-###############################################################################
-# Dynamic Project aliases
-#
-# Projects and Environments are loaded dynamically from imac-config.
-# These aliases provide backwards compatibility for legacy short Project names
-# that are still used by existing resources but are not present in imac-config.
-###############################################################################
-
-project_aliases := {
-    "dwb": "data_workbench",
-    "mle": "ml-engineering",
+# Resources we want to ignore
+ignored_resource_types := {
+	"aws_api_gateway_documentation_part",
+	"aws_api_gateway_integration",
+	"aws_api_gateway_resource",
+	"aws_apigatewayv2_integration",
+	"aws_apigatewayv2_route",
+	"aws_appconfig_hosted_configuration_version",
+	"aws_backup_selection",
+	"aws_cloudwatch_event_target",
+	"aws_cloudwatch_log_subscription_filter",
+	"aws_cognito_identity_provider",
+	"aws_iam_role_policy",
+	"aws_iam_policy_attachment",
+	"aws_iam_role_policy_attachment",
+	"aws_kms_alias",
+	"aws_lakeformation_data_lake_setting",
+	"aws_lakeformation_lf_tag",
+	"aws_lakeformation_lf_tag_policy",
+	"aws_lakeformation_permissions",
+	"aws_lakeformation_resource",
+	"aws_lakeformation_resource_lf_tags",
+	"aws_lambda_layer_version",
+	"aws_lambda_permission",
+	"aws_lb_listener_rule",
+	"aws_lb_listener",
+	"aws_lb_target_group_attachment",
+	"aws_s3_bucket_acl",
+	"aws_s3_bucket_lifecycle_configuration",
+	"aws_s3_bucket_policy",
+	"aws_s3_bucket_public_access_block",
+	"aws_s3_bucket_server_side_encryption_configuration",
+	"aws_s3_bucket_versioning",
+	"aws_sagemaker_image_version",
+	"aws_scheduler_schedule",
+	"aws_secretsmanager_secret_version",
+	"aws_security_group_rule",
+	"aws_sns_topic_subscription",
+	"aws_ssoadmin_application_assignment",
+	"aws_vpc_security_group_ingress_rule",
+	"aws_vpc_security_group_egress_rule",
+	"aws_vpc_endpoint_route_table_association",
+	"aws_route_table_association",
+	"aws_subnet_route_table_association",
+	"jenkins_folder",
+	"jenkins_job",
+	"null_resource",
+	"random_password",
+	"terraform_data",
+	"time_static",
 }
 
 
-###############################################################################
-# AWS account ID Environment exception
-###############################################################################
-
+# AWS account ID format.
+# IMAC is allowed to use a 12-digit AWS account ID as Environment.
 aws_account_id_pattern := `^\d{12}$`
 
 
-###############################################################################
-# Required tags
-###############################################################################
-
+# Required tags with fixed allowed values
 required_tags := {
-    "BusinessUnit": ["cdo"],
-    "FISMABoundary": ["dsgss", "dwb"],
+	"BusinessUnit": ["cdo"],
+	"FISMABoundary": ["dsgss", "dwb"],
 }
 
+
+# Required tags whose values are not restricted to a predefined list
 flexible_required_tags := {
-    "ApplicationName",
-    "OwnerContact",
-    "CreatedBy",
+	"ApplicationName",
+	"OwnerContact",
+	"CreatedBy",
 }
 
+
+# Required tags whose allowed values come dynamically from imac-config
 dynamic_required_tags := {
-    "Environment",
-    "Project",
+	"Environment",
+	"Project",
 }
 
+
+# Union of all required tag keys
 all_required_tag_keys := object.keys(required_tags) |
-    flexible_required_tags |
-    dynamic_required_tags
+	flexible_required_tags |
+	dynamic_required_tags
+
+
+# Only evaluate resources being created or updated
+valid_actions := {
+	"create",
+	"update",
+}
 
 
 ###############################################################################
 # Dynamic tagging data validation
 ###############################################################################
 
+# The tagging object must be provided to the policy.
 deny contains msg if {
-    not data.tagging
+	not data.tagging
 
-    msg := "tagging data was not provided to policy evaluation"
+	msg := "tagging data was not provided to policy evaluation"
 }
 
 
+# The tagging object must not be empty.
 deny contains msg if {
-    count(data.tagging) == 0
+	count(data.tagging) == 0
 
-    msg := "tagging data is empty"
+	msg := "tagging data is empty"
 }
 
 
+# The tagging object must contain the dynamic Project list.
 deny contains msg if {
-    data.tagging
-    not data.tagging.projects
+	data.tagging
+	not data.tagging.projects
 
-    msg := "tagging projects data was not provided to policy evaluation"
+	msg := "tagging projects data was not provided to policy evaluation"
 }
 
 
+# The tagging object must contain the project-specific Environment map.
 deny contains msg if {
-    data.tagging
-    not data.tagging.environments
+	data.tagging
+	not data.tagging.environments
 
-    msg := "tagging environments data was not provided to policy evaluation"
+	msg := "tagging environments data was not provided to policy evaluation"
 }
 
 
 ###############################################################################
-# Project resolution
-#
-# First try the Project exactly as supplied.
-# If it is not present in imac-config, try the legacy alias mapping.
+# Missing required tags
 ###############################################################################
 
-resolved_project(project) := project if {
-    project in data.tagging.projects
+deny contains res if {
+	some resource in input.resource_changes
+
+	not ignored_resource_types[resource.type]
+
+	some action in resource.change.actions
+	valid_actions[action]
+
+	# Only enforce tagging on resources that expose tags.
+	count(collect_resource_tags(resource)) > 0
+
+	missing_tags := collect_missing_tags(resource)
+
+	count(missing_tags) > 0
+
+	res := sprintf(
+		"Resource %s is missing required tags: %v.",
+		[
+			resource.address,
+			missing_tags,
+		],
+	)
 }
 
 
-resolved_project(project) := canonical_project if {
-    canonical_project := project_aliases[project]
+###############################################################################
+# Invalid required tag values
+###############################################################################
 
-    canonical_project in data.tagging.projects
+deny contains res if {
+	some resource in input.resource_changes
+
+	not ignored_resource_types[resource.type]
+
+	some action in resource.change.actions
+	valid_actions[action]
+
+	invalid_tags := collect_invalid_tags(resource)
+
+	count(invalid_tags) > 0
+
+	res := sprintf(
+		"Resource '%s' has invalid tag values: %v",
+		[
+			resource.address,
+			invalid_tags,
+		],
+	)
 }
 
 
 ###############################################################################
-# Environment validation
+# Required tags with empty values
 ###############################################################################
 
-# Normal Project/Environment validation is always based on the dynamically
-# loaded environment list from imac-config.
+deny contains res if {
+	some resource in input.resource_changes
+
+	not ignored_resource_types[resource.type]
+
+	some action in resource.change.actions
+	valid_actions[action]
+
+	count(collect_resource_tags(resource)) > 0
+
+	not tags_are_unknown(resource)
+
+	resource_tags := collect_resource_tags(resource)
+
+	empty_tags := [tag |
+		some tag in all_required_tag_keys
+
+		resource_tags[tag] == ""
+	]
+
+	count(empty_tags) > 0
+
+	res := sprintf(
+		"Resource '%s' has empty values for required tags: %v",
+		[
+			resource.address,
+			empty_tags,
+		],
+	)
+}
+
+
+###############################################################################
+# Helper function to get missing required tags
+###############################################################################
+
+collect_missing_tags(resource) := missing if {
+	not tags_are_unknown(resource)
+
+	resource_tags := collect_resource_tags(resource)
+
+	missing := [tag |
+		some tag in all_required_tag_keys
+
+		not resource_tags[tag]
+	]
+}
+
+
+###############################################################################
+# Helper function to get invalid tag values
+###############################################################################
+
+collect_invalid_tags(resource) := invalid if {
+	resource_tags := collect_resource_tags(resource)
+
+
+	# Validate fixed-value required tags.
+	invalid_static := [sprintf("%s=%s", [tag, value]) |
+		some tag in object.keys(required_tags)
+
+		value := resource_tags[tag]
+
+		value != null
+		value != ""
+
+		not value in required_tags[tag]
+	]
+
+
+	# Project must exist in the dynamically loaded project list.
+	invalid_project := [sprintf("Project=%s", [project]) |
+		project := resource_tags["Project"]
+
+		project != null
+		project != ""
+
+		data.tagging.projects
+
+		not project in data.tagging.projects
+	]
+
+
+	# Environment must be valid for the selected Project.
+	# Only validate Environment after Project itself has been confirmed valid.
+	invalid_environment := [sprintf("Environment=%s", [environment]) |
+		project := resource_tags["Project"]
+		environment := resource_tags["Environment"]
+
+		project != null
+		project != ""
+
+		environment != null
+		environment != ""
+
+		data.tagging.projects
+		data.tagging.environments
+
+		project in data.tagging.projects
+
+		not valid_environment(project, environment)
+	]
+
+
+	invalid := array.flatten([
+		invalid_static,
+		invalid_project,
+		invalid_environment,
+	])
+}
+
+
+###############################################################################
+# Helper function to validate Environment for Project
+###############################################################################
+
+# Standard Project/Environment validation comes directly from imac-config.
 valid_environment(project, environment) if {
-    project_environments := data.tagging.environments[project]
+	project_environments := data.tagging.environments[project]
 
-    environment in project_environments
+	environment in project_environments
 }
 
 
 # IMAC can additionally use a 12-digit AWS account ID as Environment.
 valid_environment(project, environment) if {
-    project == "imac"
+	project == "imac"
 
-    regex.match(aws_account_id_pattern, environment)
+	regex.match(
+		aws_account_id_pattern,
+		environment,
+	)
 }
 
 
 ###############################################################################
-# Collect invalid required tag values
+# Helper function to extract resource tags
 ###############################################################################
 
-collect_invalid_tags(resource) := invalid if {
-    resource_tags := collect_resource_tags(resource)
+collect_resource_tags(resource) := tags if {
+	tags := resource.change.after.tags_all
+} else := tags if {
+	tags := resource.change.after.tags
+} else := tags if {
+	# Fallback for resources such as Auto Scaling Groups that expose
+	# tags as tag blocks instead of a normal tags map.
+	tags := {t.key: t.value |
+		some t in resource.change.after.tag
+
+		t.key != null
+	}
+} else := {}
 
 
-    ###########################################################################
-    # Fixed-value required tags
-    ###########################################################################
+###############################################################################
+# Helper function to detect unknown/computed tags
+###############################################################################
 
-    invalid_static := [sprintf("%s=%s", [tag, value]) |
-        some tag in object.keys(required_tags)
-
-        value := resource_tags[tag]
-
-        value != null
-        value != ""
-
-        not value in required_tags[tag]
-    ]
-
-
-    ###########################################################################
-    # Project validation
-    #
-    # Accept:
-    #   - Projects loaded dynamically from imac-config
-    #   - Legacy aliases whose canonical Project exists in imac-config
-    ###########################################################################
-
-    invalid_project := [sprintf("Project=%s", [project]) |
-        project := resource_tags["Project"]
-
-        project != null
-        project != ""
-
-        data.tagging.projects
-
-        not resolved_project(project)
-    ]
-
-
-    ###########################################################################
-    # Environment validation
-    #
-    # Resolve legacy Project names first, then validate the Environment
-    # against the canonical Project's dynamically loaded environments.
-    ###########################################################################
-
-    invalid_environment := [sprintf("Environment=%s", [environment]) |
-        project := resource_tags["Project"]
-        environment := resource_tags["Environment"]
-
-        project != null
-        project != ""
-
-        environment != null
-        environment != ""
-
-        data.tagging.projects
-        data.tagging.environments
-
-        canonical_project := resolved_project(project)
-
-        not valid_environment(canonical_project, environment)
-    ]
-
-
-    invalid := array.flatten([
-        invalid_static,
-        invalid_project,
-        invalid_environment,
-    ])
+tags_are_unknown(resource) if {
+	resource.change.after_unknown.tags
 }
 
 
-#######################################  
+tags_are_unknown(resource) if {
+	resource.change.after_unknown.tags_all
+}
+
+
+
+
+
+
+####################################   required_default_tagging_test.rego
+
+package cdo.terraform.required_default_tagging_test
+
+import rego.v1
+
+import data.cdo.terraform.required_default_tagging as check
+
+
+###############################################################################
+# Mock tagging data
+#
+# This represents the structure supplied to OPA from imac-config.
+###############################################################################
+
+mock_tagging := {
+	"projects": [
+		"cgap",
+		"data_workbench",
+		"gis",
+		"ides",
+		"imac",
+		"ml-engineering",
+		"oams",
+		"salt",
+		"sia",
+		"sie",
+		"swift-insights-explorer",
+		"utility",
+	],
+
+	"environments": {
+		"cgap": [
+			"dev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"data_workbench": [
+			"dev",
+			"predev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"gis": [
+			"dev",
+			"predev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"ides": [
+			"dev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"imac": [
+			"dev",
+			"predev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+			"dev-imac-lza",
+		],
+
+		"ml-engineering": [
+			"dev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"oams": [
+			"dev",
+			"test",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"salt": [
+			"dev",
+			"prod",
+		],
+
+		"sia": [
+			"dev",
+			"prod",
+		],
+
+		"sie": [
+			"dev",
+			"qa",
+			"stage",
+			"prod",
+		],
+
+		"swift-insights-explorer": [
+			"dev",
+			"qa",
+			"prod",
+		],
+
+		"utility": [
+			"dev",
+			"prod",
+		],
+	},
+}
+
+
+###############################################################################
+# Valid dynamic Project and Environment
+###############################################################################
+
+test_valid_dynamic_project_environment if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.test",
+					"type": "aws_s3_bucket",
+
+					"change": {
+						"actions": ["create"],
+
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "dev",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "sie",
+							},
+						},
+
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# Valid IMAC environment loaded from imac-config
+###############################################################################
+
+test_valid_imac_lza_environment if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.imac_lza",
+					"type": "aws_s3_bucket",
+
+					"change": {
+						"actions": ["update"],
+
+						"after": {
+							"tags": {
+								"ApplicationName": "imac",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "dev-imac-lza",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "imac",
+							},
+						},
+
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# IMAC account ID is valid as Environment
+###############################################################################
+
+test_imac_account_id_environment_allowed if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.imac",
+					"type": "aws_s3_bucket",
+
+					"change": {
+						"actions": ["create"],
+
+						"after": {
+							"tags": {
+								"ApplicationName": "imac",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "966555604991",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "imac",
+							},
+						},
+
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# Account ID is invalid for non-IMAC projects
+###############################################################################
+
+test_non_imac_account_id_environment_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.sie",
+					"type": "aws_s3_bucket",
+
+					"change": {
+						"actions": ["create"],
+
+						"after": {
+							"tags": {
+								"ApplicationName": "sie",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "966555604991",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "sie",
+							},
+						},
+
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 1
+
+	"Resource 'aws_s3_bucket.sie' has invalid tag values: [\"Environment=966555604991\"]" in result
+}
+
+
+###############################################################################
+# Invalid Project
+###############################################################################
+
+test_invalid_project_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.invalid_project",
+					"type": "aws_s3_bucket",
+
+					"change": {
+						"actions": ["create"],
+
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "dev",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "invalid-project",
+							},
+						},
+
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 1
+
+	"Resource 'aws_s3_bucket.invalid_project' has invalid tag values: [\"Project=invalid-project\"]" in result
+}
+
+
+###############################################################################
+# Invalid Environment for Project
+###############################################################################
+
+test_invalid_environment_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.invalid_environment",
+					"type": "aws_s3_bucket",
+
+					"change": {
+						"actions": ["create"],
+
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "does-not-exist",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "owner@example.com",
+								"Project": "sie",
+							},
+						},
+
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 1
+
+	"Resource 'aws_s3_bucket.invalid_environment' has invalid tag values: [\"Environment=does-not-exist\"]" in result
+}
+
+
+###############################################################################
+# Missing required tag
+###############################################################################
+
+test_missing_required_tag_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.missing_owner",
+					"type": "aws_s3_bucket",
+
+					"change": {
+						"actions": ["create"],
+
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "dev",
+								"FISMABoundary": "dsgss",
+								"Project": "sie",
+							},
+						},
+
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) > 0
+}
+
+
+###############################################################################
+# Empty required tag
+###############################################################################
+
+test_empty_required_tag_denied if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.empty_owner",
+					"type": "aws_s3_bucket",
+
+					"change": {
+						"actions": ["create"],
+
+						"after": {
+							"tags": {
+								"ApplicationName": "test",
+								"BusinessUnit": "cdo",
+								"CreatedBy": "terraform",
+								"Environment": "dev",
+								"FISMABoundary": "dsgss",
+								"OwnerContact": "",
+								"Project": "sie",
+							},
+						},
+
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) > 0
+}
+
+
+###############################################################################
+# Destroy action is ignored
+###############################################################################
+
+test_destroy_action_ignored if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_s3_bucket.destroy",
+					"type": "aws_s3_bucket",
+
+					"change": {
+						"actions": ["delete"],
+						"after": {},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# Ignored resource type is ignored
+###############################################################################
+
+test_ignored_resource_type if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "null_resource.test",
+					"type": "null_resource",
+
+					"change": {
+						"actions": ["create"],
+
+						"after": {
+							"triggers": {},
+						},
+
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# Untaggable resource is ignored
+###############################################################################
+
+test_untaggable_resource_ignored if {
+	result := check.deny
+		with input as {
+			"resource_changes": [
+				{
+					"address": "aws_example.test",
+					"type": "aws_example",
+
+					"change": {
+						"actions": ["create"],
+						"after": {},
+						"after_unknown": {},
+					},
+				},
+			],
+		}
+		with data.tagging as mock_tagging
+
+	count(result) == 0
+}
+
+
+###############################################################################
+# Missing dynamic tagging data
+###############################################################################
+
+test_missing_dynamic_tagging_data if {
+	result := check.deny
+		with input as {
+			"resource_changes": [],
+		}
+
+	"tagging data was not provided to policy evaluation" in result
+}
+
+
+###############################################################################
+# Empty dynamic tagging data
+###############################################################################
+
+test_empty_dynamic_tagging_data if {
+	result := check.deny
+		with input as {
+			"resource_changes": [],
+		}
+		with data.tagging as {}
+
+	"tagging data is empty" in result
+}
+
+
+###############################################################################
+# Missing dynamic projects data
+###############################################################################
+
+test_missing_dynamic_projects_data if {
+	result := check.deny
+		with input as {
+			"resource_changes": [],
+		}
+		with data.tagging as {
+			"environments": {
+				"imac": [
+					"dev",
+					"prod",
+				],
+			},
+		}
+
+	"tagging projects data was not provided to policy evaluation" in result
+}
+
+
+###############################################################################
+# Missing dynamic environments data
+###############################################################################
+
+test_missing_dynamic_environments_data if {
+	result := check.deny
+		with input as {
+			"resource_changes": [],
+		}
+		with data.tagging as {
+			"projects": [
+				"imac",
+			],
+		}
+
+	"tagging environments data was not provided to policy evaluation" in result
+}
+
+
+
+
+
+#######################################      INFRA
+
+#!/bin/bash
+
+REPO_URL="https://git.aws.hhsoig.gov/CDO/imac-policies.git"
+REPO_BRANCH="main"
+
+POLICIES_ROOT_DIR="opa"
+POLICIES_DIR="policies"
+POLICIES_BUNDLE="${POLICIES_ROOT_DIR}/${POLICIES_DIR}"
+
+DECISION="cdo/terraform/required_default_tagging/deny"
+
+TF_PLAN_FILE="${AWS_PROFILE}.tfplan" # generated by plan_infrastructure()
+INPUT_FILE="${AWS_PROFILE}-tfplan.json"
+
+IMAC_CONFIG_TABLE="dev-ImacConfigTable"
+IMAC_CONFIG_KEY="IMAC_CONFIG"
+IMAC_CONFIG_REGION="us-east-1"
+
+
+echo "[GOVERNANCE] Starting OPA policy evaluation..."
+echo "[GOVERNANCE] Policies Bundle: $POLICIES_BUNDLE"
+echo "[GOVERNANCE] Input File: $INPUT_FILE"
+echo "[GOVERNANCE] Decision Path: $DECISION"
+echo "[GOVERNANCE] Policies Branch: $REPO_BRANCH"
+
+
+# Convert the Terraform plan to JSON so that OPA can read the plan
+if [[ -f "${TF_PLAN_FILE}" ]]; then
+    terraform show -json "${TF_PLAN_FILE}" > "${INPUT_FILE}"
+else
+    echo "WARNING: No ${TF_PLAN_FILE} found. Skipping policy check..."
+    exit 0
+fi
+
+
+# Download the imac-policies/policies/cdo/terraform
+if [[ ! -d "${POLICIES_ROOT_DIR}" ]]; then
+    git clone \
+        --depth 1 \
+        --branch "${REPO_BRANCH}" \
+        --no-checkout \
+        "${REPO_URL}" \
+        "${POLICIES_ROOT_DIR}"
+
+    cd "${POLICIES_ROOT_DIR}"
+
+    # Initialize in cone mode before setting sparse-checkout path
+    git sparse-checkout init --cone
+
+    # Checkout only the required policies
+    git sparse-checkout set "${POLICIES_DIR}/${DECISION}" && git checkout
+
+    # Remove the _test.rego files, otherwise opa exec will run the tests as well
+    find . -name '*_test.rego' | xargs rm -f
+
+    cd ..
+fi
+
+
+###############################################################################
+# Load dynamic Project and Environment configuration from imac-config
+###############################################################################
+
+echo "[GOVERNANCE] Loading tagging configuration from ${IMAC_CONFIG_TABLE}..."
+
+# plan_infrastructure() may set AWS_PROFILE to the team's AWS account.
+# Clear it only for this DynamoDB lookup so the AWS CLI uses the
+# Jenkins agent instance role from the account that owns ImacConfigTable.
+CONFIG_JSON=$(AWS_PROFILE= AWS_DEFAULT_PROFILE= \
+    aws dynamodb get-item \
+    --table-name "${IMAC_CONFIG_TABLE}" \
+    --key "{\"Name\":{\"S\":\"${IMAC_CONFIG_KEY}\"}}" \
+    --region "${IMAC_CONFIG_REGION}" \
+    --query 'Item.CONFIG_JSON.S' \
+    --output text)
+
+
+if [[ -z "${CONFIG_JSON}" || "${CONFIG_JSON}" == "None" ]]; then
+    echo "[GOVERNANCE] ERROR: IMAC_CONFIG was not returned from DynamoDB."
+    exit 1
+fi
+
+
+# CONFIG_JSON is stored as an escaped JSON string in DynamoDB
+CONFIG_JSON=$(printf '%s' "${CONFIG_JSON}" | sed 's/\\"/"/g')
+
+# Remove surrounding quotes if the value still contains them
+CONFIG_JSON="${CONFIG_JSON#\"}"
+CONFIG_JSON="${CONFIG_JSON%\"}"
+
+
+# Verify that the retrieved configuration is valid JSON
+if ! printf '%s' "${CONFIG_JSON}" | jq empty >/dev/null 2>&1; then
+    echo "[GOVERNANCE] ERROR: CONFIG_JSON returned from DynamoDB is not valid JSON."
+    exit 1
+fi
+
+
+###############################################################################
+# Generate OPA data
+#
+# Expected data.json format:
+#
+# {
+#   "tagging": {
+#     "projects": ["imac", "sie"],
+#     "environments": {
+#       "imac": ["dev", "prod"],
+#       "sie": ["dev", "qa", "prod"]
+#     }
+#   }
+# }
+###############################################################################
+
+TAGGING_DATA_FILE="${POLICIES_BUNDLE}/data.json"
+
+printf '%s' "${CONFIG_JSON}" | jq '
+{
+    tagging: {
+        projects: (
+            .projects
+            | keys
+        ),
+
+        environments: (
+            .projects
+            | with_entries(
+                .value = (.value.environments | keys)
+            )
+        )
+    }
+}
+' > "${TAGGING_DATA_FILE}"
+
+
+echo "[GOVERNANCE] OPA tagging data generated successfully."
+
+
+###############################################################################
+# Debugging only
+###############################################################################
+
+# echo "[GOVERNANCE] Generated OPA tagging data:"
+# jq '.tagging' "${TAGGING_DATA_FILE}"
+
+
+###############################################################################
+# Execute the OPA policy on the Terraform plan
+###############################################################################
+
+echo "[GOVERNANCE] Executing OPA policy..."
+
+opa exec \
+    --decision "${DECISION}" \
+    --bundle "${POLICIES_BUNDLE}" \
+    "${INPUT_FILE}" \
+    --format json \
+    --fail-non-empty
+
+
+OPA_STATUS=$?
+
+
+if [[ ${OPA_STATUS} -eq 0 ]]; then
+    echo "[GOVERNANCE] OPA policy check PASSED: $DECISION"
+else
+    echo "[GOVERNANCE] OPA policy check FAILED: $DECISION"
+    exit 1
+fi
+
+
+echo "[GOVERNANCE] OPA policy evaluation complete."
