@@ -1,55 +1,12 @@
-## PR Title
+policies/cdo/terraform/required_default_tagging/required_default_tagging.rego
+project_aliases := {
+	"dwb": "data_workbench",
+	"mle": "ml-engineering",
+"arcgis" : "gis",
+}
+Member
+@Cosmina-Chindris Cosmina-Chindris 1 hour ago
+where is "arcgis" covered?
 
-**Updating infra policy checks for OPA**
+also update policies/cdo/terraform/required_default_tagging/required_default_tagging_test.rego
 
-## Description
-
-Updates `governance/resources/infra_policy_check.sh` to support dynamic Project and Environment validation in OPA.
-
-### Changes
-
-* Retrieves the `IMAC_CONFIG` configuration from the `dev-ImacConfigTable` DynamoDB table.
-* Generates OPA `data.json` containing the dynamically configured Projects and Environments.
-* Uses the Jenkins agent instance role for the DynamoDB lookup by removing `AWS_PROFILE` only for that command.
-* Keeps the pipeline's existing `AWS_PROFILE` available for Terraform plan processing.
-* Updates the OPA policy repository branch to `main`.
-* Replaces `find | xargs` with `find -exec` for safer removal of `_test.rego` files.
-* Passes the generated dynamic configuration to OPA during Terraform policy evaluation.
-
-### Result
-
-Infrastructure policy checks can now provide the Project and Environment configuration from `imac-config` to OPA instead of requiring those values to be maintained directly in the policy.
-
-
-
-## PR Title
-
-**[IMAC-1241] Auto load project envs in OPA checks**
-
-## Description
-
-Updates the required default tagging OPA policy to dynamically validate Project and Environment tags using configuration supplied from `imac-config`.
-
-### Changes
-
-* Removes dependency on hardcoded Project and Environment lists.
-* Validates `Project` against dynamically loaded `data.tagging.projects`.
-* Validates `Environment` against the configured environments for the selected Project.
-* Adds backward compatibility for legacy Project names:
-
-  * `dwb` → `data_workbench`
-  * `mle` → `ml-engineering`
-* Legacy Project aliases use the Environment configuration of their canonical Project.
-* Preserves the IMAC exception that allows a 12-digit AWS account ID as the Environment value.
-* Adds validation for missing or malformed `data.tagging.projects` and `data.tagging.environments`.
-* Updates unit tests for dynamic Projects/Environments, legacy aliases, invalid values, missing configuration, and IMAC-specific behavior.
-
-## Security Information
-
-**Vulnerability/Misconfiguration Link:** N/A
-**Severity:** N/A
-**Summary:** Updates OPA required tagging validation to dynamically load valid Project and Environment values from `imac-config` while maintaining required legacy Project compatibility.
-**Ignore Reason:** N/A
-**Risk Assessment:** Low. The change centralizes Project and Environment validation using `imac-config` as the source of truth. Unit tests cover valid, invalid, legacy, and malformed configuration scenarios.
-**JIRA ticket:** IMAC-1241
-**Owner:** CDO / IMAC
