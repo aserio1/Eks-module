@@ -1,17 +1,7 @@
-governance/resources/infra_policy_check.sh
-    # Remove the _test.rego files, otherwise opa exec will run the tests as well
-    find . -name *_test.rego | xargs rm -f
-    find . -name '*_test.rego' | xargs rm -f
-Member
-@Claudio-SidiKemvo Claudio-SidiKemvo 17 minutes ago
-Consider -exec rm -f {} + instead of piping to xargs. Safer with unexpected filenames and empty results. I worry this might crash if we have empty results
-
-
-
 #!/bin/bash
 
 REPO_URL="https://git.aws.hhsoig.gov/CDO/imac-policies.git"
-REPO_BRANCH="feature1-IMAC-1241"
+REPO_BRANCH="main"
 
 POLICIES_ROOT_DIR="opa"
 POLICIES_DIR="policies"
@@ -61,7 +51,7 @@ if [[ ! -d "${POLICIES_ROOT_DIR}" ]]; then
     git sparse-checkout set "${POLICIES_DIR}/${DECISION}" && git checkout
 
     # Remove the _test.rego files, otherwise opa exec will run the tests as well
-    find . -name '*_test.rego' | xargs rm -f
+    find . -name '*_test.rego' -exec rm -f {} +
 
     cd ..
 fi
