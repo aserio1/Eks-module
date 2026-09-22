@@ -1,11 +1,7 @@
-  git push --set-upstream origin feature-IMAC-1262
-Enumerating objects: 8, done.
-Counting objects: 100% (8/8), done.
-Delta compression using up to 16 threads
-Compressing objects: 100% (5/5), done.
-Writing objects: 100% (5/5), 2.40 KiB | 2.40 MiB/s, done.
-Total 5 (delta 2), reused 0 (delta 0), pack-reused 0 (from 0)
-remote: Resolving deltas: 100% (2/2), completed with 2 local objects.
-To https://git.aws.hhsoig.gov/CDO/imac-shared-gh-actions.git
- ! [remote rejected] feature-IMAC-1262 -> feature-IMAC-1262 (refusing to allow a Personal Access Token to create or update workflow `.github/workflows/infra-policy-check.yml` without `workflow` scope)
-error: failed to push some refs to 'https://git.aws.hhsoig.gov/CDO/imac-shared-gh-actions.git'
+fatal: The current branch feature-IMAC-1262 has no upstream branch.
+To push the current branch and set the remote as upstream, use
+
+    git push --set-upstream origin feature-IMAC-1262
+
+To have this happen automatically for branches without a tracking
+upstream, see 'push.autoSetupRemote' in 'git help config'.
