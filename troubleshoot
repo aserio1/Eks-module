@@ -1,33 +1,17 @@
-Jira IMAC-1262 – Code Update Description
+https://git.aws.hhsoig.gov/CDO/imac-config/blob/main/Jenkinsfile
+Jenkinsfile
 
-Title: POC: Replicate IMAC Infrastructure Governance Policy Check Using GitHub Actions
+//Build Concurrency Config
+disable_concurrent_builds()
 
-Description
+git_checkout()
 
-Created a standalone GitHub Actions workflow (infra-policy-check.yml) to replicate the existing Jenkins infra_policy_check.sh governance process. The workflow retrieves IMAC project and environment configuration from DynamoDB, dynamically generates OPA tagging data, and evaluates Terraform plans against the existing infrastructure tagging policies.
+scan_dependencies()
 
-The workflow runs on the IMAC self-hosted GitHub Actions runner and supports automatic execution on pushes to the main branch, as well as manual execution for testing.
+lint_infrastructure(true)
+scan_infrastructure(true)
 
-Changes Implemented
+plan_infrastructure(dev)
+deploy_infrastructure(dev)
 
-Created .github/workflows/infra-policy-check.yml as a separate governance workflow without modifying the existing Terraform plan workflow.
-
-Configured automatic execution on pushes to main and manual execution through workflow_dispatch.
-
-Added validation for required tools, including AWS CLI, Terraform, jq, OPA, and Git.
-
-Implemented Terraform plan retrieval from S3 and conversion to JSON for OPA evaluation.
-
-Integrated the existing CDO/imac-policies repository to retrieve infrastructure governance policies.
-
-Added DynamoDB integration to retrieve IMAC_CONFIG from dev-ImacConfigTable using the runner's AWS credentials.
-
-Implemented dynamic generation of opa/policies/data.json containing the configured IMAC projects and environments.
-
-Added OPA policy evaluation using the cdo/terraform/required_default_tagging/deny decision path.
-
-Configured the workflow to fail when the Terraform plan violates the required infrastructure tagging policies.
-
-Expected Outcome
-
-The GitHub Actions workflow provides an alternative to the existing Jenkins governance process by dynamically retrieving IMAC configuration from DynamoDB and enforcing infrastructure tagging policies against Terraform plans.
+compile_config()
