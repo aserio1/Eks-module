@@ -1,202 +1,178 @@
-
-name: IMAC Configuration Pipeline
-
-on:
-  push:
-    branches:
-      - main
-      - feature-IMAC-1262
-
-  workflow_dispatch:
-
-############################################################
-# Prevent concurrent builds
-############################################################
-
-concurrency:
-  group: imac-config-${{ github.ref }}
-  cancel-in-progress: false
-
-############################################################
-# IMAC DEV Configuration
-############################################################
-
-env:
-  PROJECT: imac
-  ENV_SHORT_NAME: dev
-
-  AWS_ACCOUNT_ID: "213141505949"
-
-  WORKING_DIRECTORY: infrastructure/terraform
-
-jobs:
-
-  imac-config:
-
-    name: IMAC Configuration Pipeline
-
-    runs-on: [self-hosted, imac]
-
-    permissions:
-      contents: read
-
-    steps:
-
-      ##########################################################
-      # Git Checkout
-      ##########################################################
-
-      - name: Checkout IMAC Config
-        uses: actions/checkout@v4
-
-      ##########################################################
-      # Verify AWS Identity
-      ##########################################################
-
-      - name: Verify AWS Identity
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "[AWS] Verifying AWS identity..."
-
-          # Auth comes from the runner's baked-in AWS profiles.
-          # Same authentication approach as Jenkins agents.
-
-          ACTUAL_ACCOUNT=$(
-            aws sts get-caller-identity \
-              --profile "${AWS_ACCOUNT_ID}" \
-              --query Account \
-              --output text
-          )
-
-          echo "[AWS] Account: ${ACTUAL_ACCOUNT}"
-
-          if [[ "${ACTUAL_ACCOUNT}" != "${AWS_ACCOUNT_ID}" ]]; then
-            echo "[AWS] ERROR: Incorrect AWS account."
-            exit 1
-          fi
-
-          echo "[AWS] AWS identity verified successfully."
-
-      ##########################################################
-      # Scan Dependencies
-      ##########################################################
-
-      - name: Scan Dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "[IMAC] Starting dependency scan..."
-
-          # TODO:
-          # Implement the equivalent of the Jenkins
-          # scan_dependencies() shared-library function.
-
-          echo "[IMAC] Dependency scanning not yet implemented."
-          exit 1
-
-      ##########################################################
-      # Lint Infrastructure
-      ##########################################################
-
-      - name: Lint Infrastructure
-        shell: bash
-        working-directory: ${{ env.WORKING_DIRECTORY }}
-        env:
-          AWS_PROFILE: ${{ env.AWS_ACCOUNT_ID }}
-        run: |
-          set -euo pipefail
-
-          echo "[IMAC] Starting infrastructure linting..."
-
-          terraform fmt -check -recursive
-
-          terraform init -backend=false
-
-          terraform validate
-
-          echo "[IMAC] Terraform validation completed."
-
-      ##########################################################
-      # Scan Infrastructure
-      ##########################################################
-
-      - name: Scan Infrastructure
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "[IMAC] Starting infrastructure scan..."
-
-          # TODO:
-          # Implement the equivalent of the Jenkins
-          # scan_infrastructure(true) shared-library function.
-
-          echo "[IMAC] Infrastructure scanning not yet implemented."
-          exit 1
-
-      ##########################################################
-      # Terraform Plan - DEV
-      ##########################################################
-
-      - name: Terraform Plan DEV
-        id: terraform-plan
-        uses: CDO/imac-shared-gh-actions/terraform/plan@v1
-        with:
-          project: imac
-          env_short_name: dev
-          working_directory: infrastructure/terraform
-          aws_profile_override: "213141505949"
-
-      ##########################################################
-      # Terraform Deploy - DEV
-      ##########################################################
-
-      - name: Terraform Deploy DEV
-        shell: bash
-        working-directory: ${{ env.WORKING_DIRECTORY }}
-        env:
-          AWS_PROFILE: ${{ steps.terraform-plan.outputs.aws_profile }}
-          PLAN_FILE: ${{ steps.terraform-plan.outputs.plan_file }}
-        run: |
-          set -euo pipefail
-
-          echo "[IMAC] Starting DEV deployment..."
-
-          echo "[IMAC] AWS Profile: ${AWS_PROFILE}"
-
-          if [[ -z "${PLAN_FILE}" || ! -f "${PLAN_FILE}" ]]; then
-            echo "[IMAC] ERROR: Terraform plan not found."
-            exit 1
-          fi
-
-          terraform apply \
-            -input=false \
-            "${PLAN_FILE}"
-
-          echo "[IMAC] DEV deployment completed."
-
-      ##########################################################
-      # Compile IMAC Configuration
-      ##########################################################
-
-      - name: Compile IMAC Configuration
-        shell: bash
-        env:
-          AWS_PROFILE: ${{ env.AWS_ACCOUNT_ID }}
-        run: |
-          set -euo pipefail
-
-          echo "[IMAC] Starting configuration compilation..."
-
-          # TODO:
-          # Implement the equivalent of the Jenkins
-          # compile_config() shared-library function.
-          #
-          # This stage should compile the IMAC configuration
-          # and publish it to the appropriate DynamoDB table.
-
-          echo "[IMAC] Configuration compilation not yet implemented."
-          exit 1
+{
+    "name" : "imac",
+    "description" : "Innovation, Modern Architectures, and Collaberation",
+    "owner" : "Katie Rose",
+    "cloud9_instance_profile" : "arn:aws:iam::213141505949:instance-profile/cloud9/AWSCloud9SSMInstanceProfile",
+    "environments" : {
+        "dev" : {
+            "name" : "dev",
+            "description" : "Dev deployment to Shared Services (currently dataworkbench dev)",
+            "account" : "ref:/account/213141505949.json"
+        },
+        "prod" : {
+            "name" : "prod",
+            "description" : "Prod deployment to Shared Services (currently dataworkbench dev)",
+            "account" : "ref:/account/213141505949.json"
+        },
+        "dev-imac-lza" : {
+            "name" : "dev-imac-lza",
+            "description" : "Dev environment for IMAC LZA Dev",
+            "account" : "ref:/account/055694273479.json"
+        },
+        "test-imac-lza" : {
+            "name" : "test-imac-lza",
+            "description" : "Test environment for IMAC LZA Test",
+            "account" : "ref:/account/594541046048.json"
+        },
+        "prod-imac-lza" : {
+            "name" : "prod-imac-lza",
+            "description" : "Prod environment for IMAC LZA Prod",
+            "account" : "ref:/account/102306345766.json"
+        },
+        "213141505949" : {
+            "name" : "213141505949",
+            "description" : "Deploy IMAC tools to TRI/DW Dev",
+            "account" : "ref:/account/213141505949.json"
+        },
+        "973222108556" : {
+            "name" : "973222108556",
+            "description" : "Deploy IMAC tools to TRI/DW QA",
+            "account" : "ref:/account/973222108556.json"
+        },
+        "333866270941" : {
+            "name" : "333866270941",
+            "description" : "Deploy IMAC tools to TRI/DW Prod",
+            "account" : "ref:/account/333866270941.json"
+        },
+        "475117487119" : {
+            "name" : "475117487119",
+            "description" : "Deploy IMAC tools to TAP Dev",
+            "account" : "ref:/account/475117487119.json"
+        },
+        "966555604991" : {
+            "name" : "966555604991",
+            "description" : "Deploy IMAC tools to TAP Prod",
+            "account" : "ref:/account/966555604991.json"
+        },
+        "757265181315" : {
+            "name" : "757265181315",
+            "description" : "Deploy IMAC tools to SIE LZA Dev",
+            "account" : "ref:/account/757265181315.json"
+        },
+        "598956749955" : {
+            "name" : "598956749955",
+            "description" : "Deploy IMAC tools to SIE LZA Test",
+            "account" : "ref:/account/598956749955.json"
+        },
+        "663200706104" : {
+            "name" : "663200706104",
+            "description" : "Deploy IMAC tools to SIE LZA Prod",
+            "account" : "ref:/account/663200706104.json"
+        },
+        "730335313798" : {
+            "name" : "730335313798",
+            "description" : "Deploy IMAC tools to IDEs Dev",
+            "account" : "ref:/account/730335313798.json"
+        },
+        "438465134269" : {
+            "name" : "438465134269",
+            "description" : "Deploy IMAC tools to IDEs Test",
+            "account" : "ref:/account/438465134269.json"
+        },
+        "202533541645" : { 
+            "name" : "202533541645",
+            "description" : "Deploy IMAC tools to IDEs Prod",
+            "account" : "ref:/account/202533541645.json"
+        },
+        "340752827390" : {
+            "name" : "340752827390",
+            "description" : "Deploy IMAC tools to Viz-tools Dev",
+            "account" : "ref:/account/340752827390.json"
+        },
+        "361769585396" : {
+            "name" : "361769585396",
+            "description" : "Deploy IMAC tools to Viz-tools Test",
+            "account" : "ref:/account/361769585396.json"
+        },
+        "445567108167" : {
+            "name" : "445567108167",
+            "description" : "Deploy IMAC tools to Viz-tools Prod",
+            "account" : "ref:/account/445567108167.json"
+        },
+        "779846803742" : {
+            "name" : "779846803742",
+            "description" : "Deploy IMAC tools to Gis-tools Dev",
+            "account" : "ref:/account/779846803742.json"
+        },
+        "864981735892" : {
+            "name" : "864981735892",
+            "description" : "Deploy IMAC tools to Gis-tools Test",
+            "account" : "ref:/account/864981735892.json"
+        },
+        "442426863774" : {
+            "name" : "442426863774",
+            "description" : "Deploy IMAC tools to Gis-tools Prod",
+            "account" : "ref:/account/442426863774.json"
+        },
+        "302695037820" : {
+            "name" : "302695037820",
+            "description" : "Deploy IMAC tools to DataPipelines Dev",
+            "account" : "ref:/account/302695037820.json"
+        },
+        "895583930055" : {
+            "name" : "895583930055",
+            "description" : "Deploy IMAC tools to DataPipelines QA",
+            "account" : "ref:/account/895583930055.json"
+        },
+        "817491136226" : {
+            "name" : "817491136226",
+            "description" : "Deploy IMAC tools to DataPipelines Prod",
+            "account" : "ref:/account/817491136226.json"
+        },
+         "723265503409" : { 
+            "name" : "723265503409",
+            "description" : "Deploy IMAC tools to Data Infrastructure Dev",
+            "account" : "ref:/account/723265503409.json"
+        },
+        "244639567260" : { 
+            "name" : "244639567260",
+            "description" : "Deploy IMAC tools to Data Infrastructure Test",
+            "account" : "ref:/account/244639567260.json"
+        },
+        "180703226693" : {
+            "name" : "180703226693",
+            "description" : "Deploy IMAC tools to Data Infrastructure Prod",
+            "account" : "ref:/account/180703226693.json"
+        },
+        "306026246970" : {
+            "name" : "306026246970",
+            "description" : "Deploy IMAC tools to DataAquisition Dev",
+            "account" : "ref:/account/306026246970.json"
+        },
+        "620558997858" : {
+            "name" : "620558997858",
+            "description" : "Deploy IMAC tools to DataAquisition Test",
+            "account" : "ref:/account/620558997858.json"
+        },
+        "756167686138" : {
+            "name" : "756167686138",
+            "description" : "Deploy IMAC tools to DataAquisition Prod",
+            "account" : "ref:/account/756167686138.json"
+        },
+        "055694273479" : {
+            "name" : "055694273479",
+            "description" : "Deploy IMAC tools to IMAC LZA Dev",
+            "account" : "ref:/account/055694273479.json"
+        },
+        "594541046048" : {
+            "name" : "594541046048",
+            "description" : "Deploy IMAC tools to IMAC LZA Test",
+            "account" : "ref:/account/594541046048.json"
+        },
+        "102306345766" : {
+            "name" : "102306345766",
+            "description" : "Deploy IMAC tools to IMAC LZA Prod",
+            "account" : "ref:/account/102306345766.json"
+        }
+    }
+}
