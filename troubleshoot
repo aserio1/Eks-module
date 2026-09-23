@@ -1,17 +1,184 @@
-https://git.aws.hhsoig.gov/CDO/imac-config/blob/main/Jenkinsfile
-Jenkinsfile
 
-//Build Concurrency Config
-disable_concurrent_builds()
+name: IMAC Config Pipeline
 
-git_checkout()
+on:
+  push:
+    branches:
+      - main
 
-scan_dependencies()
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: GitHub Actions runner
+        required: false
+        type: string
+        default: imac
 
-lint_infrastructure(true)
-scan_infrastructure(true)
+      aws_account_id:
+        description: Target AWS account ID
+        required: true
+        type: string
 
-plan_infrastructure(dev)
-deploy_infrastructure(dev)
+concurrency:
+  group: imac-config-${{ github.ref }}
+  cancel-in-progress: false
 
-compile_config()
+jobs:
+  imac-config:
+
+    name: IMAC Configuration Pipeline
+
+    runs-on: ${{ inputs.runner || 'imac' }}
+
+    permissions:
+      contents: read
+
+    env:
+      PROJECT: imac
+      ENV_SHORT_NAME: dev
+      WORKING_DIRECTORY: infrastructure/terraform
+
+      AWS_ACCOUNT_ID: ${{ inputs.aws_account_id || vars.AWS_ACCOUNT_ID }}
+
+    steps:
+
+      ##########################################################
+      # Git Checkout
+      ##########################################################
+
+      - name: Checkout IMAC Config
+        uses: actions/checkout@v4
+
+      ##########################################################
+      # Verify AWS Identity
+      ##########################################################
+
+      - name: Verify AWS Identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${AWS_ACCOUNT_ID}" ]]; then
+            echo "ERROR: AWS_ACCOUNT_ID is not configured."
+            exit 1
+          fi
+
+          aws sts get-caller-identity \
+            --profile "${AWS_ACCOUNT_ID}"
+
+      ##########################################################
+      # Scan Dependencies
+      ##########################################################
+
+      - name: Scan Dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting dependency scan..."
+
+          # TODO:
+          # Replace with the GitHub Actions equivalent
+          # of Jenkins scan_dependencies().
+
+          echo "[IMAC] Dependency scan integration pending."
+
+      ##########################################################
+      # Lint Infrastructure
+      ##########################################################
+
+      - name: Lint Infrastructure
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting infrastructure linting..."
+
+          terraform fmt -check -recursive
+
+          terraform init -backend=false
+
+          terraform validate
+
+          echo "[IMAC] Terraform validation completed."
+
+          # TODO:
+          # Add any additional linting performed by
+          # Jenkins lint_infrastructure(true).
+
+      ##########################################################
+      # Scan Infrastructure
+      ##########################################################
+
+      - name: Scan Infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting infrastructure scan..."
+
+          # TODO:
+          # Replace with the existing Jenkins
+          # scan_infrastructure(true) implementation.
+
+          echo "[IMAC] Infrastructure scan integration pending."
+
+      ##########################################################
+      # Terraform Plan - DEV
+      ##########################################################
+
+      - name: Terraform Plan DEV
+        id: terraform-plan
+        uses: CDO/imac-shared-gh-actions/terraform/plan@v1
+        with:
+          project: imac
+          env_short_name: dev
+          working_directory: infrastructure/terraform
+          aws_profile_override: ${{ env.AWS_ACCOUNT_ID }}
+
+      ##########################################################
+      # Terraform Deploy - DEV
+      ##########################################################
+
+      - name: Terraform Deploy DEV
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        env:
+          AWS_PROFILE: ${{ steps.terraform-plan.outputs.aws_profile }}
+          PLAN_FILE: ${{ steps.terraform-plan.outputs.plan_file }}
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting DEV deployment..."
+
+          if [[ ! -f "${PLAN_FILE}" ]]; then
+            echo "ERROR: Terraform plan not found."
+            exit 1
+          fi
+
+          terraform apply \
+            -input=false \
+            "${PLAN_FILE}"
+
+          echo "[IMAC] DEV deployment completed."
+
+      ##########################################################
+      # Compile IMAC Configuration
+      ##########################################################
+
+      - name: Compile IMAC Configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting configuration compilation..."
+
+          # TODO:
+          # Replace with the existing Jenkins
+          # compile_config() implementation.
+          #
+          # This should generate and publish the IMAC
+          # configuration to DynamoDB.
+
+          echo "[IMAC] Configuration compilation integration pending."
