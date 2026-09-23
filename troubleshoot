@@ -1,114 +1,18 @@
-name: IMAC Configuration Pipeline
-
-on:
-  push:
-    branches:
-      - main
-      - feature-IMAC-1262
-
-  workflow_dispatch:
-    inputs:
-      runner:
-        description: "GitHub Actions runner"
-        required: false
-        type: string
-        default: imac
-
-      environment:
-        description: "IMAC deployment environment"
-        required: false
-        type: choice
-        default: dev
-        options:
-          - dev
-          - prod
-          - dev-imac-lza
-          - test-imac-lza
-          - prod-imac-lza
-
-concurrency:
-  group: imac-config-${{ github.ref }}
-  cancel-in-progress: false
-
-env:
-  PROJECT: imac
-  ENV_SHORT_NAME: ${{ inputs.environment || 'dev' }}
-  IMAC_CONFIG_FILE: src/project/imac.json
-  WORKING_DIRECTORY: infrastructure/terraform
-
-jobs:
-  imac-config:
-    name: IMAC Configuration Pipeline
-
-    runs-on: ${{ inputs.runner || 'imac' }}
-
-    permissions:
-      contents: read
-
-    steps:
-      ##########################################################
-      # Git Checkout
-      ##########################################################
-
-      - name: Checkout IMAC Config
-        uses: actions/checkout@v4
-
-      ##########################################################
-      # Resolve AWS Account from imac.json
-      ##########################################################
-
-      - name: Resolve AWS Account
-        id: account
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ACCOUNT_REF=$(
-            jq -er \
-              --arg env "$ENV_SHORT_NAME" \
-              '.environments[$env].account' \
-              "$IMAC_CONFIG_FILE"
-          )
-
-          AWS_ACCOUNT_ID=$(
-            echo "$ACCOUNT_REF" |
-            sed -nE 's|^ref:/account/([0-9]{12})\.json$|\1|p'
-          )
-
-          if [[ -z "$AWS_ACCOUNT_ID" ]]; then
-            echo "ERROR: Unable to resolve AWS account."
-            exit 1
-          fi
-
-          echo "Environment: $ENV_SHORT_NAME"
-          echo "AWS Account: $AWS_ACCOUNT_ID"
-
-          echo "aws_account_id=$AWS_ACCOUNT_ID" >> "$GITHUB_OUTPUT"
-          echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> "$GITHUB_ENV"
-
-      ##########################################################
-      # Verify AWS Identity
-      ##########################################################
-
-      - name: Verify AWS Identity
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Auth comes from the runner's baked-in AWS profiles.
-          # Same as Jenkins agents.
-
-          aws sts get-caller-identity \
-            --profile "$AWS_ACCOUNT_ID"
-
-          ACTUAL_ACCOUNT=$(
-            aws sts get-caller-identity \
-              --profile "$AWS_ACCOUNT_ID" \
-              --query Account \
-              --output text
-          )
-
-          if [[ "$ACTUAL_ACCOUNT" != "$AWS_ACCOUNT_ID" ]]; then
-            echo "ERROR: AWS account mismatch."
-            exit 1
-          fi
+Run set -euo pipefail
+  set -euo pipefail
+  
+  if [[ -z "${AWS_ACCOUNT_ID}" ]]; then
+    echo "ERROR: AWS_ACCOUNT_ID is not configured."
+    exit 1
+  fi
+  
+  aws sts get-caller-identity \
+    --profile "${AWS_ACCOUNT_ID}"
+  shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+  env:
+    PROJECT: imac
+    ENV_SHORT_NAME: dev
+    WORKING_DIRECTORY: infrastructure/terraform
+    AWS_ACCOUNT_ID: 
+ERROR: AWS_ACCOUNT_ID is not configured.
+Error: Process completed with exit code 1.
