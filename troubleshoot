@@ -1,10 +1,12 @@
-  aws sts get-caller-identity \
-    --profile "${AWS_ACCOUNT_ID}"
-  shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
-  env:
-    PROJECT: imac
-    ENV_SHORT_NAME: dev
-    WORKING_DIRECTORY: infrastructure/terraform
-    AWS_ACCOUNT_ID: 
-ERROR: AWS_ACCOUNT_ID is not configured.
-Error: Process completed with exit code 1.
+update code here is how it was passed 
+
+      # Auth comes from the runner's baked-in AWS profiles (same as Jenkins agents)
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          aws sts get-caller-identity --profile ${{ inputs.aws_account_id }}
+
+
+
+set the runners like this 
+    runs-on: [self-hosted, imac]
