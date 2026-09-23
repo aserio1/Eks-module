@@ -1,23 +1,10 @@
-Title: POC: Migrate IMAC Configuration Jenkins Pipeline to GitHub Actions
-
-Description
-
-Created a new GitHub Actions workflow, imac-config-pipeline.yml, to replicate the existing Jenkins pipeline in the CDO/imac-config repository. The workflow is designed to automate dependency scanning, infrastructure validation, security scanning, Terraform planning and deployment, and IMAC configuration compilation.
-
-Changes Implemented
-
-Created a standalone GitHub Actions workflow under .github/workflows/.
-
-Configured automatic execution on pushes to main and manual execution for testing.
-
-Added concurrency controls to prevent overlapping infrastructure deployments.
-
-Configured execution on the existing IMAC self-hosted GitHub Actions runner.
-
-Integrated the existing shared Terraform plan action for the DEV environment.
-
-Added Terraform formatting and validation checks.
-
-Added a Terraform deployment step using the generated plan.
-
-Established integration points for dependency scanning, infrastructure security scanning, and IMAC configuration compilation.
+  aws sts get-caller-identity \
+    --profile "${AWS_ACCOUNT_ID}"
+  shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+  env:
+    PROJECT: imac
+    ENV_SHORT_NAME: dev
+    WORKING_DIRECTORY: infrastructure/terraform
+    AWS_ACCOUNT_ID: 
+ERROR: AWS_ACCOUNT_ID is not configured.
+Error: Process completed with exit code 1.
