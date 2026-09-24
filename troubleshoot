@@ -1,18 +1,205 @@
-Run set -euo pipefail
-  set -euo pipefail
-  
-  if [[ -z "${AWS_ACCOUNT_ID}" ]]; then
-    echo "ERROR: AWS_ACCOUNT_ID is not configured."
-    exit 1
-  fi
-  
-  aws sts get-caller-identity \
-    --profile "${AWS_ACCOUNT_ID}"
-  shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
-  env:
-    PROJECT: imac
-    ENV_SHORT_NAME: dev
-    WORKING_DIRECTORY: infrastructure/terraform
-    AWS_ACCOUNT_ID: 
-ERROR: AWS_ACCOUNT_ID is not configured.
-Error: Process completed with exit code 1.
+
+name: IMAC Configuration Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - feature-IMAC-1262
+
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "GitHub Actions runner"
+        required: false
+        type: string
+        default: imac
+
+############################################################
+# Prevent Concurrent Builds
+############################################################
+
+concurrency:
+  group: imac-config-${{ github.ref }}
+  cancel-in-progress: false
+
+############################################################
+# IMAC DEV Configuration
+############################################################
+
+env:
+  PROJECT: imac
+  ENV_SHORT_NAME: dev
+  WORKING_DIRECTORY: infrastructure/terraform
+  AWS_ACCOUNT_ID: "213141505949"
+
+jobs:
+
+  imac-config:
+
+    name: IMAC Configuration Pipeline
+
+    runs-on: ${{ inputs.runner || 'imac' }}
+
+    permissions:
+      contents: read
+
+    steps:
+
+      ##########################################################
+      # Git Checkout
+      ##########################################################
+
+      - name: Checkout IMAC Config
+        uses: actions/checkout@v4
+
+      ##########################################################
+      # Verify AWS Identity
+      ##########################################################
+
+      - name: Verify AWS Identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[AWS] Verifying IMAC DEV AWS account..."
+
+          # Use the AWS profile already configured on the runner.
+
+          aws sts get-caller-identity \
+            --profile 213141505949
+
+          ACTUAL_ACCOUNT=$(
+            aws sts get-caller-identity \
+              --profile 213141505949 \
+              --query Account \
+              --output text
+          )
+
+          if [[ "${ACTUAL_ACCOUNT}" != "213141505949" ]]; then
+            echo "[AWS] ERROR: Incorrect AWS account."
+            echo "[AWS] Expected: 213141505949"
+            echo "[AWS] Actual: ${ACTUAL_ACCOUNT}"
+            exit 1
+          fi
+
+          echo "[AWS] Successfully authenticated to IMAC DEV."
+
+      ##########################################################
+      # Scan Dependencies
+      ##########################################################
+
+      - name: Scan Dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting dependency scan..."
+
+          # TODO:
+          # Implement the existing Jenkins
+          # scan_dependencies() function.
+
+          echo "[IMAC] Dependency scan not yet implemented."
+          exit 1
+
+      ##########################################################
+      # Lint Infrastructure
+      ##########################################################
+
+      - name: Lint Infrastructure
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        env:
+          AWS_PROFILE: "213141505949"
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting infrastructure linting..."
+
+          terraform fmt -check -recursive
+
+          terraform init -backend=false
+
+          terraform validate
+
+          echo "[IMAC] Terraform validation completed."
+
+      ##########################################################
+      # Scan Infrastructure
+      ##########################################################
+
+      - name: Scan Infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting infrastructure scan..."
+
+          # TODO:
+          # Implement the existing Jenkins
+          # scan_infrastructure(true) function.
+
+          echo "[IMAC] Infrastructure scan not yet implemented."
+          exit 1
+
+      ##########################################################
+      # Terraform Plan DEV
+      ##########################################################
+
+      - name: Terraform Plan DEV
+        id: terraform-plan
+        uses: CDO/imac-shared-gh-actions/terraform/plan@v1
+        with:
+          project: imac
+          env_short_name: dev
+          working_directory: infrastructure/terraform
+          aws_profile_override: "213141505949"
+
+      ##########################################################
+      # Terraform Deploy DEV
+      ##########################################################
+
+      - name: Terraform Deploy DEV
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        env:
+          AWS_PROFILE: "213141505949"
+          PLAN_FILE: ${{ steps.terraform-plan.outputs.plan_file }}
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting DEV deployment..."
+
+          echo "[IMAC] AWS Profile: ${AWS_PROFILE}"
+
+          if [[ -z "${PLAN_FILE}" || ! -f "${PLAN_FILE}" ]]; then
+            echo "[IMAC] ERROR: Terraform plan not found."
+            exit 1
+          fi
+
+          terraform apply \
+            -input=false \
+            "${PLAN_FILE}"
+
+          echo "[IMAC] DEV deployment completed."
+
+      ##########################################################
+      # Compile IMAC Configuration
+      ##########################################################
+
+      - name: Compile IMAC Configuration
+        shell: bash
+        env:
+          AWS_PROFILE: "213141505949"
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting configuration compilation..."
+
+          # TODO:
+          # Implement the existing Jenkins
+          # compile_config() function.
+
+          echo "[IMAC] Configuration compilation not yet implemented."
+          exit 1
