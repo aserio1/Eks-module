@@ -1,3 +1,655 @@
+This code works just fine https://git.aws.hhsoig.gov/CDO/imac-github-runners/actions/runs/1362/job/7760
+#########################
+name: Run Terraform Plan
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        required: true
+        type: string
+      env_short_name:
+        required: true
+        type: string
+      profile:
+        required: false
+        type: string
+        default: ""
+      s3_key:
+        required: false
+        type: string
+        default: ""
+      var_file:
+        required: false
+        type: string
+        default: ""
+      additional_vars:
+        required: false
+        type: string
+        default: ""
+      working_directory:
+        required: false
+        type: string
+        default: infrastructure/terraform
+      runner:
+        required: false
+        type: string
+        default: imac
+      aws_account_id:
+        description: Target account ID — must match a runner AWS profile.
+        required: true
+        type: string
+    outputs:
+      plan_name:
+        value: ${{ jobs.plan.outputs.plan_name }}
+      plan_file:
+        value: ${{ jobs.plan.outputs.plan_file }}
+      state_bucket:
+        value: ${{ jobs.plan.outputs.state_bucket }}
+      plan_s3_uri:
+        value: ${{ jobs.plan.outputs.plan_s3_uri }}
+
+jobs:
+  plan:
+    runs-on: ${{ inputs.runner }}
+
+    outputs:
+      plan_name:    ${{ steps.terraform-plan.outputs.plan_name }}
+      plan_file:    ${{ steps.terraform-plan.outputs.plan_file }}
+      state_bucket: ${{ steps.terraform-plan.outputs.state_bucket }}
+      plan_s3_uri:  ${{ steps.upload-plan.outputs.plan_s3_uri }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Auth comes from the runner's baked-in AWS profiles (same as Jenkins agents)
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          aws sts get-caller-identity --profile ${{ inputs.aws_account_id }}
+
+      - name: Run terraform plan
+        id: terraform-plan
+        uses: CDO/imac-shared-gh-actions/terraform/plan@v1
+        with:
+          project:              ${{ inputs.project }}
+          env_short_name:       ${{ inputs.env_short_name }}
+          profile:              ${{ inputs.profile }}
+          s3_key:               ${{ inputs.s3_key }}
+          var_file:             ${{ inputs.var_file }}
+          additional_vars:      ${{ inputs.additional_vars }}
+          working_directory:    ${{ inputs.working_directory }}
+          aws_profile_override: ${{ inputs.aws_account_id }}
+
+      # Plan goes to the project artifacts bucket. GitHub artifact
+      # storage is not usable on our GHES (v4 unsupported, v3 blocked
+      # by the instance cert), and S3 matches the Jenkins model anyway.
+      - name: Upload plan to S3
+        id: upload-plan
+        shell: bash
+        working-directory: ${{ inputs.working_directory }}
+        env:
+          AWS_PROFILE:      ${{ steps.terraform-plan.outputs.aws_profile }}
+          ARTIFACTS_BUCKET: ${{ steps.terraform-plan.outputs.artifacts_bucket }}
+          PLAN_FILE:        ${{ steps.terraform-plan.outputs.plan_file }}
+        run: |
+          S3_PREFIX="s3://${ARTIFACTS_BUCKET}/github-actions/${{ github.repository }}/${{ github.run_id }}"
+          aws s3 cp "$PLAN_FILE"       "${S3_PREFIX}/${PLAN_FILE}"
+          aws s3 cp .aws_profile.txt   "${S3_PREFIX}/.aws_profile.txt"
+          echo "plan_s3_uri=${S3_PREFIX}/${PLAN_FILE}" >> $GITHUB_OUTPUT
+          echo "Plan uploaded to ${S3_PREFIX}/${PLAN_FILE}"
+
+
+
+################################### OUTPUT CONSOLE
+0s
+Current runner version: '2.324.0'
+Runner name: 'imac-ip-172-37-5-96.ec2.internal'
+Runner group name: 'imac'
+Machine name: 'ip-172-37-5-96'
+GITHUB_TOKEN Permissions
+Secret source: Actions
+Prepare workflow directory
+Prepare all required actions
+Complete job name: smoke-test
+0s
+Run echo "Hostname:   $(hostnamectl hostname)"
+System has not been booted with systemd as init system (PID 1). Can't operate.
+Failed to connect to system scope bus via local transport: Host is down
+Hostname:   
+User:       runner
+Runner OS:  Linux
+Runner name: imac-ip-172-37-5-96.ec2.internal
+Runner labels: self-hosted,imac
+10s
+Run echo "=== AWS CLI ===" && aws --version
+=== AWS CLI ===
+aws-cli/2.36.24 Python/3.14.6 Linux/6.1.170-210.320.amzn2023.x86_64 exe/x86_64.rhel.10
+=== Terraform ===
+Terraform v1.15.8
+on linux_amd64
+
+Your version of Terraform is out of date! The latest version
+is 1.16.4. You can update by downloading from https://developer.hashicorp.com/terraform/install
+=== Docker CLI ===
+Docker version 29.7.2, build a7dcaa6
+=== Git ===
+git version 2.52.0
+=== Node ===
+v22.23.1
+=== Python ===
+Python 3.14.4
+=== jq ===
+jq-
+=== yq ===
+yq (https://github.com/mikefarah/yq/) version v4.53.3
+=== OPA ===
+Version: 1.19.0
+Build Commit: 1e32c796e8979b1bda2f768138500b1deb95ff24-dirty
+Build Timestamp: 2026-07-30T19:38:54Z
+Build Hostname: 
+Go Version: go1.26.5
+Platform: linux/amd64
+Rego Version: v1
+WebAssembly: available
+=== Regal ===
+Version:       0.42.0
+Go Version:    go1.26.5
+OPA Version:   1.18.2
+Platform:      linux/amd64
+Commit:        bcdaa1dd41259a0bf964e2b7c0938d28bc35db26
+Timestamp:     2026-07-16T14:00:07Z
+Installed via: github.actions.local
+=== tflint ===
+TFLint version 0.64.0
++ ruleset.terraform (0.15.0-bundled)
+=== Trivy ===
+Version: 0.73.0
+=== sonar-scanner ===
+14:25:52.847 INFO  Scanner configuration file: /usr/lib/sonar-scanner/sonar-scanner-8.0.1.6346-linux-x64/conf/sonar-scanner.properties
+14:25:52.860 INFO  Project root configuration file: NONE
+14:25:52.919 INFO  SonarScanner CLI 8.0.1.6346
+14:25:52.947 INFO  Linux 6.1.170-210.320.amzn2023.x86_64 amd64
+=== Nuclei ===
+[INF] Nuclei Engine Version: v3.11.1
+[INF] Nuclei Config Directory: /home/runner/.config/nuclei
+[INF] Nuclei Cache Directory: /home/runner/.cache/nuclei
+[INF] PDCP Directory: /home/runner/.pdcp
+=== OpenGrep ===
+opengrep-core version: 1.27.0
+1s
+Run aws sts get-caller-identity
+{
+    "UserId": "AROATDIBZI6OYT2TFNFHO:i-0247fd4ff83b879b8",
+    "Account": "213141505949",
+    "Arn": "arn:aws:sts::213141505949:assumed-role/imac-github-runner-role/i-0247fd4ff83b879b8"
+}
+1s
+Run echo "=== ~/.aws/config ===" && cat ~/.aws/config
+=== ~/.aws/config ===
+[profile 055694273479]
+role_arn = arn:aws:iam::055694273479:role/prod_jenkins_role_imac_055694273479
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 102306345766]
+role_arn = arn:aws:iam::102306345766:role/prod_jenkins_role_imac_102306345766
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 180703226693]
+role_arn = arn:aws:iam::180703226693:role/prod_jenkins_role_imac_180703226693
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 202533541645]
+role_arn = arn:aws:iam::202533541645:role/prod_jenkins_role_imac_202533541645
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 213141505949]
+role_arn = arn:aws:iam::213141505949:role/prod_jenkins_role_imac_213141505949
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 244639567260]
+role_arn = arn:aws:iam::244639567260:role/prod_jenkins_role_imac_244639567260
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 302695037820]
+role_arn = arn:aws:iam::302695037820:role/prod_jenkins_role_imac_302695037820
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 306026246970]
+role_arn = arn:aws:iam::306026246970:role/prod_jenkins_role_imac_306026246970
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 333866270941]
+role_arn = arn:aws:iam::333866270941:role/prod_jenkins_role_imac_333866270941
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 340752827390]
+role_arn = arn:aws:iam::340752827390:role/prod_jenkins_role_imac_340752827390
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 361769585396]
+role_arn = arn:aws:iam::361769585396:role/prod_jenkins_role_imac_361769585396
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 438465134269]
+role_arn = arn:aws:iam::438465134269:role/prod_jenkins_role_imac_438465134269
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 442426863774]
+role_arn = arn:aws:iam::442426863774:role/prod_jenkins_role_imac_442426863774
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 445567108167]
+role_arn = arn:aws:iam::445567108167:role/prod_jenkins_role_imac_445567108167
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 475117487119]
+role_arn = arn:aws:iam::475117487119:role/prod_jenkins_role_imac_475117487119
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 594541046048]
+role_arn = arn:aws:iam::594541046048:role/prod_jenkins_role_imac_594541046048
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 598956749955]
+role_arn = arn:aws:iam::598956749955:role/prod_jenkins_role_imac_598956749955
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 620558997858]
+role_arn = arn:aws:iam::620558997858:role/prod_jenkins_role_imac_620558997858
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 663200706104]
+role_arn = arn:aws:iam::663200706104:role/prod_jenkins_role_imac_663200706104
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 723265503409]
+role_arn = arn:aws:iam::723265503409:role/prod_jenkins_role_imac_723265503409
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 730335313798]
+role_arn = arn:aws:iam::730335313798:role/prod_jenkins_role_imac_730335313798
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 756167686138]
+role_arn = arn:aws:iam::756167686138:role/prod_jenkins_role_imac_756167686138
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 757265181315]
+role_arn = arn:aws:iam::757265181315:role/prod_jenkins_role_imac_757265181315
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 779846803742]
+role_arn = arn:aws:iam::779846803742:role/prod_jenkins_role_imac_779846803742
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 817491136226]
+role_arn = arn:aws:iam::817491136226:role/prod_jenkins_role_imac_817491136226
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 864981735892]
+role_arn = arn:aws:iam::864981735892:role/prod_jenkins_role_imac_864981735892
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 895583930055]
+role_arn = arn:aws:iam::895583930055:role/prod_jenkins_role_imac_895583930055
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 966555604991]
+role_arn = arn:aws:iam::966555604991:role/prod_jenkins_role_imac_966555604991
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile 973222108556]
+role_arn = arn:aws:iam::973222108556:role/prod_jenkins_role_imac_973222108556
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile dev]
+role_arn = arn:aws:iam::213141505949:role/prod_jenkins_role_imac_dev
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile dev-imac-lza]
+role_arn = arn:aws:iam::055694273479:role/prod_jenkins_role_imac_dev-imac-lza
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile prod]
+role_arn = arn:aws:iam::213141505949:role/prod_jenkins_role_imac_prod
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile prod-imac-lza]
+role_arn = arn:aws:iam::102306345766:role/prod_jenkins_role_imac_prod-imac-lza
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+[profile test-imac-lza]
+role_arn = arn:aws:iam::594541046048:role/prod_jenkins_role_imac_test-imac-lza
+credential_source = Ec2InstanceMetadata
+region = us-east-1
+
+=== Profile list ===
+055694273479
+102306345766
+180703226693
+202533541645
+213141505949
+244639567260
+302695037820
+306026246970
+333866270941
+340752827390
+361769585396
+438465134269
+442426863774
+445567108167
+475117487119
+594541046048
+598956749955
+620558997858
+663200706104
+723265503409
+730335313798
+756167686138
+757265181315
+779846803742
+817491136226
+864981735892
+895583930055
+966555604991
+973222108556
+dev
+dev-imac-lza
+prod
+prod-imac-lza
+test-imac-lza
+47s
+Run for profile in $(aws configure list-profiles); do
+Testing profile: 055694273479
+{
+    "UserId": "AROAQZ55DFPDZHEPWZEKK:botocore-session-1790259960",
+    "Account": "055694273479",
+    "Arn": "arn:aws:sts::055694273479:assumed-role/prod_jenkins_role_imac_055694273479/botocore-session-1790259960"
+}
+OK
+Testing profile: 102306345766
+{
+    "UserId": "AROARPUPO6MTMSTUQCI5R:botocore-session-1790259962",
+    "Account": "102306345766",
+    "Arn": "arn:aws:sts::102306345766:assumed-role/prod_jenkins_role_imac_102306345766/botocore-session-1790259962"
+}
+OK
+Testing profile: 180703226693
+{
+    "UserId": "AROASUEWANNC35LL7XMUS:botocore-session-1790259963",
+    "Account": "180703226693",
+    "Arn": "arn:aws:sts::180703226693:assumed-role/prod_jenkins_role_imac_180703226693/botocore-session-1790259963"
+}
+OK
+Testing profile: 202533541645
+{
+    "UserId": "AROAS6J7QS4G4FRSX5LDX:botocore-session-1790259965",
+    "Account": "202533541645",
+    "Arn": "arn:aws:sts::202533541645:assumed-role/prod_jenkins_role_imac_202533541645/botocore-session-1790259965"
+}
+OK
+Testing profile: 213141505949
+{
+    "UserId": "AROATDIBZI6OZDAAE6ZLR:botocore-session-1790259966",
+    "Account": "213141505949",
+    "Arn": "arn:aws:sts::213141505949:assumed-role/prod_jenkins_role_imac_213141505949/botocore-session-1790259966"
+}
+OK
+Testing profile: 244639567260
+{
+    "UserId": "AROATR5NHRWOPTLYFQ2KF:botocore-session-1790259967",
+    "Account": "244639567260",
+    "Arn": "arn:aws:sts::244639567260:assumed-role/prod_jenkins_role_imac_244639567260/botocore-session-1790259967"
+}
+OK
+Testing profile: 302695037820
+{
+    "UserId": "AROAUM6QHXN6EXYQZVK24:botocore-session-1790259968",
+    "Account": "302695037820",
+    "Arn": "arn:aws:sts::302695037820:assumed-role/prod_jenkins_role_imac_302695037820/botocore-session-1790259968"
+}
+OK
+Testing profile: 306026246970
+{
+    "UserId": "AROAUOQEV6M5GPVQBL2FL:botocore-session-1790259970",
+    "Account": "306026246970",
+    "Arn": "arn:aws:sts::306026246970:assumed-role/prod_jenkins_role_imac_306026246970/botocore-session-1790259970"
+}
+OK
+Testing profile: 333866270941
+{
+    "UserId": "AROAU3O73ADOXTB7OH4VV:botocore-session-1790259971",
+    "Account": "333866270941",
+    "Arn": "arn:aws:sts::333866270941:assumed-role/prod_jenkins_role_imac_333866270941/botocore-session-1790259971"
+}
+OK
+Testing profile: 340752827390
+{
+    "UserId": "AROAU6VTTQP7DFSKGHHDV:botocore-session-1790259972",
+    "Account": "340752827390",
+    "Arn": "arn:aws:sts::340752827390:assumed-role/prod_jenkins_role_imac_340752827390/botocore-session-1790259972"
+}
+OK
+Testing profile: 361769585396
+{
+    "UserId": "AROAVIOZFZL2BSDCHDOB6:botocore-session-1790259974",
+    "Account": "361769585396",
+    "Arn": "arn:aws:sts::361769585396:assumed-role/prod_jenkins_role_imac_361769585396/botocore-session-1790259974"
+}
+OK
+Testing profile: 438465134269
+{
+    "UserId": "AROAWMFUO7264S5PWCLHE:botocore-session-1790259975",
+    "Account": "438465134269",
+    "Arn": "arn:aws:sts::438465134269:assumed-role/prod_jenkins_role_imac_438465134269/botocore-session-1790259975"
+}
+OK
+Testing profile: 442426863774
+{
+    "UserId": "AROAWOAVSGCPICKK4HFD7:botocore-session-1790259977",
+    "Account": "442426863774",
+    "Arn": "arn:aws:sts::442426863774:assumed-role/prod_jenkins_role_imac_442426863774/botocore-session-1790259977"
+}
+OK
+Testing profile: 445567108167
+{
+    "UserId": "AROAWPPO6QRD4PFXNCSEE:botocore-session-1790259978",
+    "Account": "445567108167",
+    "Arn": "arn:aws:sts::445567108167:assumed-role/prod_jenkins_role_imac_445567108167/botocore-session-1790259978"
+}
+OK
+Testing profile: 475117487119
+{
+    "UserId": "AROAW5HZVQQHUOLX267SA:botocore-session-1790259979",
+    "Account": "475117487119",
+    "Arn": "arn:aws:sts::475117487119:assumed-role/prod_jenkins_role_imac_475117487119/botocore-session-1790259979"
+}
+OK
+Testing profile: 594541046048
+{
+    "UserId": "AROAYU3LINEQHIDZ6NSX5:botocore-session-1790259981",
+    "Account": "594541046048",
+    "Arn": "arn:aws:sts::594541046048:assumed-role/prod_jenkins_role_imac_594541046048/botocore-session-1790259981"
+}
+OK
+Testing profile: 598956749955
+{
+    "UserId": "AROAYW5E2WSBZ4E5CLFEG:botocore-session-1790259982",
+    "Account": "598956749955",
+    "Arn": "arn:aws:sts::598956749955:assumed-role/prod_jenkins_role_imac_598956749955/botocore-session-1790259982"
+}
+OK
+Testing profile: 620558997858
+{
+    "UserId": "AROAZA7BS3FRB7MTXSWQ5:botocore-session-1790259983",
+    "Account": "620558997858",
+    "Arn": "arn:aws:sts::620558997858:assumed-role/prod_jenkins_role_imac_620558997858/botocore-session-1790259983"
+}
+OK
+Testing profile: 663200706104
+{
+    "UserId": "AROAZU2OXVY4HIV5ZLI7Q:botocore-session-1790259985",
+    "Account": "663200706104",
+    "Arn": "arn:aws:sts::663200706104:assumed-role/prod_jenkins_role_imac_663200706104/botocore-session-1790259985"
+}
+OK
+Testing profile: 723265503409
+{
+    "UserId": "AROA2QZP3YCY7RJ5AQQO6:botocore-session-1790259986",
+    "Account": "723265503409",
+    "Arn": "arn:aws:sts::723265503409:assumed-role/prod_jenkins_role_imac_723265503409/botocore-session-1790259986"
+}
+OK
+Testing profile: 730335313798
+{
+    "UserId": "AROA2UC3AP6DMQ6Z2CMJY:botocore-session-1790259987",
+    "Account": "730335313798",
+    "Arn": "arn:aws:sts::730335313798:assumed-role/prod_jenkins_role_imac_730335313798/botocore-session-1790259987"
+}
+OK
+Testing profile: 756167686138
+{
+    "UserId": "AROA3ADY3G75O4WC2R5BA:botocore-session-1790259989",
+    "Account": "756167686138",
+    "Arn": "arn:aws:sts::756167686138:assumed-role/prod_jenkins_role_imac_756167686138/botocore-session-1790259989"
+}
+OK
+Testing profile: 757265181315
+{
+    "UserId": "AROA3AUEFVKB5HKEONEYG:botocore-session-1790259990",
+    "Account": "757265181315",
+    "Arn": "arn:aws:sts::757265181315:assumed-role/prod_jenkins_role_imac_757265181315/botocore-session-1790259990"
+}
+OK
+Testing profile: 779846803742
+{
+    "UserId": "AROA3LET54EPO7KE6CIQU:botocore-session-1790259992",
+    "Account": "779846803742",
+    "Arn": "arn:aws:sts::779846803742:assumed-role/prod_jenkins_role_imac_779846803742/botocore-session-1790259992"
+}
+OK
+Testing profile: 817491136226
+{
+    "UserId": "AROA34VSEZ3RCVZI4PWHO:botocore-session-1790259993",
+    "Account": "817491136226",
+    "Arn": "arn:aws:sts::817491136226:assumed-role/prod_jenkins_role_imac_817491136226/botocore-session-1790259993"
+}
+OK
+Testing profile: 864981735892
+{
+    "UserId": "AROA4SZHN3HKEAX5A3P7Z:botocore-session-1790259994",
+    "Account": "864981735892",
+    "Arn": "arn:aws:sts::864981735892:assumed-role/prod_jenkins_role_imac_864981735892/botocore-session-1790259994"
+}
+OK
+Testing profile: 895583930055
+{
+    "UserId": "AROA5BBHWI3D2MRAU3HZ7:botocore-session-1790259995",
+    "Account": "895583930055",
+    "Arn": "arn:aws:sts::895583930055:assumed-role/prod_jenkins_role_imac_895583930055/botocore-session-1790259995"
+}
+OK
+Testing profile: 966555604991
+{
+    "UserId": "AROA6CCZUC77Y36O2D7EM:botocore-session-1790259997",
+    "Account": "966555604991",
+    "Arn": "arn:aws:sts::966555604991:assumed-role/prod_jenkins_role_imac_966555604991/botocore-session-1790259997"
+}
+OK
+Testing profile: 973222108556
+{
+    "UserId": "AROA6FGEO3WGCSQBEP2N4:botocore-session-1790259998",
+    "Account": "973222108556",
+    "Arn": "arn:aws:sts::973222108556:assumed-role/prod_jenkins_role_imac_973222108556/botocore-session-1790259998"
+}
+OK
+Testing profile: dev
+{
+    "UserId": "AROATDIBZI6OSLKBGELG6:botocore-session-1790259999",
+    "Account": "213141505949",
+    "Arn": "arn:aws:sts::213141505949:assumed-role/prod_jenkins_role_imac_dev/botocore-session-1790259999"
+}
+OK
+Testing profile: dev-imac-lza
+{
+    "UserId": "AROAQZ55DFPDXTOXTNQSP:botocore-session-1790260001",
+    "Account": "055694273479",
+    "Arn": "arn:aws:sts::055694273479:assumed-role/prod_jenkins_role_imac_dev-imac-lza/botocore-session-1790260001"
+}
+OK
+Testing profile: prod
+{
+    "UserId": "AROATDIBZI6OWKJ42H2M6:botocore-session-1790260002",
+    "Account": "213141505949",
+    "Arn": "arn:aws:sts::213141505949:assumed-role/prod_jenkins_role_imac_prod/botocore-session-1790260002"
+}
+OK
+Testing profile: prod-imac-lza
+{
+    "UserId": "AROARPUPO6MTISN3TKNHQ:botocore-session-1790260003",
+    "Account": "102306345766",
+    "Arn": "arn:aws:sts::102306345766:assumed-role/prod_jenkins_role_imac_prod-imac-lza/botocore-session-1790260003"
+}
+OK
+Testing profile: test-imac-lza
+{
+    "UserId": "AROAYU3LINEQPVTP3EP5B:botocore-session-1790260005",
+    "Account": "594541046048",
+    "Arn": "arn:aws:sts::594541046048:assumed-role/prod_jenkins_role_imac_test-imac-lza/botocore-session-1790260005"
+}
+OK
+0s
+Run echo "=== Cache mount ===" && df -h /home/runner/.cache
+=== Cache mount ===
+Filesystem      Size  Used Avail Use% Mounted on
+127.0.0.1:/     8.0E     0  8.0E   0% /home/runner/.cache
+=== Write test ===
+OK
+0s
+Run docker ps --filter "name=imac-runner" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
+NAMES         STATUS       IMAGE
+imac-runner   Up 3 weeks   213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/runner/github-runner:latest
+0s
+Cleaning up orphan processes
+
+
+
+######## BUT THIS NEW CODE ################ https://git.aws.hhsoig.gov/CDO/imac-config/actions/runs/1375/job/7770
 
 name: IMAC Configuration Pipeline
 
@@ -366,3 +1018,66 @@ jobs:
 
           echo "Configuration compilation not yet implemented."
           exit 1
+
+############### CONSOLE OUTPUT ###################
+Current runner version: '2.324.0'
+Runner name: 'imac-ip-172-37-5-96.ec2.internal'
+Runner group name: 'imac'
+Machine name: 'ip-172-37-5-96'
+GITHUB_TOKEN Permissions
+Secret source: Actions
+Prepare workflow directory
+Prepare all required actions
+Getting action download info
+Download action repository 'actions/checkout@v4' (SHA:11bd71901bbe5b1630ceea73d27597364c9af683)
+Download action repository 'CDO/imac-shared-gh-actions@v1' (SHA:b2f2d8a2ce38ae0c54a4bd0cca8e95ff6cdd8ec8)
+Complete job name: IMAC Configuration Pipeline
+0s
+Run actions/checkout@v4
+Syncing repository: CDO/imac-config
+Getting Git version info
+Temporarily overriding HOME='/home/runner/_work/_temp/f4d80ea7-259a-48ed-bb47-b3bf6789b62a' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+/usr/bin/git config --global --add safe.directory /home/runner/_work/imac-config/imac-config
+/usr/bin/git config --local --get remote.origin.url
+https://git.aws.hhsoig.gov/CDO/imac-config
+Removing previously created refs, to avoid conflicts
+/usr/bin/git submodule status
+Cleaning the repository
+Disabling automatic garbage collection
+Setting up auth
+Fetching the repository
+Determining the checkout info
+/usr/bin/git sparse-checkout disable
+/usr/bin/git config --local --unset-all extensions.worktreeConfig
+Checking out the ref
+/usr/bin/git log -1 --format=%H
+d8c2c1705ed43d5e6fe7e0f43a2208182dd5f8d5
+0s
+Run set -euo pipefail
+ERROR: AWS_ACCOUNT_ID is not configured.
+Error: Process completed with exit code 1.
+0s
+0s
+0s
+0s
+0s
+0s
+0s
+Post job cleanup.
+Unexpected error attempting to determine if executable file exists '/home/python/.local/bin/git': Error: EACCES: permission denied, stat '/home/python/.local/bin/git'
+/usr/bin/git version
+git version 2.52.0
+Temporarily overriding HOME='/home/runner/_work/_temp/6349521b-c742-4579-9c2a-89f4ed220d65' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+/usr/bin/git config --global --add safe.directory /home/runner/_work/imac-config/imac-config
+/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/git\.aws\.hhsoig\.gov\/\.extraheader
+http.https://git.aws.hhsoig.gov/.extraheader
+/usr/bin/git config --local --unset-all http.https://git.aws.hhsoig.gov/.extraheader
+/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/git\.aws\.hhsoig\.gov\/\.extraheader' && git config --local --unset-all 'http.https://git.aws.hhsoig.gov/.extraheader' || :"
+0s
+Cleaning up orphan processes
+
+i do not know why it is failing 
