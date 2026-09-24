@@ -1,51 +1,373 @@
+
+name: IMAC Configuration Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - feature-IMAC-1262
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "IMAC deployment environment"
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - prod
+          - dev-imac-lza
+          - test-imac-lza
+          - prod-imac-lza
+
+############################################################
+# Prevent Concurrent Builds
+############################################################
+
+concurrency:
+  group: imac-config-${{ github.ref }}
+  cancel-in-progress: false
+
+############################################################
+# IMAC Configuration
+############################################################
+
+env:
+  PROJECT: imac
+  ENV_SHORT_NAME: ${{ inputs.environment || 'dev' }}
+  IMAC_CONFIG_FILE: src/project/imac.json
+  WORKING_DIRECTORY: infrastructure/terraform
+
 jobs:
-  smoke-test:
+
+  imac-config:
+
+    name: IMAC Configuration Pipeline
+
     runs-on: [self-hosted, imac]
 
+    permissions:
+      contents: read
+
     steps:
-      ########################################################################
-      # 1. confirm we are on the right runner
-      ########################################################################
-      - name: Runner identity
+
+      ##########################################################
+      # 1. Git Checkout
+      ##########################################################
+
+      - name: Checkout IMAC Config
+        uses: actions/checkout@v4
+
+      ##########################################################
+      # 2. Runner Identity
+      ##########################################################
+
+      - name: Runner Identity
+        shell: bash
         run: |
-          echo "Hostname:   $(hostnamectl hostname)"
+          echo "======================================"
+          echo "IMAC GitHub Actions Runner"
+          echo "======================================"
+
+          echo "Hostname:   $(hostname)"
           echo "User:       $(whoami)"
           echo "Runner OS:  $RUNNER_OS"
           echo "Runner name: $RUNNER_NAME"
-          echo "Runner labels: $RUNNER_LABELS"
+          echo "Runner labels: ${RUNNER_LABELS:-Not available}"
 
-      ########################################################################
-      # 2. confirm tools are available
-      ########################################################################
-      - name: Tool versions
-        run: |
-          echo "=== AWS CLI ===" && aws --version
-          echo "=== Terraform ===" && terraform version
-          echo "=== Docker CLI ===" && docker --version
-          echo "=== Git ===" && git --version
-          echo "=== Node ===" && node -v
-          echo "=== Python ===" && python3 --version
-          echo "=== jq ===" && jq --version
-          echo "=== yq ===" && yq --version
-          echo "=== OPA ===" && opa version
-          echo "=== Regal ===" && regal version
-          echo "=== tflint ===" && tflint --version
-          echo "=== Trivy ===" && trivy --version
-          echo "=== sonar-scanner ===" && sonar-scanner --version
-          echo "=== Nuclei ===" && nuclei --version
-          echo "=== OpenGrep ===" && opengrep-core -version
+      ##########################################################
+      # 3. Verify Tools
+      ##########################################################
 
-      ########################################################################
-      # 3. confirm AWS identity — verifies instance profile is working
-      ########################################################################
-      - name: AWS identity
+      - name: Tool Versions
+        shell: bash
         run: |
+          set -euo pipefail
+
+          echo "======================================"
+          echo "Checking Installed Tools"
+          echo "======================================"
+
+          echo "=== AWS CLI ==="
+          aws --version
+
+          echo "=== Terraform ==="
+          terraform version
+
+          echo "=== Docker CLI ==="
+          docker --version
+
+          echo "=== Git ==="
+          git --version
+
+          echo "=== Node ==="
+          node -v
+
+          echo "=== Python ==="
+          python3 --version
+
+          echo "=== jq ==="
+          jq --version
+
+          echo "=== yq ==="
+          yq --version
+
+          echo "=== OPA ==="
+          opa version
+
+          echo "=== Regal ==="
+          regal version
+
+          echo "=== tflint ==="
+          tflint --version
+
+          echo "=== Trivy ==="
+          trivy --version
+
+          echo "=== sonar-scanner ==="
+          sonar-scanner --version
+
+          echo "=== Nuclei ==="
+          nuclei --version
+
+          echo "=== OpenGrep ==="
+          opengrep-core -version
+
+      ##########################################################
+      # 4. Verify Default AWS Identity
+      ##########################################################
+
+      - name: AWS Identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "======================================"
+          echo "AWS Default Identity"
+          echo "======================================"
+
+          # Verify the runner's default AWS credentials.
+
           aws sts get-caller-identity
 
-      ########################################################################
-      # 4. confirm AWS profiles are in ~/.aws/config
-      ########################################################################
-      - name: AWS profiles
+      ##########################################################
+      # 5. Discover AWS Profiles
+      ##########################################################
+
+      - name: AWS Profiles
+        shell: bash
         run: |
-          echo "=== ~/.aws/config ===" && cat ~/.aws/config
-          echo "=== Profile list ===" && aws configure list-profiles
+          set -euo pipefail
+
+          echo "======================================"
+          echo "Available AWS Profiles"
+          echo "======================================"
+
+          aws configure list-profiles
+
+      ##########################################################
+      # 6. Resolve AWS Account from imac.json
+      ##########################################################
+
+      - name: Resolve AWS Account
+        id: account
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "======================================"
+          echo "Resolving IMAC AWS Account"
+          echo "======================================"
+
+          ACCOUNT_REF=$(
+            jq -er \
+              --arg env "$ENV_SHORT_NAME" \
+              '.environments[$env].account' \
+              "$IMAC_CONFIG_FILE"
+          )
+
+          AWS_ACCOUNT_ID=$(
+            echo "$ACCOUNT_REF" |
+            sed -nE 's|^ref:/account/([0-9]{12})\.json$|\1|p'
+          )
+
+          if [[ -z "$AWS_ACCOUNT_ID" ]]; then
+            echo "ERROR: Unable to resolve AWS account."
+            exit 1
+          fi
+
+          echo "Project: $PROJECT"
+          echo "Environment: $ENV_SHORT_NAME"
+          echo "AWS Account: $AWS_ACCOUNT_ID"
+
+          echo "aws_account_id=$AWS_ACCOUNT_ID" >> "$GITHUB_OUTPUT"
+          echo "AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID" >> "$GITHUB_ENV"
+
+      ##########################################################
+      # 7. Verify Target AWS Account
+      ##########################################################
+
+      - name: Verify Target AWS Account
+        id: aws-auth
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "======================================"
+          echo "Verifying Target AWS Account"
+          echo "======================================"
+
+          if aws configure list-profiles |
+             grep -Fxq "$AWS_ACCOUNT_ID"; then
+
+            echo "Using configured AWS profile."
+
+            AWS_PROFILE="$AWS_ACCOUNT_ID"
+
+            ACTUAL_ACCOUNT=$(
+              aws sts get-caller-identity \
+                --profile "$AWS_PROFILE" \
+                --query Account \
+                --output text
+            )
+
+          else
+
+            echo "Account-specific profile not found."
+            echo "Checking runner default AWS identity."
+
+            AWS_PROFILE=""
+
+            ACTUAL_ACCOUNT=$(
+              aws sts get-caller-identity \
+                --query Account \
+                --output text
+            )
+
+          fi
+
+          echo "Expected Account: $AWS_ACCOUNT_ID"
+          echo "Actual Account:   $ACTUAL_ACCOUNT"
+
+          if [[ "$ACTUAL_ACCOUNT" != "$AWS_ACCOUNT_ID" ]]; then
+            echo "ERROR: AWS account mismatch."
+            exit 1
+          fi
+
+          echo "AWS_PROFILE=$AWS_PROFILE" >> "$GITHUB_ENV"
+          echo "aws_profile=$AWS_PROFILE" >> "$GITHUB_OUTPUT"
+
+          echo "AWS authentication successful."
+
+      ##########################################################
+      # 8. Scan Dependencies
+      ##########################################################
+
+      - name: Scan Dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting dependency scan..."
+
+          # TODO:
+          # Migrate Jenkins scan_dependencies().
+
+          echo "Dependency scan not yet implemented."
+          exit 1
+
+      ##########################################################
+      # 9. Lint Infrastructure
+      ##########################################################
+
+      - name: Lint Infrastructure
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting infrastructure linting..."
+
+          terraform fmt -check -recursive
+
+          terraform init -backend=false
+
+          terraform validate
+
+          echo "[IMAC] Terraform validation completed."
+
+      ##########################################################
+      # 10. Scan Infrastructure
+      ##########################################################
+
+      - name: Scan Infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting infrastructure scan..."
+
+          # TODO:
+          # Migrate Jenkins scan_infrastructure(true).
+
+          echo "Infrastructure scan not yet implemented."
+          exit 1
+
+      ##########################################################
+      # 11. Terraform Plan
+      ##########################################################
+
+      - name: Terraform Plan DEV
+        id: terraform-plan
+        uses: CDO/imac-shared-gh-actions/terraform/plan@v1
+        with:
+          project: imac
+          env_short_name: ${{ env.ENV_SHORT_NAME }}
+          working_directory: infrastructure/terraform
+          aws_profile_override: ${{ steps.aws-auth.outputs.aws_profile }}
+
+      ##########################################################
+      # 12. Terraform Deploy
+      ##########################################################
+
+      - name: Terraform Deploy DEV
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        env:
+          PLAN_FILE: ${{ steps.terraform-plan.outputs.plan_file }}
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting deployment..."
+
+          echo "Environment: $ENV_SHORT_NAME"
+          echo "AWS Account: $AWS_ACCOUNT_ID"
+
+          if [[ -z "${PLAN_FILE}" || ! -f "${PLAN_FILE}" ]]; then
+            echo "ERROR: Terraform plan not found."
+            exit 1
+          fi
+
+          terraform apply \
+            -input=false \
+            "${PLAN_FILE}"
+
+          echo "[IMAC] Deployment completed."
+
+      ##########################################################
+      # 13. Compile IMAC Configuration
+      ##########################################################
+
+      - name: Compile IMAC Configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting configuration compilation..."
+
+          # TODO:
+          # Migrate Jenkins compile_config().
+
+          echo "Configuration compilation not yet implemented."
+          exit 1
