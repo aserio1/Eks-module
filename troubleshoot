@@ -1,4 +1,59 @@
 
+name: IMAC Configuration Pipeline
+
+############################################################
+# Trigger on commits to main or feature branch
+############################################################
+
+on:
+  push:
+    branches:
+      - main
+      - feature-IMAC-1262
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "IMAC deployment environment"
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - prod
+          - dev-imac-lza
+          - test-imac-lza
+          - prod-imac-lza
+
+############################################################
+# Prevent Concurrent Builds
+############################################################
+
+concurrency:
+  group: imac-config-${{ github.ref }}
+  cancel-in-progress: false
+
+############################################################
+# IMAC Configuration
+############################################################
+
+env:
+  PROJECT: imac
+  ENV_SHORT_NAME: ${{ inputs.environment || 'dev' }}
+  IMAC_CONFIG_FILE: src/project/imac.json
+  WORKING_DIRECTORY: infrastructure/terraform
+
+jobs:
+
+  imac-config:
+
+    name: IMAC Configuration Pipeline
+
+    runs-on: [self-hosted, imac]
+
+    permissions:
+      contents: read
+
     steps:
 
       ##########################################################
@@ -87,6 +142,7 @@
           echo "======================================"
 
           # Use the runner's existing AWS credentials.
+          # No AWS_ACCOUNT_ID variable is required here.
 
           aws sts get-caller-identity
 
@@ -198,3 +254,115 @@
           echo "aws_profile=$AWS_PROFILE" >> "$GITHUB_OUTPUT"
 
           echo "AWS authentication successful."
+
+      ##########################################################
+      # 7. Scan Dependencies
+      ##########################################################
+
+      - name: Scan Dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting dependency scan..."
+
+          # TODO:
+          # Migrate Jenkins scan_dependencies().
+
+          echo "Dependency scan not yet implemented."
+          exit 1
+
+      ##########################################################
+      # 8. Lint Infrastructure
+      ##########################################################
+
+      - name: Lint Infrastructure
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting infrastructure linting..."
+
+          terraform fmt -check -recursive
+
+          terraform init -backend=false
+
+          terraform validate
+
+          echo "[IMAC] Terraform validation completed."
+
+      ##########################################################
+      # 9. Scan Infrastructure
+      ##########################################################
+
+      - name: Scan Infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting infrastructure scan..."
+
+          # TODO:
+          # Migrate Jenkins scan_infrastructure(true).
+
+          echo "Infrastructure scan not yet implemented."
+          exit 1
+
+      ##########################################################
+      # 10. Terraform Plan DEV
+      ##########################################################
+
+      - name: Terraform Plan DEV
+        id: terraform-plan
+        uses: CDO/imac-shared-gh-actions/terraform/plan@v1
+        with:
+          project: imac
+          env_short_name: ${{ env.ENV_SHORT_NAME }}
+          working_directory: infrastructure/terraform
+          aws_profile_override: ${{ steps.aws-auth.outputs.aws_profile }}
+
+      ##########################################################
+      # 11. Terraform Deploy DEV
+      ##########################################################
+
+      - name: Terraform Deploy DEV
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        env:
+          PLAN_FILE: ${{ steps.terraform-plan.outputs.plan_file }}
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting deployment..."
+
+          echo "Environment: $ENV_SHORT_NAME"
+          echo "AWS Account: $AWS_ACCOUNT_ID"
+
+          if [[ -z "${PLAN_FILE}" || ! -f "${PLAN_FILE}" ]]; then
+            echo "ERROR: Terraform plan not found."
+            exit 1
+          fi
+
+          terraform apply \
+            -input=false \
+            "${PLAN_FILE}"
+
+          echo "[IMAC] Deployment completed."
+
+      ##########################################################
+      # 12. Compile IMAC Configuration
+      ##########################################################
+
+      - name: Compile IMAC Configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting configuration compilation..."
+
+          # TODO:
+          # Migrate Jenkins compile_config().
+
+          echo "Configuration compilation not yet implemented."
+          exit 1
