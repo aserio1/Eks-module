@@ -1,9 +1,210 @@
-/home/jenkins/anaconda3/envs/python314/bin/python -m pip install \
-  --ignore-installed \
-  --no-cache-dir \
-  'greenlet>=3.5.6'
+name: IMAC Configuration Pipeline
+
+on:
+  # 1. Allows you to trigger the workflow manually from the Actions tab
+  workflow_dispatch:
+
+  # 2. Triggers the workflow automatically on commits (pushes) to specific branches
+  push:
+    branches:
+      - main        # Triggers when a commit is pushed/merged to main
+      - feature1-IMAC-1261
+
+jobs:
+  imac-config:
+    runs-on: [self-hosted, imac]
+
+    steps:
+      ########################################################################
+      # 1. confirm we are on the right runner
+      ########################################################################
+      - name: Runner identity
+        run: |
+          echo "Hostname:   $(hostnamectl hostname)"
+          echo "User:       $(whoami)"
+          echo "Runner OS:  $RUNNER_OS"
+          echo "Runner name: $RUNNER_NAME"
+          echo "Runner labels: $RUNNER_LABELS"
+
+      ########################################################################
+      # 2. confirm tools are available
+      ########################################################################
+      - name: Tool versions
+        run: |
+          echo "=== AWS CLI ===" && aws --version
+          echo "=== Terraform ===" && terraform version
+          echo "=== Docker CLI ===" && docker --version
+          echo "=== Git ===" && git --version
+          echo "=== Node ===" && node -v
+          echo "=== Python ===" && python3 --version
+          echo "=== jq ===" && jq --version
+          echo "=== yq ===" && yq --version
+          echo "=== OPA ===" && opa version
+          echo "=== Regal ===" && regal version
+          echo "=== tflint ===" && tflint --version
+          echo "=== Trivy ===" && trivy --version
+          echo "=== sonar-scanner ===" && sonar-scanner --version
+          echo "=== Nuclei ===" && nuclei --version
+          echo "=== OpenGrep ===" && opengrep-core -version
+
+      ########################################################################
+      # 3. confirm AWS identity — verifies instance profile is working
+      ########################################################################
+      - name: AWS identity
+        run: |
+          aws sts get-caller-identity
+
+      ########################################################################
+      # 4. confirm AWS profiles are in ~/.aws/config
+      ########################################################################
+      - name: AWS profiles
+        run: |
+          echo "=== ~/.aws/config ===" && cat ~/.aws/config
+          echo "=== Profile list ===" && aws configure list-profiles
+
+      ########################################################################
+      # 5. confirm each profile can assume its role
+      ########################################################################
+      - name: AWS profile role assumption
+        run: |
+          for profile in $(aws configure list-profiles); do
+            echo "Testing profile: $profile"
+            aws sts get-caller-identity --profile "$profile" && echo "OK" || echo "FAILED"
+          done
+      ##########################################################
+      # 6. Git Checkout
+      ##########################################################
+
+      - name: Checkout IMAC Config
+        uses: actions/checkout@v4
+      ##########################################################
+      # 7. Scan Dependencies
+      ##########################################################
+
+      - name: Scan Dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting dependency scan..."
+
+          # TODO:
+          # Migrate Jenkins scan_dependencies().
+
+          echo "ERROR: Dependency scan not yet implemented."
+          exit 1
+      ##########################################################
+      # 8. Lint Infrastructure
+      ##########################################################
+
+      - name: Lint Infrastructure
+        shell: bash
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          set -euo pipefail
+
+          echo "[IMAC] Starting infrastructure linting..."
+
+          terraform fmt -check -recursive
+
+          terraform init -backend=false
+
+          terraform validate
+
+          echo "[IMAC] Terraform validation completed."
 
 
-/home/jenkins/anaconda3/envs/python314/bin/python -m pip install \
-  --no-cache-dir \
-  'sqlalchemy[asyncio]'
+
+###### SCAN Dependencies
+void call(Boolean blocking=true) {
+  String scanCodeTrivyScript = resource("scan.sh")
+  node(jte.keywords.project) {
+    ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
+      stage("Scan code") {
+        s = {
+          println "Running scan code in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
+          // JTE has NO WAY to inspect what keywords are available, so use a try/catch.
+          try {
+            conda_python_version = jte.keywords.python_version
+          } catch (Exception ex) {
+            println "DEPRECATED - Please use jte.keywords.python_version to declare python version unambiguously."
+          }
+          
+          if (conda_python_version != "") {
+            // Use conda environment
+            env_name = conda_python_version.replace(".", "")
+            withEnv([
+              "ENV_NAME=python${env_name}",
+              "PYTHON_VERSION=${conda_python_version}",
+              "PROJECT=$jte.keywords.project"
+            ]) {
+              println "Scanning dependencies for vulnerabilities..."
+              sh scanCodeTrivyScript
+
+            }
+          }
+        }
+        if (!blocking) {
+          catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') { s() }
+        } else {
+          s()
+        }
+      }
+    }
+  }
+}
+
+
+#################LINT 
+void call(Boolean blocking=true, String tool="Flake8") {
+  node(jte.keywords.project) {
+    ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
+      stage("Static Code Analysis: Python") {
+        String black_mypy = resource("black_conda.sh")
+        String flake_conda = resource("flake_conda.sh")
+        
+        s = {
+          try {
+            conda_python_version = jte.keywords.python_version
+          } 
+          catch (Exception ex) {
+            println "DEPRECATED - Please use jte.keywords.python_version to declare python version unambiguously."
+          } 
+          if (conda_python_version != "") {
+            env_name = conda_python_version.replace(".","")
+              
+            withEnv(["ENV_NAME=python${env_name}","PYTHON_VERSION=${conda_python_version}"])                    
+            {
+              if(tool=="black") {
+                println "Running black and mypy in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
+                  sh black_mypy
+              }
+              if(tool=="Flake8") {
+                println "Running Flake8 in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
+                sh flake_conda
+              }
+            }
+          }
+          else {
+            if(tool=="black") {
+              println "Running black and mypy in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
+              sh "python3 --version"
+              sh "python3 -m black --check . --extend-exclude=archive/,Archive/,archived/,Archived/"
+              sh  "python3 -m mypy . --exclude archive/ --exclude Archive/  --exclude archived/ --exclude Archived/" 
+            }
+            if(tool=="Flake8") {
+              println "Running Flake8 in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
+              sh "python3 -m flake8 --extend-exclude=archive/,Archive/,archived/,Archived/"
+            } 
+          }
+        }
+        
+        if (!blocking) {
+          catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') { s() }
+        } else {
+          s()
+        }
+      }
+    }
+  }
+}
