@@ -1,47 +1,489 @@
-######### Black_conda.sh
-if ! command -v ~/anaconda3/bin/conda &> /dev/null
-then
-    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
-    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
-fi
+name: IMAC Configuration Pipeline
 
-if ! ~/anaconda3/bin/conda info --envs | grep -q $ENV_NAME
-then
-    ~/anaconda3/bin/conda create -y --name $ENV_NAME python=$PYTHON_VERSION
-fi    
+on:
+  # 1. Allows you to trigger the workflow manually from the Actions tab
+  workflow_dispatch:
 
-echo "Activating Conda $ENV_NAME"
-set +x
-source ~/anaconda3/bin/activate $ENV_NAME
-set -x
+  # 2. Triggers the workflow automatically on commits (pushes) to specific branches
+  push:
+    branches:
+      - main        # Triggers when a commit is pushed/merged to main
+      - feature1-IMAC-1261
 
+jobs:
+  imac-config:
+    runs-on: [self-hosted, imac]
 
-python --version
-python -m black --version
-python -m black --check . --extend-exclude=archive/,Archive/,archived/,Archived/
-python -m mypy . --exclude archive/ --exclude Archive/  --exclude archived/ --exclude Archived/
+    steps:
+      ########################################################################
+      # 1. Confirm we are on the right runner
+      ########################################################################
+      - name: Runner identity
+        run: |
+          echo "Hostname:   $(hostnamectl hostname)"
+          echo "User:       $(whoami)"
+          echo "Runner OS:  $RUNNER_OS"
+          echo "Runner name: $RUNNER_NAME"
+          echo "Runner labels: $RUNNER_LABELS"
 
+      ########################################################################
+      # 2. Confirm tools are available
+      ########################################################################
+      - name: Tool versions
+        run: |
+          echo "=== AWS CLI ===" && aws --version
+          echo "=== Terraform ===" && terraform version
+          echo "=== Docker CLI ===" && docker --version
+          echo "=== Git ===" && git --version
+          echo "=== Node ===" && node -v
+          echo "=== Python ===" && python3 --version
+          echo "=== jq ===" && jq --version
+          echo "=== yq ===" && yq --version
+          echo "=== OPA ===" && opa version
+          echo "=== Regal ===" && regal version
+          echo "=== tflint ===" && tflint --version
+          echo "=== Trivy ===" && trivy --version
+          echo "=== sonar-scanner ===" && sonar-scanner --version
+          echo "=== Nuclei ===" && nuclei --version
+          echo "=== OpenGrep ===" && opengrep-core -version
 
+      ########################################################################
+      # 3. Confirm AWS identity — verifies instance profile is working
+      ########################################################################
+      - name: AWS identity
+        run: |
+          aws sts get-caller-identity
 
+      ########################################################################
+      # 4. Confirm AWS profiles are in ~/.aws/config
+      ########################################################################
+      - name: AWS profiles
+        run: |
+          echo "=== ~/.aws/config ===" && cat ~/.aws/config
+          echo "=== Profile list ===" && aws configure list-profiles
 
-##########Flake_conda.sh
-if ! command -v ~/anaconda3/bin/conda &> /dev/null
-then
-    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
-    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
-fi
+      ########################################################################
+      # 5. Confirm each profile can assume its role
+      ########################################################################
+      - name: AWS profile role assumption
+        run: |
+          for profile in $(aws configure list-profiles); do
+            echo "Testing profile: $profile"
+            aws sts get-caller-identity --profile "$profile" && echo "OK" || echo "FAILED"
+          done
 
-if ! ~/anaconda3/bin/conda info --envs | grep -q $ENV_NAME
-then
-    ~/anaconda3/bin/conda create -y --name $ENV_NAME python=$PYTHON_VERSION
-fi    
+      ########################################################################
+      # 6. Git Checkout
+      ########################################################################
+      - name: Checkout IMAC Config
+        uses: actions/checkout@v4
 
-echo "Activating Conda $ENV_NAME"
-set +x
-source ~/anaconda3/bin/activate $ENV_NAME
-set -x
+      ########################################################################
+      # 7. Scan Dependencies
+      ########################################################################
+      - name: Scan Dependencies
+        shell: bash
+        env:
+          PROJECT: imac
+          ENV_NAME: python314
+        run: |
+          set -euo pipefail
 
+          echo "======================================"
+          echo "[IMAC] Starting dependency scan..."
+          echo "======================================"
 
-python --version
-python -m flake8 --version
-python -m flake8 --extend-exclude=archive/,Archive/,archived/,Archived/
+          ####################################################################
+          # Trivy Configuration
+          ####################################################################
+
+          TRIVY_REPO=imac-policies
+          TRIVY_BRANCH=main
+          TRIVY_SERVER="http://trivy-server:4954"
+          TRIVY_CACHE_BACKEND="redis://redis-container:6379"
+          IGNORE_FILE=".trivyignore.yaml"
+
+          ####################################################################
+          # Prepare .trivyignore.yaml
+          ####################################################################
+
+          if [ ! -d "trivy-ignores" ]; then
+            mkdir trivy-ignores
+          fi
+
+          ####################################################################
+          # Prefer fix branch if it exists, otherwise use main
+          ####################################################################
+
+          FIX_BRANCH="fix/correct-trivy-ignore-sections"
+
+          if curl -kfsL --output /dev/null \
+            "https://raw.git.aws.hhsoig.gov/CDO/${TRIVY_REPO}/${FIX_BRANCH}/trivy-ignores/global.yaml"; then
+
+            TRIVY_BRANCH="${FIX_BRANCH}"
+
+            echo "Using branch ${TRIVY_BRANCH} for trivy-ignores."
+
+          else
+
+            echo "Branch ${FIX_BRANCH} not found (or global.yaml missing there), falling back to ${TRIVY_BRANCH}."
+
+          fi
+
+          ####################################################################
+          # Download Trivy Ignore Files
+          ####################################################################
+
+          set +e
+
+          curl -kfLO \
+            --output-dir ./trivy-ignores \
+            "https://raw.git.aws.hhsoig.gov/CDO/${TRIVY_REPO}/${TRIVY_BRANCH}/trivy-ignores/global.yaml"
+
+          if [[ "$?" -ne 0 ]]; then
+            echo "No global.yaml found in the ${TRIVY_REPO}."
+          fi
+
+          curl -kfLO \
+            --output-dir ./trivy-ignores \
+            "https://raw.git.aws.hhsoig.gov/CDO/${TRIVY_REPO}/${TRIVY_BRANCH}/trivy-ignores/${PROJECT}.yaml"
+
+          if [[ "$?" -ne 0 ]]; then
+            echo "No ${PROJECT}.yaml found in the ${TRIVY_REPO}."
+          fi
+
+          set -e
+
+          ####################################################################
+          # Merge Trivy Ignore Files
+          ####################################################################
+
+          if [ -f "trivy-ignores/${PROJECT}.yaml" ]; then
+
+            yq eval-all \
+              'select(fileIndex == 0) *+ select(fileIndex == 1)' \
+              trivy-ignores/global.yaml \
+              "trivy-ignores/${PROJECT}.yaml" \
+              > "${IGNORE_FILE}"
+
+          else
+
+            cp trivy-ignores/global.yaml "${IGNORE_FILE}"
+
+          fi
+
+          echo "Trivy ignore configuration prepared."
+
+          ####################################################################
+          # Find Python Requirements Files
+          ####################################################################
+
+          requirements_files=$(
+            find . \
+              -type f \
+              -iname 'requirements*.txt' \
+              ! -iname 'requirements-dev.txt' \
+              ! -path '*/scan/*'
+          )
+
+          ####################################################################
+          # Activate Conda Environment
+          ####################################################################
+
+          if command -v "$HOME/anaconda3/bin/conda" &> /dev/null; then
+
+            echo "Activating Conda ${ENV_NAME}"
+
+            set +x
+            source "$HOME/anaconda3/bin/activate" "$ENV_NAME"
+            set -x
+
+          else
+
+            echo "Conda not found. Using current Python environment."
+
+          fi
+
+          ####################################################################
+          # Install pip-tools
+          ####################################################################
+
+          python -m pip install \
+            -i "https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple" \
+            --trusted-host repo.platform.aws.hhsoig.gov \
+            pip-tools
+
+          ####################################################################
+          # Scan Requirements Files
+          ####################################################################
+
+          if [[ -z "${requirements_files}" ]]; then
+
+            echo "No requirements files found."
+            echo "[IMAC] Dependency scan completed."
+
+          else
+
+            for requirement_file in $requirements_files
+            do
+
+              echo "======================================"
+              echo "Processing ${requirement_file}"
+              echo "======================================"
+
+              ##############################################################
+              # Create separate requirements file for scanning
+              ##############################################################
+
+              scandir="$(dirname "$requirement_file")/scan"
+              scanfile="${scandir}/requirements.txt"
+
+              mkdir -p "$scandir"
+
+              cp "$requirement_file" \
+                "${scandir}/requirements.in"
+
+              ##############################################################
+              # Compile Dependencies
+              ##############################################################
+
+              echo "Compiling dependencies..."
+
+              python -m piptools compile \
+                "${scandir}/requirements.in" \
+                -o "$scanfile" \
+                -i "https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple" \
+                --trusted-host repo.platform.aws.hhsoig.gov \
+                --strip-extras
+
+              ##############################################################
+              # Scan CRITICAL/HIGH
+              ##############################################################
+
+              echo "Scanning ${scanfile} for CRITICAL,HIGH issues..."
+
+              trivy fs \
+                --ignorefile "./${IGNORE_FILE}" \
+                --server "${TRIVY_SERVER}" \
+                --cache-backend "${TRIVY_CACHE_BACKEND}" \
+                --timeout 30m \
+                --scanners vuln \
+                --format table \
+                --severity CRITICAL,HIGH \
+                --exit-code 1 \
+                "$scanfile"
+
+              ##############################################################
+              # Scan MEDIUM/LOW only on main
+              ##############################################################
+
+              if [[ "$GITHUB_REF_NAME" == "main" ]]; then
+
+                echo "Scanning ${scanfile} for MEDIUM,LOW issues..."
+
+                trivy fs \
+                  --ignorefile "./${IGNORE_FILE}" \
+                  --server "${TRIVY_SERVER}" \
+                  --cache-backend "${TRIVY_CACHE_BACKEND}" \
+                  --timeout 30m \
+                  --scanners vuln \
+                  --format table \
+                  --severity MEDIUM,LOW \
+                  --exit-code 0 \
+                  "$scanfile"
+
+              fi
+
+              ##############################################################
+              # Remove temporary scanning requirements
+              ##############################################################
+
+              rm -rf "$scandir"
+
+            done
+
+          fi
+
+          echo "======================================"
+          echo "[IMAC] Dependency Scan Completed"
+          echo "======================================"
+
+      ########################################################################
+      # 8. Lint Python Code
+      ########################################################################
+      - name: Lint Python Code
+        shell: bash
+        env:
+          PYTHON_VERSION: "3.14"
+          LINT_TOOL: "Flake8"
+          BLOCKING: "true"
+        run: |
+          set -euo pipefail
+
+          echo "======================================"
+          echo "IMAC Static Code Analysis: Python"
+          echo "======================================"
+
+          ####################################################################
+          # Configure Python Environment
+          ####################################################################
+
+          # Jenkins equivalent:
+          #
+          # conda_python_version = jte.keywords.python_version
+          # env_name = conda_python_version.replace(".","")
+          # ENV_NAME=python${env_name}
+
+          ENV_NAME="python${PYTHON_VERSION//./}"
+
+          echo "Python Version:    ${PYTHON_VERSION}"
+          echo "Conda Environment: ${ENV_NAME}"
+          echo "Lint Tool:         ${LINT_TOOL}"
+          echo "Blocking:          ${BLOCKING}"
+
+          ####################################################################
+          # Install Anaconda If Missing
+          ####################################################################
+
+          if [[ ! -x "$HOME/anaconda3/bin/conda" ]]; then
+
+            echo "Anaconda not found."
+            echo "Installing Anaconda..."
+
+            wget \
+              https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
+
+            bash \
+              Anaconda3-2024.06-1-Linux-x86_64.sh \
+              -b \
+              -u
+
+          else
+
+            echo "Anaconda is already installed."
+
+          fi
+
+          ####################################################################
+          # Create Conda Environment If Missing
+          ####################################################################
+
+          if ! "$HOME/anaconda3/bin/conda" env list --json |
+            jq -e \
+              --arg env "$ENV_NAME" \
+              '[.envs[] | split("/")[-1] == $env] | any' \
+              > /dev/null; then
+
+            echo "Conda environment ${ENV_NAME} does not exist."
+            echo "Creating ${ENV_NAME} with Python ${PYTHON_VERSION}..."
+
+            "$HOME/anaconda3/bin/conda" create \
+              -y \
+              --name "$ENV_NAME" \
+              "python=${PYTHON_VERSION}"
+
+          else
+
+            echo "Conda environment ${ENV_NAME} already exists."
+
+          fi
+
+          ####################################################################
+          # Activate Conda Environment
+          ####################################################################
+
+          echo "Activating Conda ${ENV_NAME}"
+
+          set +x
+          source "$HOME/anaconda3/bin/activate" "$ENV_NAME"
+          set -x
+
+          echo "======================================"
+          echo "Python Environment"
+          echo "======================================"
+
+          python --version
+
+          ####################################################################
+          # Static Code Analysis Function
+          ####################################################################
+
+          run_lint() {
+
+            ##################################################################
+            # Black + Mypy
+            ##################################################################
+
+            if [[ "$LINT_TOOL" == "black" ]]; then
+
+              echo "======================================"
+              echo "Running Black and Mypy"
+              echo "======================================"
+
+              python -m black --version
+
+              python -m black \
+                --check . \
+                --extend-exclude=archive/,Archive/,archived/,Archived/
+
+              python -m mypy \
+                . \
+                --exclude archive/ \
+                --exclude Archive/ \
+                --exclude archived/ \
+                --exclude Archived/
+
+            ##################################################################
+            # Flake8
+            ##################################################################
+
+            elif [[ "$LINT_TOOL" == "Flake8" ]]; then
+
+              echo "======================================"
+              echo "Running Flake8"
+              echo "======================================"
+
+              python -m flake8 --version
+
+              python -m flake8 \
+                --extend-exclude=archive/,Archive/,archived/,Archived/
+
+            ##################################################################
+            # Invalid Tool
+            ##################################################################
+
+            else
+
+              echo "ERROR: Unsupported lint tool: ${LINT_TOOL}"
+
+              return 1
+
+            fi
+          }
+
+          ####################################################################
+          # Blocking / Non-Blocking
+          ####################################################################
+
+          if [[ "$BLOCKING" == "true" ]]; then
+
+            echo "Running ${LINT_TOOL} in blocking mode."
+
+            run_lint
+
+          else
+
+            echo "Running ${LINT_TOOL} in non-blocking mode."
+
+            if ! run_lint; then
+
+              echo "WARNING: Python static code analysis failed."
+              echo "Pipeline will continue because BLOCKING=false."
+
+            fi
+
+          fi
+
+          echo "======================================"
+          echo "IMAC Python Static Code Analysis Completed"
+          echo "======================================"
