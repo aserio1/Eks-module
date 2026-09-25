@@ -116,43 +116,107 @@ jobs:
 
 
 ###### SCAN Dependencies
-void call(Boolean blocking=true) {
-  String scanCodeTrivyScript = resource("scan.sh")
-  node(jte.keywords.project) {
-    ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
-      stage("Scan code") {
-        s = {
-          println "Running scan code in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
-          // JTE has NO WAY to inspect what keywords are available, so use a try/catch.
-          try {
-            conda_python_version = jte.keywords.python_version
-          } catch (Exception ex) {
-            println "DEPRECATED - Please use jte.keywords.python_version to declare python version unambiguously."
-          }
-          
-          if (conda_python_version != "") {
-            // Use conda environment
-            env_name = conda_python_version.replace(".", "")
-            withEnv([
-              "ENV_NAME=python${env_name}",
-              "PYTHON_VERSION=${conda_python_version}",
-              "PROJECT=$jte.keywords.project"
-            ]) {
-              println "Scanning dependencies for vulnerabilities..."
-              sh scanCodeTrivyScript
+# Run Trivy's "filesystem" scan to scan code files
 
-            }
-          }
-        }
-        if (!blocking) {
-          catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') { s() }
-        } else {
-          s()
-        }
-      }
-    }
-  }
-}
+TRIVY_REPO=imac-policies
+TRIVY_BRANCH=main
+TRIVY_SERVER="http://trivy-server:4954"
+TRIVY_CACHE_BACKEND="redis://redis-container:6379"
+IGNORE_FILE=".trivyignore.yaml"
+
+### PREP the .trivyignore.yaml ####
+# Download trivy ignore yaml
+if [ ! -d "trivy-ignores" ]; then
+  mkdir trivy-ignores
+fi
+
+# Prefer the fix/correct-trivy-ignore-sections branch if it exists, else fall back to main
+FIX_BRANCH="fix/correct-trivy-ignore-sections"
+if curl -kfsL --output /dev/null "https://raw.git.aws.hhsoig.gov/CDO/${TRIVY_REPO}/${FIX_BRANCH}/trivy-ignores/global.yaml"; then
+  TRIVY_BRANCH="${FIX_BRANCH}"
+  echo "Using branch ${TRIVY_BRANCH} for trivy-ignores."
+else
+  echo "Branch ${FIX_BRANCH} not found (or global.yaml missing there), falling back to ${TRIVY_BRANCH}."
+fi
+
+set +e
+curl -kfLO --output-dir ./trivy-ignores https://raw.git.aws.hhsoig.gov/CDO/${TRIVY_REPO}/${TRIVY_BRANCH}/trivy-ignores/global.yaml
+if [[ "$?" -ne 0 ]]; then
+  echo "No global.yaml found in the ${TRIVY_REPO}."
+fi
+curl -kfLO --output-dir ./trivy-ignores https://raw.git.aws.hhsoig.gov/CDO/${TRIVY_REPO}/${TRIVY_BRANCH}/trivy-ignores/${PROJECT}.yaml
+if [[ "$?" -ne 0 ]]; then
+  echo "No ${PROJECT}.yaml found in the ${TRIVY_REPO}."
+fi
+set -e
+
+if [ -f "trivy-ignores/${PROJECT}.yaml" ]; then
+  # Merge YAML using yq, combining arrays under the same keys
+  yq eval-all 'select(fileIndex == 0) *+ select(fileIndex == 1)' \
+    trivy-ignores/global.yaml \
+    trivy-ignores/${PROJECT}.yaml > "${IGNORE_FILE}"
+else
+  cp trivy-ignores/global.yaml "${IGNORE_FILE}"
+fi
+### DONE PREP ########################
+
+# Run Trivy's "filesystem" scan to scan code files
+requirements_files=$(find . -type f -iname 'requirements*.txt' ! -iname 'requirements-dev.txt')
+
+if command -v ~/anaconda3/bin/conda &> /dev/null
+then
+    echo "Activating Conda $ENV_NAME"
+    set +x
+    source ~/anaconda3/bin/activate $ENV_NAME
+    set -x
+fi
+
+# ensure pip-tools is installed
+pip install -i "https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple" --trusted-host repo.platform.aws.hhsoig.gov pip-tools
+
+for requirement_file in $requirements_files
+do
+  # create a separate requirements file for scanning only
+  scandir=$(dirname $requirement_file)/scan
+  scanfile=$scandir/requirements.txt
+  mkdir $scandir
+  cp $requirement_file $scandir/requirements.in
+
+  # compile the dependencies based on original requirements.txt
+  # pip-compile is generating a scan/requirements.txt from scan/requirements.in
+  # when requirements include internal packages it needs the Nexus repo location
+  python -m piptools compile $scandir/requirements.in \
+    -i "https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple" \
+    --trusted-host repo.platform.aws.hhsoig.gov \
+    --strip-extras 2>&1 > /dev/null
+
+  echo "Scanning ${scanfile} for CRITICAL,HIGH issues..."
+  trivy fs --ignorefile ./${IGNORE_FILE} \
+           --server ${TRIVY_SERVER} \
+           --cache-backend ${TRIVY_CACHE_BACKEND} \
+           --timeout 30m \
+           --scanners vuln \
+           --format table \
+           --severity CRITICAL,HIGH \
+           --exit-code 1 $scanfile
+
+  # Check for MEDIUM/LOW vuln only for main
+  if [[ "$BRANCH_NAME" == "main" ]]
+  then
+    echo "Scanning ${scanfile} for MEDIUM,LOW issues..."
+    trivy fs --ignorefile ./${IGNORE_FILE} \
+            --server ${TRIVY_SERVER} \
+            --cache-backend ${TRIVY_CACHE_BACKEND} \
+            --timeout 30m \
+            --scanners vuln \
+            --format table \
+            --severity MEDIUM,LOW \
+            --exit-code 0 $scanfile
+    fi
+
+  # remove requirements file for scanning only
+  rm -Rf $scandir
+done
 
 
 #################LINT 
