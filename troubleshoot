@@ -1,274 +1,47 @@
-name: IMAC Configuration Pipeline
-
-on:
-  # 1. Allows you to trigger the workflow manually from the Actions tab
-  workflow_dispatch:
-
-  # 2. Triggers the workflow automatically on commits (pushes) to specific branches
-  push:
-    branches:
-      - main        # Triggers when a commit is pushed/merged to main
-      - feature1-IMAC-1261
-
-jobs:
-  imac-config:
-    runs-on: [self-hosted, imac]
-
-    steps:
-      ########################################################################
-      # 1. confirm we are on the right runner
-      ########################################################################
-      - name: Runner identity
-        run: |
-          echo "Hostname:   $(hostnamectl hostname)"
-          echo "User:       $(whoami)"
-          echo "Runner OS:  $RUNNER_OS"
-          echo "Runner name: $RUNNER_NAME"
-          echo "Runner labels: $RUNNER_LABELS"
-
-      ########################################################################
-      # 2. confirm tools are available
-      ########################################################################
-      - name: Tool versions
-        run: |
-          echo "=== AWS CLI ===" && aws --version
-          echo "=== Terraform ===" && terraform version
-          echo "=== Docker CLI ===" && docker --version
-          echo "=== Git ===" && git --version
-          echo "=== Node ===" && node -v
-          echo "=== Python ===" && python3 --version
-          echo "=== jq ===" && jq --version
-          echo "=== yq ===" && yq --version
-          echo "=== OPA ===" && opa version
-          echo "=== Regal ===" && regal version
-          echo "=== tflint ===" && tflint --version
-          echo "=== Trivy ===" && trivy --version
-          echo "=== sonar-scanner ===" && sonar-scanner --version
-          echo "=== Nuclei ===" && nuclei --version
-          echo "=== OpenGrep ===" && opengrep-core -version
-
-      ########################################################################
-      # 3. confirm AWS identity — verifies instance profile is working
-      ########################################################################
-      - name: AWS identity
-        run: |
-          aws sts get-caller-identity
-
-      ########################################################################
-      # 4. confirm AWS profiles are in ~/.aws/config
-      ########################################################################
-      - name: AWS profiles
-        run: |
-          echo "=== ~/.aws/config ===" && cat ~/.aws/config
-          echo "=== Profile list ===" && aws configure list-profiles
-
-      ########################################################################
-      # 5. confirm each profile can assume its role
-      ########################################################################
-      - name: AWS profile role assumption
-        run: |
-          for profile in $(aws configure list-profiles); do
-            echo "Testing profile: $profile"
-            aws sts get-caller-identity --profile "$profile" && echo "OK" || echo "FAILED"
-          done
-      ##########################################################
-      # 6. Git Checkout
-      ##########################################################
-
-      - name: Checkout IMAC Config
-        uses: actions/checkout@v4
-      ##########################################################
-      # 7. Scan Dependencies
-      ##########################################################
-
-      - name: Scan Dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "[IMAC] Starting dependency scan..."
-
-          # TODO:
-          # Migrate Jenkins scan_dependencies().
-
-          echo "ERROR: Dependency scan not yet implemented."
-          exit 1
-      ##########################################################
-      # 8. Lint Infrastructure
-      ##########################################################
-
-      - name: Lint Infrastructure
-        shell: bash
-        working-directory: ${{ env.WORKING_DIRECTORY }}
-        run: |
-          set -euo pipefail
-
-          echo "[IMAC] Starting infrastructure linting..."
-
-          terraform fmt -check -recursive
-
-          terraform init -backend=false
-
-          terraform validate
-
-          echo "[IMAC] Terraform validation completed."
-
-
-
-###### SCAN Dependencies
-# Run Trivy's "filesystem" scan to scan code files
-
-TRIVY_REPO=imac-policies
-TRIVY_BRANCH=main
-TRIVY_SERVER="http://trivy-server:4954"
-TRIVY_CACHE_BACKEND="redis://redis-container:6379"
-IGNORE_FILE=".trivyignore.yaml"
-
-### PREP the .trivyignore.yaml ####
-# Download trivy ignore yaml
-if [ ! -d "trivy-ignores" ]; then
-  mkdir trivy-ignores
-fi
-
-# Prefer the fix/correct-trivy-ignore-sections branch if it exists, else fall back to main
-FIX_BRANCH="fix/correct-trivy-ignore-sections"
-if curl -kfsL --output /dev/null "https://raw.git.aws.hhsoig.gov/CDO/${TRIVY_REPO}/${FIX_BRANCH}/trivy-ignores/global.yaml"; then
-  TRIVY_BRANCH="${FIX_BRANCH}"
-  echo "Using branch ${TRIVY_BRANCH} for trivy-ignores."
-else
-  echo "Branch ${FIX_BRANCH} not found (or global.yaml missing there), falling back to ${TRIVY_BRANCH}."
-fi
-
-set +e
-curl -kfLO --output-dir ./trivy-ignores https://raw.git.aws.hhsoig.gov/CDO/${TRIVY_REPO}/${TRIVY_BRANCH}/trivy-ignores/global.yaml
-if [[ "$?" -ne 0 ]]; then
-  echo "No global.yaml found in the ${TRIVY_REPO}."
-fi
-curl -kfLO --output-dir ./trivy-ignores https://raw.git.aws.hhsoig.gov/CDO/${TRIVY_REPO}/${TRIVY_BRANCH}/trivy-ignores/${PROJECT}.yaml
-if [[ "$?" -ne 0 ]]; then
-  echo "No ${PROJECT}.yaml found in the ${TRIVY_REPO}."
-fi
-set -e
-
-if [ -f "trivy-ignores/${PROJECT}.yaml" ]; then
-  # Merge YAML using yq, combining arrays under the same keys
-  yq eval-all 'select(fileIndex == 0) *+ select(fileIndex == 1)' \
-    trivy-ignores/global.yaml \
-    trivy-ignores/${PROJECT}.yaml > "${IGNORE_FILE}"
-else
-  cp trivy-ignores/global.yaml "${IGNORE_FILE}"
-fi
-### DONE PREP ########################
-
-# Run Trivy's "filesystem" scan to scan code files
-requirements_files=$(find . -type f -iname 'requirements*.txt' ! -iname 'requirements-dev.txt')
-
-if command -v ~/anaconda3/bin/conda &> /dev/null
+######### Black_conda.sh
+if ! command -v ~/anaconda3/bin/conda &> /dev/null
 then
-    echo "Activating Conda $ENV_NAME"
-    set +x
-    source ~/anaconda3/bin/activate $ENV_NAME
-    set -x
+    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
+    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
 fi
 
-# ensure pip-tools is installed
-pip install -i "https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple" --trusted-host repo.platform.aws.hhsoig.gov pip-tools
+if ! ~/anaconda3/bin/conda info --envs | grep -q $ENV_NAME
+then
+    ~/anaconda3/bin/conda create -y --name $ENV_NAME python=$PYTHON_VERSION
+fi    
 
-for requirement_file in $requirements_files
-do
-  # create a separate requirements file for scanning only
-  scandir=$(dirname $requirement_file)/scan
-  scanfile=$scandir/requirements.txt
-  mkdir $scandir
-  cp $requirement_file $scandir/requirements.in
-
-  # compile the dependencies based on original requirements.txt
-  # pip-compile is generating a scan/requirements.txt from scan/requirements.in
-  # when requirements include internal packages it needs the Nexus repo location
-  python -m piptools compile $scandir/requirements.in \
-    -i "https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple" \
-    --trusted-host repo.platform.aws.hhsoig.gov \
-    --strip-extras 2>&1 > /dev/null
-
-  echo "Scanning ${scanfile} for CRITICAL,HIGH issues..."
-  trivy fs --ignorefile ./${IGNORE_FILE} \
-           --server ${TRIVY_SERVER} \
-           --cache-backend ${TRIVY_CACHE_BACKEND} \
-           --timeout 30m \
-           --scanners vuln \
-           --format table \
-           --severity CRITICAL,HIGH \
-           --exit-code 1 $scanfile
-
-  # Check for MEDIUM/LOW vuln only for main
-  if [[ "$BRANCH_NAME" == "main" ]]
-  then
-    echo "Scanning ${scanfile} for MEDIUM,LOW issues..."
-    trivy fs --ignorefile ./${IGNORE_FILE} \
-            --server ${TRIVY_SERVER} \
-            --cache-backend ${TRIVY_CACHE_BACKEND} \
-            --timeout 30m \
-            --scanners vuln \
-            --format table \
-            --severity MEDIUM,LOW \
-            --exit-code 0 $scanfile
-    fi
-
-  # remove requirements file for scanning only
-  rm -Rf $scandir
-done
+echo "Activating Conda $ENV_NAME"
+set +x
+source ~/anaconda3/bin/activate $ENV_NAME
+set -x
 
 
-#################LINT 
-void call(Boolean blocking=true, String tool="Flake8") {
-  node(jte.keywords.project) {
-    ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
-      stage("Static Code Analysis: Python") {
-        String black_mypy = resource("black_conda.sh")
-        String flake_conda = resource("flake_conda.sh")
-        
-        s = {
-          try {
-            conda_python_version = jte.keywords.python_version
-          } 
-          catch (Exception ex) {
-            println "DEPRECATED - Please use jte.keywords.python_version to declare python version unambiguously."
-          } 
-          if (conda_python_version != "") {
-            env_name = conda_python_version.replace(".","")
-              
-            withEnv(["ENV_NAME=python${env_name}","PYTHON_VERSION=${conda_python_version}"])                    
-            {
-              if(tool=="black") {
-                println "Running black and mypy in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
-                  sh black_mypy
-              }
-              if(tool=="Flake8") {
-                println "Running Flake8 in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
-                sh flake_conda
-              }
-            }
-          }
-          else {
-            if(tool=="black") {
-              println "Running black and mypy in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
-              sh "python3 --version"
-              sh "python3 -m black --check . --extend-exclude=archive/,Archive/,archived/,Archived/"
-              sh  "python3 -m mypy . --exclude archive/ --exclude Archive/  --exclude archived/ --exclude Archived/" 
-            }
-            if(tool=="Flake8") {
-              println "Running Flake8 in block mode: ${blocking ? 'FAILURE' : 'SUCCESS'}"
-              sh "python3 -m flake8 --extend-exclude=archive/,Archive/,archived/,Archived/"
-            } 
-          }
-        }
-        
-        if (!blocking) {
-          catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') { s() }
-        } else {
-          s()
-        }
-      }
-    }
-  }
-}
+python --version
+python -m black --version
+python -m black --check . --extend-exclude=archive/,Archive/,archived/,Archived/
+python -m mypy . --exclude archive/ --exclude Archive/  --exclude archived/ --exclude Archived/
+
+
+
+
+##########Flake_conda.sh
+if ! command -v ~/anaconda3/bin/conda &> /dev/null
+then
+    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
+    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
+fi
+
+if ! ~/anaconda3/bin/conda info --envs | grep -q $ENV_NAME
+then
+    ~/anaconda3/bin/conda create -y --name $ENV_NAME python=$PYTHON_VERSION
+fi    
+
+echo "Activating Conda $ENV_NAME"
+set +x
+source ~/anaconda3/bin/activate $ENV_NAME
+set -x
+
+
+python --version
+python -m flake8 --version
+python -m flake8 --extend-exclude=archive/,Archive/,archived/,Archived/
