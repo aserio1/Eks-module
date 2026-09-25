@@ -1,15 +1,13 @@
-pip install sqlalchemy[asyncio]
+File "/home/jenkins/anaconda3/envs/python314/lib/python3.14/site-packages/sqlalchemy/util/concurrency.py", line 79, in _initialize
+09:14:24      raise ImportError(_ERROR_MESSAGE) from e
+09:14:24  ImportError: The SQLAlchemy asyncio module requires that the Python 'greenlet' library is installed.  In order to ensure this dependency is available, use the 'sqlalchemy[asyncio]' install target:  'pip install sqlalchemy[asyncio]'
+
+
+python -m pip  install 'sqlalchemy[asyncio]'
 Collecting sqlalchemy[asyncio]
-  Downloading sqlalchemy-2.1.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
-Collecting typing-extensions>=4.6.0 (from sqlalchemy[asyncio])
-  Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
-Collecting greenlet>=1 (from sqlalchemy[asyncio])
-  Downloading greenlet-3.5.6-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
-Downloading sqlalchemy-2.1.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (4.6 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.6/4.6 MB 23.7 MB/s  0:00:00
-Downloading greenlet-3.5.6-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (670 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 670.8/670.8 kB 14.4 MB/s  0:00:00
-Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
-Installing collected packages: typing-extensions, greenlet, sqlalchemy
-ERROR: Could not install packages due to an OSError: [Errno 13] Permission denied: '/usr/local/include/python3.14/greenlet'
-Consider using the `--user` option or check the permissions.
+  Using cached sqlalchemy-2.1.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
+Requirement already satisfied: typing-extensions>=4.6.0 in /usr/local/lib/python3.14/site-packages (from sqlalchemy[asyncio]) (4.16.0)
+Requirement already satisfied: greenlet>=1 in /usr/local/lib/python3.14/site-packages (from sqlalchemy[asyncio]) (3.5.6)
+Using cached sqlalchemy-2.1.0-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (4.6 MB)
+Installing collected packages: sqlalchemy
+Successfully installed sqlalchemy-2.1.0
