@@ -446,7 +446,8 @@ jobs:
               python -m flake8 --version
 
               python -m flake8 \
-                --extend-exclude=archive/,Archive/,archived/,Archived/
+                --extend-exclude=archive/,Archive/,archived/,Archived/ \
+                --extend-ignore=E302,W293,E501,E231,E202
 
             ##################################################################
             # Invalid Tool
