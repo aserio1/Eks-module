@@ -6,3 +6,7 @@
 /home/jenkins/anaconda3/envs/python314/bin/python -m pip install \
   --no-cache-dir \
   'sqlalchemy[asyncio]'
+
+
+greenlet>=3.5.6
+sqlalchemy[asyncio]
