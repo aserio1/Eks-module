@@ -1,12 +1,121 @@
-/home/jenkins/anaconda3/envs/python314/bin/python -m pip install \
-  --ignore-installed \
-  --no-cache-dir \
-  'greenlet>=3.5.6'
+7.3.0 (mccabe: 0.7.0, pycodestyle: 2.14.0, pyflakes: 3.4.0) CPython 3.14.4 on
+Linux
++ python -m flake8 --extend-exclude=archive/,Archive/,archived/,Archived/
+./src/compile_config.py:5:1: E302 expected 2 blank lines, found 1
+./src/compile_config.py:9:1: W293 blank line contains whitespace
+./src/compile_config.py:10:1: E302 expected 2 blank lines, found 1
+./src/compile_config.py:14:1: W293 blank line contains whitespace
+./src/compile_config.py:17:80: E501 line too long (88 > 79 characters)
+./src/compile_config.py:18:1: W293 blank line contains whitespace
+./src/compile_config.py:22:42: E231 missing whitespace after ','
+./src/compile_config.py:26:53: E202 whitespace before '}'
+./src/compile_config.py:40:1: W293 blank line contains whitespace
+./src/compile_config.py:55:1: W293 blank line contains whitespace
+./src/compile_config.py:56:1: E302 expected 2 blank lines, found 1
+./src/compile_config.py:67:1: W293 blank line contains whitespace
+./src/compile_config.py:68:1: E302 expected 2 blank lines, found 1
+./src/compile_config.py:84:1: W293 blank line contains whitespace
+./src/compile_config.py:85:1: E302 expected 2 blank lines, found 1
+./src/compile_config.py:94:1: W293 blank line contains whitespace
+./src/compile_config.py:95:1: W293 blank line contains whitespace
+Error: Process completed with exit code 1.
 
-/home/jenkins/anaconda3/envs/python314/bin/python -m pip install \
-  --no-cache-dir \
-  'sqlalchemy[asyncio]'
 
 
-greenlet>=3.5.6
-sqlalchemy[asyncio]
+####################
+import json
+import os
+import subprocess
+
+def compile_config():
+    root = parse_json("manifest.json")
+    crawl_object(root)
+    write_json("combined.json", root)
+    
+def parse_json(file):
+    with open(file) as f:
+        data = json.load(f)
+    return data
+    
+
+def get_git_revision_hash():
+    return subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
+    
+
+def write_json(file, data):
+    with open(file, "w") as f:
+        j = json.dumps(data).replace("\"","\\\"")
+        db_item = {
+            "CONFIG_JSON": {"S": f"\"{j}\""},
+            "Name": {"S": "IMAC_CONFIG"},
+            "GIT_SHA": {"S": get_git_revision_hash() }
+        }
+        json.dump(db_item, f)
+
+    print("Updating the config in DynamoDB")
+    try:
+        # Using file:// syntax for --item to avoid "Argument list too long"
+        subprocess.run(["aws", "dynamodb", "put-item",
+                        "--table-name", "dev-ImacConfigTable",
+                        "--item", f"file://{file}",
+                        "--region", "us-east-1"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed with return code {e.returncode}")
+
+        
+def crawl_object(root):
+    for key, value in root.items():
+        if isinstance(value, str) and "view" in value:
+            print(f"Parsing views: {value}")
+            parse_view(root, key, value)
+        elif isinstance(value, str) and "ref:/" in value:
+            print(f"Parsing ref: {value}")
+            parse_ref(root, key, value)
+        elif isinstance(value, list):
+            print(f"Crawling array: {value}")
+            crawl_array(root, value)
+        elif isinstance(value, dict):
+            print(f"Crawling Object: {value}")
+            crawl_object(value)
+        
+def crawl_array(root, value):
+    for item in value:
+        if isinstance(item, str) and "ref:/" in item:
+            print(f"Parsing ref: {item}")
+            parse_ref(root, item, item)
+        elif isinstance(item, list):
+            print(f"Crawling array: {item}")
+            crawl_array(root, item)
+        elif isinstance(item, dict):
+            print(f"Crawling Object: {item}")
+            crawl_object(item)
+            
+def parse_ref(root, key, value):
+    path = value.replace("ref:/", "")
+    if ".json" in path:
+        data = parse_json(path)
+        crawl_object(data)
+        root[key] = data
+    else:
+        refs = {}
+        for file in os.listdir(path):
+            fq_file = f"{path}/{file}"
+            if os.path.isfile(fq_file):
+                data = parse_json(fq_file)
+                crawl_object(data)
+                ref_key = file.replace(".json", "")
+                refs[ref_key] = data
+        root[key] = refs
+        
+def parse_view(root, key, value):
+    path = value.replace("ref:/", "")
+    refs = {}
+    for file in os.listdir(path):
+        if os.path.isfile(file):
+            data = parse_json(file)
+            ref_key = file.replace(".json", "")
+            refs[ref_key] = data
+    root[key] = refs
+    
+    
+compile_config()
