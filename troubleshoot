@@ -742,16 +742,6 @@ jobs:
 
       ########################################################################
       # 10. Terraform Apply - dev
-      #
-      # Jenkins equivalent:
-      # deploy_infrastructure(dev)
-      #
-      # TEMPORARY:
-      # Deploy DEV from feature1-IMAC-1261.
-      #
-      # After testing change this back to:
-      #
-      # if: github.ref_name == 'main'
       ########################################################################
       - name: Terraform Apply - dev
         if: github.ref_name == 'feature1-IMAC-1261'
@@ -825,27 +815,6 @@ jobs:
 
       ########################################################################
       # 11. Compile IMAC Configuration
-      #
-      # Jenkins equivalent:
-      # compile_config()
-      #
-      # IMPORTANT:
-      # compile_config.py and manifest.json are under src/.
-      #
-      # Running this step from src/ also allows manifest references such as:
-      #
-      # ref:/account
-      # ref:/project
-      # ref:/tool
-      # ref:/views
-      #
-      # to resolve correctly.
-      #
-      # TEMPORARY:
-      # Run from feature1-IMAC-1261 during DEV testing.
-      #
-      # After testing change this back to:
-      #
       # if: github.ref_name == 'main'
       ########################################################################
       - name: Compile IMAC Configuration
