@@ -1,25 +1,13 @@
-**Temporary Feature-Branch Deployment Workflow**
-
-The GitHub Actions pipeline is temporarily configured to allow deployment from the `feature1-IMAC-1261` branch for DEV testing and validation.
-
-Both `main` and the feature branch trigger the pipeline's validation, dependency scanning, Python linting, and Terraform planning stages. However, **Terraform Apply and Compile IMAC Configuration execute only on `feature1-IMAC-1261`** during testing.
-
-The feature branch deploys exclusively to the DEV environment using `AWS_PROFILE=dev`, `dev.tfvars`, and the existing DEV Terraform backend. The final compilation stage updates the `dev-ImacConfigTable` DynamoDB table.
-
-Once testing is successfully completed, the deployment conditions for both stages will be changed back to `main`, restoring the intended branch-controlled deployment workflow.
-
-
-**Testing Completion Criteria – IMAC GitHub Actions Pipeline**
-
-Testing on the temporary `feature1-IMAC-1261` branch will be considered complete once the following criteria are successfully validated:
-
-1. **Runner Validation:** Confirm the pipeline executes on the designated self-hosted IMAC runner with the required tools available.
-2. **AWS Authentication:** Verify successful authentication and role assumption using the DEV AWS profile.
-3. **Security Scanning:** Confirm Trivy dependency scanning executes successfully and blocks non-ignored HIGH and CRITICAL vulnerabilities.
-4. **Python Linting:** Verify Flake8 completes successfully using the Python 3.14 Conda environment.
-5. **Terraform Plan:** Confirm Terraform initializes successfully using the DEV backend and generates `dev.tfplan`.
-6. **Terraform Deployment:** Verify Terraform Apply completes successfully and the resulting DEV infrastructure matches the intended configuration.
-7. **Configuration Compilation:** Confirm `compile_config.py` successfully processes `src/manifest.json` and generates `combined.json`.
-8. **DynamoDB Validation:** Verify the compiled configuration is successfully written to `dev-ImacConfigTable`, including the expected configuration data and Git commit SHA.
-
-**Completion and Transition:** Once all validation criteria pass, including confirmation of the DynamoDB update, the temporary feature-branch conditions for Terraform Apply and configuration compilation will be changed back to `main`. A final workflow run will verify the intended branch restrictions before the migration is considered complete.
+ Successfully configured the backend "s3"! Terraform will automatically
+11:51:19  use this backend unless the backend configuration changes.
+11:51:19  
+11:51:31  
+11:51:31  Error: Error refreshing state: state data in S3 does not have the expected content.
+11:51:31  
+11:51:31  The checksum calculated for the state stored in S3 does not match the checksum
+11:51:31  stored in DynamoDB.
+11:51:31  
+11:51:31  Bucket: oams-dev-data-pipelines-tf-state-hhsoig
+11:51:31  Key:    oams_risk_indicators_infrastructure_lza.tfstate
+11:51:31  Calculated checksum: 
+11:51:31  Stored checksum:     0ca293274a0760532e767e2a1dbcf92d
