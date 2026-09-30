@@ -1,12 +1,10 @@
-aws s3api head-object \
-  --bucket oams-dev-data-pipelines-tf-state-hhsoig \
-  --key oams_risk_indicators_infrastructure_lza.tfstate
+import jenkins.model.Jenkins
+import hudson.model.Job
 
+println "===== Jenkins Jobs ====="
 
-aws dynamodb get-item \
-  --table-name YOUR_DYNAMODB_TABLE \
-  --key '{"LockID":{"S":"oams-dev-data-pipelines-tf-state-hhsoig/oams_risk_indicators_infrastructure_lza.tfstate-md5"}}' \
-  --consistent-read
+Jenkins.get().getAllItems(Job.class).each { job ->
+    println job.fullName
+}
 
-terraform init -reconfigure
-terraform plan
+println "========================"
