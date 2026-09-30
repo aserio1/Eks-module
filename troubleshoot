@@ -1,13 +1,12 @@
- Successfully configured the backend "s3"! Terraform will automatically
-11:51:19  use this backend unless the backend configuration changes.
-11:51:19  
-11:51:31  
-11:51:31  Error: Error refreshing state: state data in S3 does not have the expected content.
-11:51:31  
-11:51:31  The checksum calculated for the state stored in S3 does not match the checksum
-11:51:31  stored in DynamoDB.
-11:51:31  
-11:51:31  Bucket: oams-dev-data-pipelines-tf-state-hhsoig
-11:51:31  Key:    oams_risk_indicators_infrastructure_lza.tfstate
-11:51:31  Calculated checksum: 
-11:51:31  Stored checksum:     0ca293274a0760532e767e2a1dbcf92d
+aws s3api head-object \
+  --bucket oams-dev-data-pipelines-tf-state-hhsoig \
+  --key oams_risk_indicators_infrastructure_lza.tfstate
+
+
+aws dynamodb get-item \
+  --table-name YOUR_DYNAMODB_TABLE \
+  --key '{"LockID":{"S":"oams-dev-data-pipelines-tf-state-hhsoig/oams_risk_indicators_infrastructure_lza.tfstate-md5"}}' \
+  --consistent-read
+
+terraform init -reconfigure
+terraform plan
