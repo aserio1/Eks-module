@@ -1,56 +1,19 @@
-pipeline {
-  agent { label jte.keywords.project }
+## Description
 
-  environment {
-    JOB_LIST_FILE = 'jenkins_live_jobs.txt'
-    AUDIT_OUTPUT_FILE = 'untracked_jobs.txt'
-    JENKINS_RELEASE_SCOPE = "prod"
-  }
+This PR updates the **IMAC Jenkins Jobs Audit** process to automatically generate a CSV file containing all Jenkins pipelines cataloged by project.
 
-  stages {
-    stage('Disable Concurrent Builds') {
-      steps {
-        echo "Disabling Concurrent Builds"
-        script {
-          disable_concurrent_builds()
-        }
-      }
-    }
+The audit script now creates `jenkins_pipeline_catalog.csv` in the Jenkins workspace with pipeline and compliance information.
 
-    stage('Trigger Cron') {
-      steps {
-        echo "Triggering job per cron schedule specification"
-        echo "BRANCH_NAME = ${env.BRANCH_NAME}"
-        script {
-          cron_trigger('0 13 * * 1', onlyOnBranch: 'main')
-        }
-      }
-    }
-  
-    stage('Checkout') {
-      steps {
-        script {
-          git_checkout()
-        }
-      }
-    }
+The Jenkins audit pipeline has also been updated to use `archiveArtifacts` to archive the generated CSV after a successful audit run. This makes the CSV available for download directly from the corresponding Jenkins build.
 
-    stage('Audit Jenkins Jobs') {
-      steps {
-        script {
-          setup()
-          ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts"){
-            sh """
-            /home/jenkins/anaconda3/envs/python312/bin/python3 audit_jenkins_jobs.py ${JENKINS_RELEASE_SCOPE}
-            """
+### Changes
+- Added CSV generation to `audit_jenkins_jobs.py`.
+- Catalogs Jenkins pipelines by project.
+- Includes pipeline path and compliance status in the CSV.
+- Generates `jenkins_pipeline_catalog.csv` in the Jenkins workspace.
+- Added `archiveArtifacts` to `Jenkinsfile.audit`.
+- Archives the generated CSV per successful Jenkins audit run.
 
-            archiveArtifacts artifacts: '**/*.csv',
-                             allowEmptyArchive: false,
-                             fingerprint: true,
-                             onlyIfSuccessful: true
-          }
-        }
-      }
-    }
-  }
-}
+### Acceptance Criteria
+- CSV file is automatically generated during the Jenkins Jobs Audit.
+- CSV file is archived and available from the Jenkins build artifacts.
