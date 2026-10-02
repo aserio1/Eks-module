@@ -1,12 +1,196 @@
-archiveArtifacts
-?
-Archives the build artifacts (for example, distribution zip files or jar files) so that they can be downloaded later. Archived files will be accessible from the Jenkins webpage.
-Normally, Jenkins keeps artifacts for a build as long as a build log itself is kept, but if you don't need old artifacts and would rather save disk space, you can do so.
+import requests
+import os
+import sys
+import boto3
+import json
+import csv
+from requests.auth import HTTPBasicAuth
+from botocore.exceptions import ClientError
 
-Note that the Maven job type automatically archives any produced Maven artifacts. Any artifacts configured here will be archived on top of that. Automatic artifact archiving can be disabled under the advanced Maven options.
+# Parameters
+JENKINS_ENV = sys.argv[1].strip()
+JENKINS_URL = "https://jenkins.aws.hhsoig.gov/"
+USERNAME = "SVC-Jenkins-Agent"
+API_TOKEN = os.environ.get("JENKINS_API_TOKEN")
 
-The Pipeline Snippet Generator generates this example when all arguments are set to true (some arguments by default are true):
-archiveArtifacts artifacts: '**/*.txt',
-                   allowEmptyArchive: true,
-                   fingerprint: true,
-                   onlyIfSuccessful: true
+# Output Files
+LIVE_JOBS_FILE = "live_jenkins_jobs.txt"
+MANAGED_JOBS_FILE = "managed_jenkins_jobs.txt"
+NONCOMPLIANT_JOBS_FILE = "noncompliant_jenkins_jobs.txt"
+PIPELINE_CATALOG_FILE = "jenkins_pipeline_catalog.csv"
+
+# Retrieves the username and token from AWS Secrets
+def get_secret(secret_name, region_name="us-east-1"):
+    """
+    Retrieve a secret from AWS Secrets Manager.
+
+    :param secret_name: The name of the secret.
+    :param region_name: The AWS region where the secret is stored.
+    :return: The secret value as a string, or None if error occurs.
+    """
+
+    # Create a Secrets Manager client
+    client = boto3.client("secretsmanager", region_name=region_name)
+
+    try:
+        # Retrieve the secret value
+        response = client.get_secret_value(SecretId=secret_name)
+
+        # Check if the secret is in plaintext or as a versioned secret
+        if "SecretString" in response:
+            secret = response["SecretString"]
+        else:
+            # If the secret is binary, convert it to a string
+            secret = response["SecretBinary"].decode("utf-8")
+
+        return secret
+
+    except ClientError as e:
+        # Handle errors from AWS Secrets Manager
+        print(f"Error retrieving secret: {e}")
+        return None
+
+# Fetch the live jobs from Jenkins
+def fetch_live_jobs(api_url, prefix=""):
+    # Fetch latest token everytime until token refresh is complete
+    API_TOKEN = get_secret(
+        JENKINS_ENV + "-svc-jenkins-agent-token", "us-east-1")
+    response = requests.get(
+        api_url, verify=False, auth=HTTPBasicAuth(USERNAME, API_TOKEN))
+    response.raise_for_status()
+    data = response.json()
+
+    jobs = []
+
+    for job in data.get("jobs", []):
+        job_name = job["name"]
+        full_path = f"{prefix}/{job_name}" if prefix else job_name
+        job_class = job.get("_class", "")
+
+        # Skip if its a branch inside a multibranch pipeline. Do not skip if regular pipeline inside folder
+        if prefix and "/job/" in prefix and "/job/" in job.get("url", "") and job["url"].count("/job/") > prefix.count("job/"):
+            if prefix and job_class == "org.jenkinsci.plugins.workflow.job.WorkflowJob":
+                 continue
+
+        # If it's a folder or multibranch pipeline with nested jobs, recurse
+        if job_class in [
+                "com.cloudbees.hudson.plugins.folder.Folder",
+                "org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject"
+        ]:
+            nested_api_url = job["url"] + "api/json"
+            jobs += fetch_live_jobs(nested_api_url, prefix=full_path)
+
+        # Only include real jobs(not folders)
+        if job_class not in [
+                "com.cloudbees.hudson.plugins.folder.Folder"
+        ]:
+            jobs.append(full_path)
+
+    return jobs
+
+# Fetch the codified jobs from project JSONS
+def gather_jobs_from_jsons():
+    managed_jobs = set()
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    jobs_dir = os.path.join(script_dir, "..", "jobs")
+    
+    if not os.path.isdir(jobs_dir):
+        print(f"Jobs directory not found at : {jobs_dir}")
+        return managed_jobs
+        
+    for filename in os.listdir(jobs_dir):
+        if filename.endswith(".json"):
+            filepath = os.path.join(jobs_dir, filename)
+            try:
+                with open(filepath) as f:
+                    data = json.load(f)
+                    
+                    for folder in data.get("folders", []):
+                        folder_name = folder.get("name", "").strip()
+
+                        # Pipelines directly under the folder
+                        for pipe in folder.get("pipelines", []):
+                            pipe_name = pipe.get("name", "").strip()
+                            if folder_name and pipe_name:
+                                managed_jobs.add(f"{folder_name}/{pipe_name}")
+                        
+                        # Pipelines under subfolders
+                        for subfolder in folder.get("subfolders", []):
+                            subfolder_name = subfolder.get("name", "").strip()
+                            for pipe in subfolder.get("pipelines", []):
+                                pipe_name = pipe.get("name", "").strip()
+                                if folder_name and subfolder_name and pipe_name:
+                                    managed_jobs.add(f"{folder_name}/{subfolder_name}/{pipe_name}")
+                                
+            except json.JSONDecodeError as e:
+                print(f"Error parsing {filename}: {e}", file=sys.stderr)
+                    
+    return managed_jobs
+    
+# Write to File system
+def write_list_to_file(items, filepath):
+    with open(filepath, "w") as f:
+        for item in sorted(items):
+            f.write(item + "\n")
+
+# Generate CSV file with all Jenkins pipelines cataloged by project
+def write_jobs_to_csv(all_jobs, managed_jobs, filepath):
+    with open(filepath, "w", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+
+        # CSV Header
+        writer.writerow([
+            "Project",
+            "Pipeline",
+            "Full Path",
+            "Compliance Status"
+        ])
+
+        for job in sorted(set(all_jobs)):
+            parts = job.split("/")
+            project = parts[0] if parts else ""
+            pipeline = parts[-1] if parts else job
+
+            if job in managed_jobs:
+                compliance_status = "Managed"
+            else:
+                compliance_status = "Non-Compliant"
+
+            writer.writerow([
+                project,
+                pipeline,
+                job,
+                compliance_status
+            ])
+
+# Main function calling the other functions to perform the comparison audit action
+def main():
+    all_jobs = fetch_live_jobs(f"{JENKINS_URL}/api/json")
+    write_list_to_file(all_jobs, LIVE_JOBS_FILE)
+    
+    managed_jobs = gather_jobs_from_jsons()
+    write_list_to_file(managed_jobs, MANAGED_JOBS_FILE)
+
+    non_compliant_jobs = sorted(set(all_jobs) - managed_jobs)
+    write_list_to_file(non_compliant_jobs, NONCOMPLIANT_JOBS_FILE)
+
+    # Generate CSV file in Jenkins workspace
+    write_jobs_to_csv(all_jobs, managed_jobs, PIPELINE_CATALOG_FILE)
+    
+    print(f"Total live jobs fetched: {len(all_jobs)}")
+    print(f"Written to: {LIVE_JOBS_FILE}")
+    print(f"Total managed jobs : {len(managed_jobs)}")
+    print(f"Written to: {MANAGED_JOBS_FILE}")
+    print(f"CSV file generated: {PIPELINE_CATALOG_FILE}")
+    
+    if non_compliant_jobs:
+        print(f"Total Non-compliant Jenkins jobs found: {len(non_compliant_jobs)}")
+        print(f"Written to: {NONCOMPLIANT_JOBS_FILE}")
+        for job in non_compliant_jobs:
+            print(f" - {job}")
+    else:
+        print("\n All Jenkins jobs are compliant per managed jobs defined in project jsons at https://git.aws.hhsoig.gov/CDO/imac-jenkins-jobs/tree/main/jobs")
+
+    
+if __name__ == "__main__":
+    main()
