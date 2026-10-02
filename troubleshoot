@@ -1,12 +1,86 @@
-stage('Jenkins Jobs Audit') {
-    steps {
-        sh '''
-            python3 scripts/jenkins_jobs_audit.py ${JENKINS_ENV}
-        '''
+################ Jenkinsfile.audit
+pipeline {
+  agent { label jte.keywords.project }
 
-        archiveArtifacts artifacts: '**/*.csv',
-                         allowEmptyArchive: false,
-                         fingerprint: true,
-                         onlyIfSuccessful: true
+  environment {
+    JOB_LIST_FILE = 'jenkins_live_jobs.txt'
+    AUDIT_OUTPUT_FILE = 'untracked_jobs.txt'
+    JENKINS_RELEASE_SCOPE = "prod"
+  }
+
+  stages {
+    stage('Disable Concurrent Builds') {
+      steps {
+        echo "Disabling Concurrent Builds"
+        script {
+          disable_concurrent_builds()
+        }
+      }
     }
+
+    stage('Trigger Cron') {
+      steps {
+        echo "Triggering job per cron schedule specification"
+        echo "BRANCH_NAME = ${env.BRANCH_NAME}"
+        script {
+          cron_trigger('0 13 * * 1', onlyOnBranch: 'main')
+        }
+      }
+    }
+  
+    stage('Checkout') {
+      steps {
+        script {
+          git_checkout()
+        }
+      }
+    }
+
+    stage('Audit Jenkins Jobs') {
+      steps {
+        script {
+          setup()
+          ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts"){
+            sh """
+            /home/jenkins/anaconda3/envs/python312/bin/python3 audit_jenkins_jobs.py ${JENKINS_RELEASE_SCOPE}
+            """
+          }
+        }
+      }
+    }
+  }
 }
+
+
+
+############ pipeline_config_audit.groovy
+jte{
+  permissive_initialization = true //allows resolution of steps with the same name
+}
+
+
+@merge libraries {
+    version_control
+    sonarqube
+    python
+    pipeline
+}
+
+application_environments{
+  dev {
+    short_name = "dev"
+    deployment_branch = "main"
+  }
+
+  prod {
+    short_name = "prod"
+    deployment_branch = "main"
+  }  
+
+}
+
+keywords{
+  project = "imac"
+  python_version = "3.12"
+}
+ 
