@@ -43,6 +43,11 @@ pipeline {
             sh """
             /home/jenkins/anaconda3/envs/python312/bin/python3 audit_jenkins_jobs.py ${JENKINS_RELEASE_SCOPE}
             /home/jenkins/anaconda3/envs/python312/bin/python3 pipeline_tech_stack.py ${JENKINS_RELEASE_SCOPE}
+
+            echo "======================================"
+            echo "Generated CSV files"
+            echo "======================================"
+            find . -type f -name "*.csv" -ls
             """
 
             archiveArtifacts artifacts: '**/*.csv',
