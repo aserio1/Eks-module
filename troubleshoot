@@ -1,62 +1,949 @@
-pipeline {
-  agent { label jte.keywords.project }
+#!/usr/bin/env python3
 
-  environment {
-    JOB_LIST_FILE = 'jenkins_live_jobs.txt'
-    AUDIT_OUTPUT_FILE = 'untracked_jobs.txt'
-    JENKINS_RELEASE_SCOPE = "prod"
-  }
+import csv
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
-  stages {
-    stage('Disable Concurrent Builds') {
-      steps {
-        echo "Disabling Concurrent Builds"
-        script {
-          disable_concurrent_builds()
-        }
-      }
-    }
+import boto3
+import requests
+from botocore.exceptions import ClientError
+from requests.auth import HTTPBasicAuth
 
-    stage('Trigger Cron') {
-      steps {
-        echo "Triggering job per cron schedule specification"
-        echo "BRANCH_NAME = ${env.BRANCH_NAME}"
-        script {
-          cron_trigger('0 13 * * 1', onlyOnBranch: 'main')
-        }
-      }
-    }
-  
-    stage('Checkout') {
-      steps {
-        script {
-          git_checkout()
-        }
-      }
-    }
 
-    stage('Audit Jenkins Jobs') {
-      steps {
-        script {
-          setup()
-          ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts"){
-            sh """
-            /home/jenkins/anaconda3/envs/python312/bin/python3 audit_jenkins_jobs.py ${JENKINS_RELEASE_SCOPE}
-            /home/jenkins/anaconda3/envs/python312/bin/python3 pipeline_tech_stack.py ${JENKINS_RELEASE_SCOPE}
+# -------------------------------------------------------
+# Parameters
+# -------------------------------------------------------
 
-            echo "======================================"
-            echo "Generated CSV files"
-            echo "======================================"
-            find . -type f -name "*.csv" -ls
-            """
+JENKINS_ENV = sys.argv[1].strip()
 
-            archiveArtifacts artifacts: '**/*.csv',
-                             allowEmptyArchive: false,
-                             fingerprint: true,
-                             onlyIfSuccessful: true
-          }
-        }
-      }
-    }
-  }
-}
+JENKINS_URL = "https://jenkins.aws.hhsoig.gov/"
+USERNAME = "SVC-Jenkins-Agent"
+
+TECH_STACK_FILE = "jenkins_tech_stack.csv"
+
+JENKINS_FOLDER_CLASS = "com.cloudbees.hudson.plugins.folder.Folder"
+
+MULTIBRANCH_CLASS = (
+    "org.jenkinsci.plugins.workflow.multibranch."
+    "WorkflowMultiBranchProject"
+)
+
+PIPELINE_CLASS = "org.jenkinsci.plugins.workflow.job.WorkflowJob"
+
+
+# -------------------------------------------------------
+# Retrieve Jenkins Token
+# -------------------------------------------------------
+
+def get_secret(secret_name, region_name="us-east-1"):
+
+    client = boto3.client(
+        "secretsmanager",
+        region_name=region_name
+    )
+
+    try:
+
+        response = client.get_secret_value(
+            SecretId=secret_name
+        )
+
+        if "SecretString" in response:
+            return response["SecretString"]
+
+        return response["SecretBinary"].decode("utf-8")
+
+    except ClientError as error:
+
+        print(
+            f"ERROR: Unable to retrieve Jenkins token: {error}",
+            file=sys.stderr
+        )
+
+        return None
+
+
+# -------------------------------------------------------
+# Jenkins Request
+# -------------------------------------------------------
+
+def jenkins_request(url, token):
+
+    response = requests.get(
+        url,
+        verify=False,
+        auth=HTTPBasicAuth(
+            USERNAME,
+            token
+        ),
+        timeout=60
+    )
+
+    response.raise_for_status()
+
+    return response
+
+
+# -------------------------------------------------------
+# Retrieve Jenkins Pipelines
+# -------------------------------------------------------
+
+def fetch_jenkins_pipelines(
+    api_url,
+    token,
+    prefix=""
+):
+
+    response = jenkins_request(
+        api_url,
+        token
+    )
+
+    data = response.json()
+
+    pipelines = []
+
+    for job in data.get("jobs", []):
+
+        job_name = job.get("name", "").strip()
+        job_url = job.get("url", "").strip()
+        job_class = job.get("_class", "")
+
+        if not job_name or not job_url:
+            continue
+
+        full_path = (
+            f"{prefix}/{job_name}"
+            if prefix
+            else job_name
+        )
+
+        # -----------------------------------------------
+        # Normal Jenkins folder
+        # -----------------------------------------------
+
+        if job_class == JENKINS_FOLDER_CLASS:
+
+            nested_url = (
+                f"{job_url}api/json"
+            )
+
+            pipelines.extend(
+                fetch_jenkins_pipelines(
+                    nested_url,
+                    token,
+                    full_path
+                )
+            )
+
+            continue
+
+        # -----------------------------------------------
+        # Multibranch Pipeline
+        #
+        # Add the actual pipeline itself.
+        # DO NOT recurse into its branch jobs.
+        #
+        # This prevents:
+        #
+        # feature/*
+        # develop
+        # release/*
+        # PR-*
+        # etc.
+        #
+        # Repository scanning later explicitly clones
+        # main.
+        # -----------------------------------------------
+
+        if job_class == MULTIBRANCH_CLASS:
+
+            pipelines.append({
+                "project": (
+                    full_path.split("/")[0]
+                ),
+                "pipeline": job_name,
+                "full_path": full_path,
+                "url": job_url,
+                "type": "multibranch"
+            })
+
+            continue
+
+        # -----------------------------------------------
+        # Regular Pipeline
+        # -----------------------------------------------
+
+        if job_class == PIPELINE_CLASS:
+
+            pipelines.append({
+                "project": (
+                    full_path.split("/")[0]
+                ),
+                "pipeline": job_name,
+                "full_path": full_path,
+                "url": job_url,
+                "type": "pipeline"
+            })
+
+    return pipelines
+
+
+# -------------------------------------------------------
+# Retrieve Jenkins Job Config
+# -------------------------------------------------------
+
+def get_job_config(job_url, token):
+
+    config_url = f"{job_url}config.xml"
+
+    try:
+
+        response = jenkins_request(
+            config_url,
+            token
+        )
+
+        return response.text
+
+    except requests.RequestException as error:
+
+        print(
+            f"WARNING: Unable to retrieve config for "
+            f"{job_url}: {error}"
+        )
+
+        return None
+
+
+# -------------------------------------------------------
+# Find Git Repository URL
+# -------------------------------------------------------
+
+def get_repository_url(config_xml):
+
+    if not config_xml:
+        return None
+
+    try:
+
+        root = ET.fromstring(config_xml)
+
+    except ET.ParseError:
+
+        return None
+
+    # ---------------------------------------------------
+    # Search Jenkins XML for common Git SCM URL fields
+    # ---------------------------------------------------
+
+    possible_tags = [
+        "url",
+        "remote",
+        "remoteUrl",
+        "repositoryUrl",
+        "projectUrl"
+    ]
+
+    for element in root.iter():
+
+        tag = element.tag.split("}")[-1]
+
+        if tag not in possible_tags:
+            continue
+
+        if not element.text:
+            continue
+
+        value = element.text.strip()
+
+        if (
+            value.startswith("git@")
+            or value.startswith("ssh://")
+            or value.startswith("https://")
+            or value.startswith("http://")
+        ):
+
+            # Avoid accidentally treating Jenkins itself
+            # as a Git repository.
+            if "jenkins.aws.hhsoig.gov" in value:
+                continue
+
+            return value
+
+    return None
+
+
+# -------------------------------------------------------
+# Clone Main Branch
+# -------------------------------------------------------
+
+def clone_main_repository(
+    repository_url,
+    destination
+):
+
+    command = [
+        "git",
+        "clone",
+        "--quiet",
+        "--depth",
+        "1",
+        "--branch",
+        "main",
+        repository_url,
+        str(destination)
+    ]
+
+    try:
+
+        subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=300
+        )
+
+        return True
+
+    except subprocess.CalledProcessError as error:
+
+        print(
+            f"WARNING: Unable to clone main branch from "
+            f"{repository_url}"
+        )
+
+        if error.stderr:
+            print(error.stderr.strip())
+
+        return False
+
+    except subprocess.TimeoutExpired:
+
+        print(
+            f"WARNING: Git clone timed out for "
+            f"{repository_url}"
+        )
+
+        return False
+
+
+# -------------------------------------------------------
+# File Helpers
+# -------------------------------------------------------
+
+def has_file(scan_dir, pattern):
+
+    return any(
+        path.is_file()
+        for path in scan_dir.rglob(pattern)
+    )
+
+
+def has_any_file(scan_dir, patterns):
+
+    for pattern in patterns:
+
+        if has_file(
+            scan_dir,
+            pattern
+        ):
+            return True
+
+    return False
+
+
+def file_contains(
+    scan_dir,
+    patterns,
+    search_text
+):
+
+    for pattern in patterns:
+
+        for filepath in scan_dir.rglob(pattern):
+
+            if not filepath.is_file():
+                continue
+
+            try:
+
+                with filepath.open(
+                    "r",
+                    encoding="utf-8",
+                    errors="ignore"
+                ) as file:
+
+                    for line in file:
+
+                        if search_text in line:
+                            return True
+
+            except (
+                OSError,
+                PermissionError
+            ):
+                continue
+
+    return False
+
+
+# -------------------------------------------------------
+# Detect Tech Stack
+# -------------------------------------------------------
+
+def detect_tech_stack(scan_dir):
+
+    tech_stack = []
+
+    # Terraform
+    if has_file(
+        scan_dir,
+        "*.tf"
+    ):
+        tech_stack.append("terraform")
+
+    # Python
+    if has_file(
+        scan_dir,
+        "*.py"
+    ):
+        tech_stack.append("python")
+
+    # Docker
+    if has_any_file(
+        scan_dir,
+        [
+            "Dockerfile",
+            "Dockerfile.*"
+        ]
+    ):
+        tech_stack.append("docker")
+
+    # Node.js
+    if has_file(
+        scan_dir,
+        "package.json"
+    ):
+        tech_stack.append("node")
+
+    # Maven
+    if has_file(
+        scan_dir,
+        "pom.xml"
+    ):
+        tech_stack.append("maven")
+
+    # Gradle
+    if has_any_file(
+        scan_dir,
+        [
+            "build.gradle",
+            "build.gradle.kts"
+        ]
+    ):
+        tech_stack.append("gradle")
+
+    # Go
+    if has_file(
+        scan_dir,
+        "go.mod"
+    ):
+        tech_stack.append("go")
+
+    # .NET
+    if has_any_file(
+        scan_dir,
+        [
+            "*.csproj",
+            "*.sln"
+        ]
+    ):
+        tech_stack.append("dotnet")
+
+    # Helm
+    if has_file(
+        scan_dir,
+        "Chart.yaml"
+    ):
+        tech_stack.append("helm")
+
+    # Kubernetes
+    if file_contains(
+        scan_dir,
+        [
+            "*.yaml",
+            "*.yml"
+        ],
+        "kind:"
+    ):
+        tech_stack.append("kubernetes")
+
+    # Ansible
+    if has_any_file(
+        scan_dir,
+        [
+            "ansible.cfg",
+            "playbook.yml",
+            "playbook.yaml"
+        ]
+    ):
+        tech_stack.append("ansible")
+
+    # Packer
+    if has_any_file(
+        scan_dir,
+        [
+            "*.pkr.hcl",
+            "*.pkr.json"
+        ]
+    ):
+        tech_stack.append("packer")
+
+    # CloudFormation
+    if file_contains(
+        scan_dir,
+        [
+            "*.yaml",
+            "*.yml",
+            "*.json"
+        ],
+        "AWSTemplateFormatVersion"
+    ):
+        tech_stack.append(
+            "cloudformation"
+        )
+
+    # OPA / Rego
+    if has_file(
+        scan_dir,
+        "*.rego"
+    ):
+        tech_stack.append("opa")
+
+    # Jenkins
+    if has_any_file(
+        scan_dir,
+        [
+            "Jenkinsfile",
+            "Jenkinsfile.*"
+        ]
+    ):
+        tech_stack.append("jenkins")
+
+    # GitHub Actions
+    github_actions = (
+        scan_dir
+        / ".github"
+        / "workflows"
+    )
+
+    if github_actions.is_dir():
+        tech_stack.append(
+            "github-actions"
+        )
+
+    # GitLab CI
+    gitlab_ci = (
+        scan_dir
+        / ".gitlab-ci.yml"
+    )
+
+    if gitlab_ci.is_file():
+        tech_stack.append(
+            "gitlab-ci"
+        )
+
+    if not tech_stack:
+        return "unknown"
+
+    return ",".join(tech_stack)
+
+
+# -------------------------------------------------------
+# Jenkinsfile LOC
+# -------------------------------------------------------
+
+def count_jenkinsfile_loc(scan_dir):
+
+    total_loc = 0
+
+    for filepath in scan_dir.rglob("*"):
+
+        if not filepath.is_file():
+            continue
+
+        if not (
+            filepath.name == "Jenkinsfile"
+            or filepath.name.startswith(
+                "Jenkinsfile."
+            )
+        ):
+            continue
+
+        try:
+
+            with filepath.open(
+                "r",
+                encoding="utf-8",
+                errors="ignore"
+            ) as file:
+
+                for line in file:
+
+                    # Count non-empty lines only
+                    if line.strip():
+                        total_loc += 1
+
+        except (
+            OSError,
+            PermissionError
+        ):
+            continue
+
+    return total_loc
+
+
+# -------------------------------------------------------
+# Write CSV
+# -------------------------------------------------------
+
+def write_csv(results):
+
+    with open(
+        TECH_STACK_FILE,
+        "w",
+        newline=""
+    ) as csvfile:
+
+        writer = csv.writer(
+            csvfile
+        )
+
+        writer.writerow([
+            "Project",
+            "Pipeline",
+            "Repository",
+            "Tech Stack",
+            "Jenkinsfile LOC"
+        ])
+
+        for result in results:
+
+            writer.writerow([
+                result["project"],
+                result["pipeline"],
+                result["repository"],
+                result["tech_stack"],
+                result["jenkinsfile_loc"]
+            ])
+
+
+# -------------------------------------------------------
+# Main
+# -------------------------------------------------------
+
+def main():
+
+    print(
+        "======================================"
+    )
+    print(
+        "Jenkins Pipeline Tech Stack Audit"
+    )
+    print(
+        "======================================"
+    )
+
+    # ---------------------------------------------------
+    # Jenkins Token
+    # ---------------------------------------------------
+
+    secret_name = (
+        f"{JENKINS_ENV}-svc-jenkins-agent-token"
+    )
+
+    token = get_secret(
+        secret_name,
+        "us-east-1"
+    )
+
+    if not token:
+
+        print(
+            "ERROR: Jenkins API token could not "
+            "be retrieved.",
+            file=sys.stderr
+        )
+
+        sys.exit(1)
+
+    # ---------------------------------------------------
+    # Retrieve Jenkins Pipelines
+    # ---------------------------------------------------
+
+    print(
+        "\nRetrieving Jenkins pipelines..."
+    )
+
+    try:
+
+        pipelines = fetch_jenkins_pipelines(
+            f"{JENKINS_URL}api/json",
+            token
+        )
+
+    except requests.RequestException as error:
+
+        print(
+            f"ERROR: Unable to retrieve Jenkins jobs: "
+            f"{error}",
+            file=sys.stderr
+        )
+
+        sys.exit(1)
+
+    print(
+        f"Jenkins pipelines discovered: "
+        f"{len(pipelines)}"
+    )
+
+    results = []
+
+    processed_repositories = {}
+
+    # ---------------------------------------------------
+    # Temporary Repository Directory
+    # ---------------------------------------------------
+
+    with tempfile.TemporaryDirectory(
+        prefix="jenkins-tech-stack-"
+    ) as temp_directory:
+
+        temp_root = Path(
+            temp_directory
+        )
+
+        # -----------------------------------------------
+        # Process Pipelines
+        # -----------------------------------------------
+
+        for index, pipeline in enumerate(
+            pipelines,
+            start=1
+        ):
+
+            project = pipeline["project"]
+            pipeline_name = pipeline["pipeline"]
+            full_path = pipeline["full_path"]
+            job_url = pipeline["url"]
+
+            print()
+            print(
+                "--------------------------------------"
+            )
+            print(
+                f"[{index}/{len(pipelines)}] "
+                f"{full_path}"
+            )
+            print(
+                "--------------------------------------"
+            )
+
+            # -------------------------------------------
+            # Jenkins Config
+            # -------------------------------------------
+
+            config_xml = get_job_config(
+                job_url,
+                token
+            )
+
+            repository_url = (
+                get_repository_url(
+                    config_xml
+                )
+            )
+
+            if not repository_url:
+
+                print(
+                    "No Git repository found."
+                )
+
+                continue
+
+            print(
+                f"Repository: {repository_url}"
+            )
+
+            # -------------------------------------------
+            # Reuse scan if repository already processed
+            # -------------------------------------------
+
+            if repository_url in processed_repositories:
+
+                print(
+                    "Repository already scanned. "
+                    "Reusing result."
+                )
+
+                repository_result = (
+                    processed_repositories[
+                        repository_url
+                    ]
+                )
+
+                results.append({
+                    "project": project,
+                    "pipeline": pipeline_name,
+                    "repository": repository_url,
+                    "tech_stack":
+                        repository_result[
+                            "tech_stack"
+                        ],
+                    "jenkinsfile_loc":
+                        repository_result[
+                            "jenkinsfile_loc"
+                        ]
+                })
+
+                continue
+
+            # -------------------------------------------
+            # Clone Main
+            # -------------------------------------------
+
+            repository_directory = (
+                temp_root
+                / f"repo-{index}"
+            )
+
+            print(
+                "Cloning main branch..."
+            )
+
+            cloned = clone_main_repository(
+                repository_url,
+                repository_directory
+            )
+
+            if not cloned:
+                continue
+
+            # -------------------------------------------
+            # Detect Tech Stack
+            # -------------------------------------------
+
+            tech_stack = detect_tech_stack(
+                repository_directory
+            )
+
+            # -------------------------------------------
+            # Jenkinsfile LOC
+            # -------------------------------------------
+
+            jenkinsfile_loc = (
+                count_jenkinsfile_loc(
+                    repository_directory
+                )
+            )
+
+            print(
+                f"Tech Stack: {tech_stack}"
+            )
+
+            print(
+                f"Jenkinsfile LOC: "
+                f"{jenkinsfile_loc}"
+            )
+
+            # -------------------------------------------
+            # Cache Repository Result
+            # -------------------------------------------
+
+            processed_repositories[
+                repository_url
+            ] = {
+                "tech_stack": tech_stack,
+                "jenkinsfile_loc":
+                    jenkinsfile_loc
+            }
+
+            # -------------------------------------------
+            # Save Pipeline Result
+            # -------------------------------------------
+
+            results.append({
+                "project": project,
+                "pipeline": pipeline_name,
+                "repository": repository_url,
+                "tech_stack": tech_stack,
+                "jenkinsfile_loc":
+                    jenkinsfile_loc
+            })
+
+    # ---------------------------------------------------
+    # Write CSV
+    # ---------------------------------------------------
+
+    write_csv(
+        results
+    )
+
+    print()
+    print(
+        "======================================"
+    )
+    print(
+        "Tech Stack Audit Complete"
+    )
+    print(
+        "======================================"
+    )
+
+    print(
+        f"Tech stack CSV generated: "
+        f"{TECH_STACK_FILE}"
+    )
+
+    print(
+        f"Total pipelines written: "
+        f"{len(results)}"
+    )
+
+    print(
+        f"Unique repositories scanned: "
+        f"{len(processed_repositories)}"
+    )
+
+    # Verify file exists for Jenkins archiveArtifacts
+    if os.path.isfile(
+        TECH_STACK_FILE
+    ):
+
+        print(
+            f"CSV verified: "
+            f"{os.path.abspath(TECH_STACK_FILE)}"
+        )
+
+    else:
+
+        print(
+            f"ERROR: {TECH_STACK_FILE} "
+            f"was not generated.",
+            file=sys.stderr
+        )
+
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
