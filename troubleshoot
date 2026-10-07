@@ -149,9 +149,14 @@ def write_jobs_to_csv(all_jobs, managed_jobs, filepath):
         for job in sorted(set(all_jobs)):
             parts = job.split("/")
 
-            # Skip feature branches
-            if any(part.lower().startswith("feature") for part in parts):
-                continue
+            # If this is a branch job, only include the main branch
+            if len(parts) >= 3:
+                branch_name = parts[-1]
+                parent_pipeline = "/".join(parts[:-1])
+
+                # Check if the parent pipeline also exists in the Jenkins job list
+                if parent_pipeline in all_jobs and branch_name != "main":
+                    continue
 
             project = parts[0] if parts else ""
             pipeline = parts[-1] if parts else job
