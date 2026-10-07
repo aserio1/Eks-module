@@ -1,275 +1,73 @@
-######## pipeline_tech_stack.py
-#!/usr/bin/env python3
-
-import os
-import sys
-from pathlib import Path
-
-
-# Directory to scan
-SCAN_DIR = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
-
-TECH_STACK = []
-
-
-def has_file(pattern):
-    """Check if at least one file matching the pattern exists."""
-    return any(
-        path.is_file()
-        for path in SCAN_DIR.rglob(pattern)
-    )
-
-
-def has_any_file(patterns):
-    """Check if at least one file matching any pattern exists."""
-    for pattern in patterns:
-        if has_file(pattern):
-            return True
-    return False
-
-
-def file_contains(patterns, search_text):
-    """
-    Search files matching the supplied patterns for specific text.
-    """
-    for pattern in patterns:
-        for filepath in SCAN_DIR.rglob(pattern):
-
-            if not filepath.is_file():
-                continue
-
-            try:
-                with filepath.open(
-                    "r",
-                    encoding="utf-8",
-                    errors="ignore"
-                ) as file:
-
-                    for line in file:
-                        if search_text in line:
-                            return True
-
-            except (OSError, PermissionError):
-                continue
-
-    return False
-
-
-# -------------------------------------------------------
-# Terraform
-# -------------------------------------------------------
-
-if has_file("*.tf"):
-    TECH_STACK.append("terraform")
-
-
-# -------------------------------------------------------
-# Python
-# -------------------------------------------------------
-
-if has_file("*.py"):
-    TECH_STACK.append("python")
-
-
-# -------------------------------------------------------
-# Docker
-# -------------------------------------------------------
-
-if has_any_file([
-    "Dockerfile",
-    "Dockerfile.*"
-]):
-    TECH_STACK.append("docker")
-
-
-# -------------------------------------------------------
-# Node.js / JavaScript / TypeScript
-# -------------------------------------------------------
-
-if has_file("package.json"):
-    TECH_STACK.append("node")
-
-
-# -------------------------------------------------------
-# Java / Maven
-# -------------------------------------------------------
-
-if has_file("pom.xml"):
-    TECH_STACK.append("maven")
-
-
-# -------------------------------------------------------
-# Java / Gradle
-# -------------------------------------------------------
-
-if has_any_file([
-    "build.gradle",
-    "build.gradle.kts"
-]):
-    TECH_STACK.append("gradle")
-
-
-# -------------------------------------------------------
-# Go
-# -------------------------------------------------------
-
-if has_file("go.mod"):
-    TECH_STACK.append("go")
-
-
-# -------------------------------------------------------
-# .NET
-# -------------------------------------------------------
-
-if has_any_file([
-    "*.csproj",
-    "*.sln"
-]):
-    TECH_STACK.append("dotnet")
-
-
-# -------------------------------------------------------
-# Helm
-# -------------------------------------------------------
-
-if has_file("Chart.yaml"):
-    TECH_STACK.append("helm")
-
-
-# -------------------------------------------------------
-# Kubernetes
-# -------------------------------------------------------
-
-if file_contains(
-    ["*.yaml", "*.yml"],
-    "kind:"
-):
-    TECH_STACK.append("kubernetes")
-
-
-# -------------------------------------------------------
-# Ansible
-# -------------------------------------------------------
-
-if has_any_file([
-    "ansible.cfg",
-    "playbook.yml",
-    "playbook.yaml"
-]):
-    TECH_STACK.append("ansible")
-
-
-# -------------------------------------------------------
-# Packer
-# -------------------------------------------------------
-
-if has_any_file([
-    "*.pkr.hcl",
-    "*.pkr.json"
-]):
-    TECH_STACK.append("packer")
-
-
-# -------------------------------------------------------
-# CloudFormation
-# -------------------------------------------------------
-
-if file_contains(
-    ["*.yaml", "*.yml", "*.json"],
-    "AWSTemplateFormatVersion"
-):
-    TECH_STACK.append("cloudformation")
-
-
-# -------------------------------------------------------
-# OPA / Rego
-# -------------------------------------------------------
-
-if has_file("*.rego"):
-    TECH_STACK.append("opa")
-
-
-# -------------------------------------------------------
-# Jenkins
-# -------------------------------------------------------
-
-if has_any_file([
-    "Jenkinsfile",
-    "Jenkinsfile.*"
-]):
-    TECH_STACK.append("jenkins")
-
-
-# -------------------------------------------------------
-# GitHub Actions
-# -------------------------------------------------------
-
-github_actions = SCAN_DIR / ".github" / "workflows"
-
-if github_actions.is_dir():
-    TECH_STACK.append("github-actions")
-
-
-# -------------------------------------------------------
-# GitLab CI
-# -------------------------------------------------------
-
-gitlab_ci = SCAN_DIR / ".gitlab-ci.yml"
-
-if gitlab_ci.is_file():
-    TECH_STACK.append("gitlab-ci")
-
-
-# -------------------------------------------------------
-# Count Jenkinsfile Lines of Code
-# -------------------------------------------------------
-
-jenkinsfile_loc = 0
-
-jenkinsfiles = []
-
-for filepath in SCAN_DIR.rglob("*"):
-
-    if not filepath.is_file():
-        continue
-
-    if (
-        filepath.name == "Jenkinsfile"
-        or filepath.name.startswith("Jenkinsfile.")
-    ):
-        jenkinsfiles.append(filepath)
-
-
-for jenkinsfile in jenkinsfiles:
-
-    try:
-        with jenkinsfile.open(
-            "r",
-            encoding="utf-8",
-            errors="ignore"
-        ) as file:
-
-            # Count non-empty lines
-            for line in file:
-                if line.strip():
-                    jenkinsfile_loc += 1
-
-    except (OSError, PermissionError):
-        continue
-
-
-# -------------------------------------------------------
-# Build Result
-# -------------------------------------------------------
-
-if TECH_STACK:
-    tech_stack_result = ",".join(TECH_STACK)
-else:
-    tech_stack_result = "unknown"
-
-
-# -------------------------------------------------------
-# Return Result
-# -------------------------------------------------------
-
-print(f"{tech_stack_result}|{jenkinsfile_loc}")
+pipeline {
+  agent { label jte.keywords.project }
+
+  environment {
+    JOB_LIST_FILE = 'jenkins_live_jobs.txt'
+    AUDIT_OUTPUT_FILE = 'untracked_jobs.txt'
+    JENKINS_RELEASE_SCOPE = "prod"
+  }
+
+  stages {
+    stage('Disable Concurrent Builds') {
+      steps {
+        echo "Disabling Concurrent Builds"
+        script {
+          disable_concurrent_builds()
+        }
+      }
+    }
+
+    stage('Trigger Cron') {
+      steps {
+        echo "Triggering job per cron schedule specification"
+        echo "BRANCH_NAME = ${env.BRANCH_NAME}"
+        script {
+          cron_trigger('0 13 * * 1', onlyOnBranch: 'main')
+        }
+      }
+    }
+  
+    stage('Checkout') {
+      steps {
+        script {
+          git_checkout()
+        }
+      }
+    }
+
+    stage('Audit Jenkins Jobs') {
+      steps {
+        script {
+          setup()
+          ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts"){
+            sh """
+            /home/jenkins/anaconda3/envs/python312/bin/python3 audit_jenkins_jobs.py ${JENKINS_RELEASE_SCOPE}
+            """
+
+            archiveArtifacts artifacts: '**/*.csv',
+                             allowEmptyArchive: false,
+                             fingerprint: true,
+                             onlyIfSuccessful: true
+          }
+        }
+      }
+    }
+
+    stage('Pipeline Tech Stack Audit') {
+      steps {
+        script {
+          ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts"){
+            sh """
+            /home/jenkins/anaconda3/envs/python312/bin/python3 pipeline_tech_stack.py ${JENKINS_RELEASE_SCOPE}
+            """
+
+            archiveArtifacts artifacts: 'jenkins_tech_stack_catalog.csv',
+                             allowEmptyArchive: false,
+                             fingerprint: true,
+                             onlyIfSuccessful: true
+          }
+        }
+      }
+    }
+  }
+}
