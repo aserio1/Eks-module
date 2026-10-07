@@ -1,63 +1,3 @@
-####jenkinsfile.audit
-pipeline {
-  agent { label jte.keywords.project }
-
-  environment {
-    JOB_LIST_FILE = 'jenkins_live_jobs.txt'
-    AUDIT_OUTPUT_FILE = 'untracked_jobs.txt'
-    JENKINS_RELEASE_SCOPE = "prod"
-  }
-
-  stages {
-    stage('Disable Concurrent Builds') {
-      steps {
-        echo "Disabling Concurrent Builds"
-        script {
-          disable_concurrent_builds()
-        }
-      }
-    }
-
-    stage('Trigger Cron') {
-      steps {
-        echo "Triggering job per cron schedule specification"
-        echo "BRANCH_NAME = ${env.BRANCH_NAME}"
-        script {
-          cron_trigger('0 13 * * 1', onlyOnBranch: 'main')
-        }
-      }
-    }
-  
-    stage('Checkout') {
-      steps {
-        script {
-          git_checkout()
-        }
-      }
-    }
-
-    stage('Audit Jenkins Jobs') {
-      steps {
-        script {
-          setup()
-          ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts"){
-            sh """
-            /home/jenkins/anaconda3/envs/python312/bin/python3 audit_jenkins_jobs.py ${JENKINS_RELEASE_SCOPE}
-            """
-
-            archiveArtifacts artifacts: '**/*.csv',
-                             allowEmptyArchive: false,
-                             fingerprint: true,
-                             onlyIfSuccessful: true
-          }
-        }
-      }
-    }
-  }
-}
-
-
-########## audit_jenkins_jobs.py
 import requests
 import os
 import sys
@@ -208,6 +148,11 @@ def write_jobs_to_csv(all_jobs, managed_jobs, filepath):
 
         for job in sorted(set(all_jobs)):
             parts = job.split("/")
+
+            # Skip feature branches
+            if any(part.lower().startswith("feature") for part in parts):
+                continue
+
             project = parts[0] if parts else ""
             pipeline = parts[-1] if parts else job
 
@@ -254,5 +199,3 @@ def main():
     
 if __name__ == "__main__":
     main()
-
-
