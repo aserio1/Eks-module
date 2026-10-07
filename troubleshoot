@@ -42,26 +42,10 @@ pipeline {
           ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts"){
             sh """
             /home/jenkins/anaconda3/envs/python312/bin/python3 audit_jenkins_jobs.py ${JENKINS_RELEASE_SCOPE}
-            """
-
-            archiveArtifacts artifacts: '**/*.csv',
-                             allowEmptyArchive: false,
-                             fingerprint: true,
-                             onlyIfSuccessful: true
-          }
-        }
-      }
-    }
-
-    stage('Pipeline Tech Stack Audit') {
-      steps {
-        script {
-          ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts"){
-            sh """
             /home/jenkins/anaconda3/envs/python312/bin/python3 pipeline_tech_stack.py ${JENKINS_RELEASE_SCOPE}
             """
 
-            archiveArtifacts artifacts: 'jenkins_tech_stack_catalog.csv',
+            archiveArtifacts artifacts: '**/*.csv',
                              allowEmptyArchive: false,
                              fingerprint: true,
                              onlyIfSuccessful: true
