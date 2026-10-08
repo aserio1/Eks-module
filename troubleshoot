@@ -1,1 +1,87 @@
- ERROR: Could not find credentials entry with ID 'jenkins-git-readonly'
+
+pipeline {
+  agent { label jte.keywords.project }
+
+  environment {
+    JOB_LIST_FILE = 'jenkins_live_jobs.txt'
+    AUDIT_OUTPUT_FILE = 'untracked_jobs.txt'
+    JENKINS_RELEASE_SCOPE = "prod"
+  }
+
+  stages {
+    stage('Disable Concurrent Builds') {
+      steps {
+        echo "Disabling Concurrent Builds"
+        script {
+          disable_concurrent_builds()
+        }
+      }
+    }
+
+    stage('Trigger Cron') {
+      steps {
+        echo "Triggering job per cron schedule specification"
+        echo "BRANCH_NAME = ${env.BRANCH_NAME}"
+        script {
+          cron_trigger('0 13 * * 1', onlyOnBranch: 'main')
+        }
+      }
+    }
+
+    stage('Checkout') {
+      steps {
+        script {
+          git_checkout()
+        }
+      }
+    }
+
+    stage('Audit Jenkins Jobs') {
+      steps {
+        script {
+          setup()
+
+          ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts") {
+
+            echo "======================================"
+            echo "Starting Jenkins Jobs Audit"
+            echo "======================================"
+
+            sh '''
+              set -e
+
+              echo "======================================"
+              echo "Running Consolidated Jenkins Audit"
+              echo "======================================"
+
+              /home/jenkins/anaconda3/envs/python312/bin/python3 \
+                audit_jenkins_jobs.py "$JENKINS_RELEASE_SCOPE"
+
+              echo "======================================"
+              echo "Verifying Generated CSV"
+              echo "======================================"
+
+              test -s jenkins_pipeline_catalog.csv
+
+              echo "CSV successfully generated:"
+              ls -lh jenkins_pipeline_catalog.csv
+            '''
+
+            echo "======================================"
+            echo "Archiving Jenkins Audit CSV"
+            echo "======================================"
+
+            archiveArtifacts artifacts: 'jenkins_pipeline_catalog.csv',
+                             allowEmptyArchive: false,
+                             fingerprint: true,
+                             onlyIfSuccessful: true
+
+            echo "======================================"
+            echo "Jenkins Jobs Audit Completed"
+            echo "======================================"
+          }
+        }
+      }
+    }
+  }
+}
