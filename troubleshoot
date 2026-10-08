@@ -34,3 +34,21 @@ def count_jenkinsfile_loc(scan_dir):
 
     for path in scan_dir.rglob("*"):
 Claudio is correct - for each job u need to look at the Jenkinsfile the job uses and count the lines.
+
+
+#####JENKINS CONSOLE OUTPUT
+use to have non-compliant job list, make the output more cleaner and restore previous output.
+15:20:30    warnings.warn(
+15:20:30  Total live jobs fetched: 122
+15:20:30  Written to: live_jenkins_jobs.txt
+15:20:30  Total managed jobs : 118
+15:20:30  Written to: managed_jenkins_jobs.txt
+15:20:30  Total Non-compliant Jenkins jobs found: 4
+15:20:30  Written to: noncompliant_jenkins_jobs.txt
+15:20:30   - CGAP/CGAP Code Deploy/CGAP DS Code Promote - Viz Tools
+15:20:30   - CGAP/CGAP Frontend/cgap-frontend
+15:20:30   - CGAP/CGAP Frontend/cloud-analytics-components
+15:20:30   - CGAP/CGAP Infrastructure/CGAP Infra - Cloud-Analytics
+
+Finally consolidate this jenkins_tech_stack.csv into jenkins_pipeline_catalog.csv, make it one file with name jenkins_pipeline_catalog.csv
+and in that file include the Jenkins list from multi-branch main branch, tech stacks and LOC of each jenkinsfiles. also fix PR comments.
