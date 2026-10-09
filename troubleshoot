@@ -14,3 +14,8 @@
 09:56:21  CSV generated: jenkins_pipeline_catalog.csv
 09:56:21  Total pipelines written: 124 / 124
 09:56:21  Unique repositories with clone failures: 12
+
+
+
+also i want just the full path in the cvs because it contains the name and path of the jenkins job. do not add Jenkins job name and full path
+make it one and not duplicate.
