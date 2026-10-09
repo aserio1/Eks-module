@@ -1,7 +1,975 @@
-Full Path	Compliance Status	Repository	Tech Stack	Jenkinsfile Path	Jenkinsfile LOC
-CGAP/CGAP Code Deploy/CGAP DS Code Promote - Viz-Tools	Managed	https://git.aws.hhsoig.gov/CDO/cgap-ds.git	Clone Failed	Clone Failed	Clone Failed
 
-CGAP/CGAP Code Deploy/CGAP DS Code Deploy - Viz-Tools	Managed	https://git.aws.hhsoig.gov/CDO/cgap-ds.git	Clone Failed	Clone Failed	Clone Failed
+#!/usr/bin/env python3
 
-CGAP/CGAP Code Deploy/CGAP DS Code Promote - Viz Tools	Non-Compliant	https://git.aws.hhsoig.gov/CDO-legacy/text-analytics.git	python	jenkins/Jenkinsfile-promote-viz-tools	Not Found
-Data Workbench/Data Workbench Packages/DWB Connector - Test Only	Managed	https://git.aws.hhsoig.gov/CDO/dwb-connectors.git	python,jenkins	jenkins/Jenkinsfile.test_only	Not Found
+"""
+Jenkins Jobs Audit
+
+Generates:
+    live_jenkins_jobs.txt
+    managed_jenkins_jobs.txt
+    noncompliant_jenkins_jobs.txt
+    jenkins_pipeline_catalog.csv
+
+CSV Columns:
+    Full Path
+    Compliance Status
+    Repository
+    Tech Stack
+    Jenkinsfile Path
+    Jenkinsfile LOC
+
+Rules:
+    - Include one row per discovered Jenkins pipeline.
+    - Exclude CSV rows containing "Not Found".
+    - Keep "Clone Failed" entries.
+    - Preserve compliance text reports.
+    - Scan only the main branch for multibranch jobs.
+"""
+
+import csv
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import xml.etree.ElementTree as ET
+
+from pathlib import Path
+from urllib.parse import urlparse
+
+import boto3
+import requests
+
+from requests.auth import HTTPBasicAuth
+
+
+# ============================================================
+# Configuration
+# ============================================================
+
+JENKINS_URL = "https://jenkins.aws.hhsoig.gov/"
+JENKINS_USER = "SVC-Jenkins-Agent"
+
+OUTPUT = "jenkins_pipeline_catalog.csv"
+
+FOLDER = "com.cloudbees.hudson.plugins.folder.Folder"
+
+MULTIBRANCH = (
+    "org.jenkinsci.plugins.workflow.multibranch."
+    "WorkflowMultiBranchProject"
+)
+
+PIPELINE = "org.jenkinsci.plugins.workflow.job.WorkflowJob"
+
+HEADERS = [
+    "Full Path",
+    "Compliance Status",
+    "Repository",
+    "Tech Stack",
+    "Jenkinsfile Path",
+    "Jenkinsfile LOC",
+]
+
+
+# ============================================================
+# AWS Secrets Manager
+# ============================================================
+
+def secret(name):
+    response = boto3.client(
+        "secretsmanager",
+        region_name="us-east-1",
+    ).get_secret_value(SecretId=name)
+
+    value = response.get("SecretString")
+
+    if value is None:
+        value = response["SecretBinary"].decode()
+
+    try:
+        obj = json.loads(value)
+
+        if isinstance(obj, dict):
+            return (
+                obj.get("token")
+                or obj.get("api_token")
+                or obj.get("password")
+                or value
+            )
+
+    except json.JSONDecodeError:
+        pass
+
+    return value
+
+
+# ============================================================
+# Jenkins API
+# ============================================================
+
+def request(session, url, xml=False):
+    response = session.get(
+        url,
+        timeout=60,
+    )
+
+    response.raise_for_status()
+
+    return response.text if xml else response.json()
+
+
+def config(session, url, quiet_404=False):
+    config_url = url.rstrip("/") + "/config.xml"
+
+    try:
+        content = request(
+            session,
+            config_url,
+            xml=True,
+        )
+
+        return ET.fromstring(content)
+
+    except requests.HTTPError as error:
+        if (
+            quiet_404
+            and error.response is not None
+            and error.response.status_code == 404
+        ):
+            return None
+
+        print(
+            f"WARNING: Cannot read job config: "
+            f"{config_url}: {error}"
+        )
+
+    except (
+        requests.RequestException,
+        ET.ParseError,
+    ) as error:
+        print(
+            f"WARNING: Cannot read job config: "
+            f"{config_url}: {error}"
+        )
+
+    return None
+
+
+# ============================================================
+# Jenkins XML Helpers
+# ============================================================
+
+def value(root, tag):
+    if root is None:
+        return None
+
+    for element in root.iter():
+        name = element.tag.rsplit("}", 1)[-1]
+
+        if (
+            name == tag
+            and element.text
+            and element.text.strip()
+        ):
+            return element.text.strip()
+
+    return None
+
+
+def repository(root):
+    if root is None:
+        return None
+
+    for element in root.iter():
+        tag = element.tag.rsplit("}", 1)[-1]
+        text = (element.text or "").strip()
+
+        if (
+            tag in {
+                "url",
+                "remote",
+                "remoteUrl",
+                "repositoryUrl",
+                "projectUrl",
+            }
+            and text.startswith(
+                (
+                    "https://",
+                    "http://",
+                    "ssh://",
+                    "git@",
+                )
+            )
+            and "jenkins.aws.hhsoig.gov" not in text
+        ):
+            return text
+
+    return None
+
+
+# ============================================================
+# Discover Jenkins Jobs
+# ============================================================
+
+def discover(
+    session,
+    url=JENKINS_URL,
+    prefix="",
+):
+    jobs = []
+
+    data = request(
+        session,
+        url.rstrip("/") + "/api/json",
+    )
+
+    for item in data.get("jobs", []):
+        name = item.get("name", "")
+        link = item.get("url", "")
+        kind = item.get("_class", "")
+
+        if not name or not link:
+            continue
+
+        path = (
+            f"{prefix}/{name}"
+            if prefix
+            else name
+        )
+
+        if kind == FOLDER:
+            jobs.extend(
+                discover(
+                    session,
+                    link,
+                    path,
+                )
+            )
+
+        elif kind == MULTIBRANCH:
+            jobs.append({
+                "path": path,
+                "url": link,
+                "multibranch": True,
+            })
+
+        elif kind == PIPELINE:
+            jobs.append({
+                "path": path,
+                "url": link,
+                "multibranch": False,
+            })
+
+    return jobs
+
+
+# ============================================================
+# Managed Jenkins Jobs
+# ============================================================
+
+def managed_jobs():
+    result = set()
+
+    jobs_dir = (
+        Path(__file__).resolve().parent.parent
+        / "jobs"
+    )
+
+    if not jobs_dir.is_dir():
+        print(
+            f"WARNING: Jobs directory not found: "
+            f"{jobs_dir}"
+        )
+        return result
+
+    for filename in jobs_dir.glob("*.json"):
+        try:
+            data = json.loads(
+                filename.read_text(
+                    encoding="utf-8"
+                )
+            )
+
+            for folder in data.get("folders", []):
+                name = folder.get(
+                    "name", ""
+                ).strip()
+
+                for pipe in folder.get(
+                    "pipelines", []
+                ):
+                    if name and pipe.get("name"):
+                        result.add(
+                            f"{name}/"
+                            f"{pipe['name'].strip()}"
+                        )
+
+                for sub in folder.get(
+                    "subfolders", []
+                ):
+                    for pipe in sub.get(
+                        "pipelines", []
+                    ):
+                        if (
+                            name
+                            and sub.get("name")
+                            and pipe.get("name")
+                        ):
+                            result.add(
+                                f"{name}/"
+                                f"{sub['name'].strip()}/"
+                                f"{pipe['name'].strip()}"
+                            )
+
+        except (
+            ValueError,
+            OSError,
+        ) as error:
+            print(
+                f"WARNING: Cannot parse "
+                f"{filename}: {error}"
+            )
+
+    return result
+
+
+# ============================================================
+# Write Text Reports
+# ============================================================
+
+def write_lines(filename, values):
+    Path(filename).write_text(
+        "".join(
+            f"{item}\n"
+            for item in sorted(values)
+        ),
+        encoding="utf-8",
+    )
+
+
+# ============================================================
+# Git Authentication
+# ============================================================
+
+def git_environment(temp_dir):
+    env = os.environ.copy()
+
+    username = env.get("GIT_USERNAME", "")
+    token = env.get("GIT_TOKEN", "")
+
+    if username and token:
+        askpass = Path(temp_dir) / "git-askpass.sh"
+
+        askpass.write_text(
+            '#!/bin/sh\n'
+            'case "$1" in\n'
+            '  *Username*) '
+            'printf "%s\\n" "$GIT_USERNAME";;\n'
+            '  *) '
+            'printf "%s\\n" "$GIT_TOKEN";;\n'
+            'esac\n',
+            encoding="utf-8",
+        )
+
+        askpass.chmod(0o700)
+        env["GIT_ASKPASS"] = str(askpass)
+
+    env["GIT_TERMINAL_PROMPT"] = "0"
+
+    return env
+
+
+# ============================================================
+# Git Clone Failure Diagnostics
+# ============================================================
+
+def git_error_reason(error, env):
+    if isinstance(
+        error,
+        subprocess.TimeoutExpired,
+    ):
+        return "Git clone timed out"
+
+    message = (error.stderr or "").lower()
+
+    if (
+        "could not read username" in message
+        or "authentication failed" in message
+        or "invalid credentials" in message
+        or "http basic: access denied" in message
+    ):
+        if not (
+            env.get("GIT_USERNAME")
+            and env.get("GIT_TOKEN")
+        ):
+            return "Git authentication unavailable"
+
+        return "Git authentication failed"
+
+    if (
+        "repository not found" in message
+        or "not found" in message
+    ):
+        return "Repository not found or access denied"
+
+    if (
+        "remote branch main not found" in message
+        or "couldn't find remote ref main" in message
+    ):
+        return "Main branch not found"
+
+    if (
+        "permission denied (publickey)" in message
+        or "publickey" in message
+    ):
+        return "SSH authentication failed"
+
+    if (
+        "could not resolve host" in message
+        or "name or service not known" in message
+    ):
+        return "Git server DNS resolution failed"
+
+    if "connection timed out" in message:
+        return "Git server connection timed out"
+
+    if "ssl certificate problem" in message:
+        return "Git TLS certificate validation failed"
+
+    return f"Git exited with code {error.returncode}"
+
+
+# ============================================================
+# Clone Git Repository
+# ============================================================
+
+def clone(repo, target, env):
+    try:
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--quiet",
+                "--depth",
+                "1",
+                "--branch",
+                "main",
+                repo,
+                str(target),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=env,
+        )
+
+        return True
+
+    except (
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+    ) as error:
+        reason = git_error_reason(error, env)
+
+        hostname = (
+            urlparse(repo).hostname
+            or (
+                repo.split("@", 1)[-1]
+                .split(":", 1)[0]
+                if repo.startswith("git@")
+                else "Git remote"
+            )
+        )
+
+        print(
+            f"WARNING: Clone failed: "
+            f"{hostname} - {reason}"
+        )
+
+        return False
+
+
+# ============================================================
+# Technology Stack Detection
+# ============================================================
+
+def stack(root):
+    paths = [
+        path
+        for path in root.rglob("*")
+        if (
+            path.is_file()
+            and ".git" not in path.parts
+        )
+    ]
+
+    names = {
+        path.name
+        for path in paths
+    }
+
+    suffixes = {
+        path.suffix
+        for path in paths
+    }
+
+    checks = [
+        (
+            "terraform",
+            ".tf" in suffixes,
+        ),
+        (
+            "python",
+            ".py" in suffixes,
+        ),
+        (
+            "docker",
+            any(
+                name == "Dockerfile"
+                or name.startswith("Dockerfile.")
+                for name in names
+            ),
+        ),
+        (
+            "node",
+            "package.json" in names,
+        ),
+        (
+            "go",
+            "go.mod" in names,
+        ),
+        (
+            "ansible",
+            bool(
+                names & {
+                    "ansible.cfg",
+                    "playbook.yml",
+                    "playbook.yaml",
+                }
+            ),
+        ),
+        (
+            "packer",
+            any(
+                name.endswith(
+                    (
+                        ".pkr.hcl",
+                        ".pkr.json",
+                    )
+                )
+                for name in names
+            ),
+        ),
+        (
+            "opa",
+            ".rego" in suffixes,
+        ),
+        (
+            "jenkins",
+            any(
+                name == "Jenkinsfile"
+                or name.startswith("Jenkinsfile.")
+                for name in names
+            ),
+        ),
+        (
+            "github-actions",
+            (
+                root / ".github/workflows"
+            ).is_dir(),
+        ),
+        (
+            "gitlab-ci",
+            (
+                root / ".gitlab-ci.yml"
+            ).is_file(),
+        ),
+    ]
+
+    detected = [
+        name
+        for name, present in checks
+        if present
+    ]
+
+    return ",".join(detected) or "unknown"
+
+
+# ============================================================
+# Count Pipeline Lines of Code
+# ============================================================
+
+def count_lines(path):
+    return sum(
+        bool(line.strip())
+        for line in path.read_text(
+            encoding="utf-8",
+            errors="ignore",
+        ).splitlines()
+    )
+
+
+def pipeline_loc(
+    repo_dir,
+    job_config,
+    parent_config=None,
+):
+    """
+    Calculate LOC for the configured pipeline file.
+
+    Do not sum every Jenkinsfile in the repository.
+    """
+
+    script = value(
+        job_config,
+        "script",
+    )
+
+    if (
+        script
+        and value(
+            job_config,
+            "scriptPath",
+        ) is None
+    ):
+        return (
+            "Inline Pipeline Script",
+            sum(
+                bool(line.strip())
+                for line in script.splitlines()
+            ),
+        )
+
+    script_path = (
+        value(
+            job_config,
+            "scriptPath",
+        )
+        or value(
+            parent_config,
+            "scriptPath",
+        )
+    )
+
+    candidates = (
+        [script_path]
+        if script_path
+        else []
+    )
+
+    # JTE fallback locations.
+    candidates += [
+        "pipeline_config.groovy",
+        "pipeline_config_audit.groovy",
+        "Jenkinsfile",
+    ]
+
+    for name in dict.fromkeys(
+        path
+        for path in candidates
+        if path
+    ):
+        path = (
+            repo_dir / name
+        ).resolve()
+
+        if (
+            path.is_relative_to(
+                repo_dir.resolve()
+            )
+            and path.is_file()
+        ):
+            return (
+                name,
+                count_lines(path),
+            )
+
+    return (
+        script_path or "Not Found",
+        "Not Found",
+    )
+
+
+# ============================================================
+# Main Jenkins Audit
+# ============================================================
+
+def main():
+    if len(sys.argv) != 2:
+        sys.exit(
+            "Usage: python3 "
+            "audit_jenkins_jobs.py "
+            "<environment>"
+        )
+
+    environment = sys.argv[1].strip()
+
+    token = (
+        os.getenv("JENKINS_API_TOKEN")
+        or secret(
+            f"{environment}-"
+            "svc-jenkins-agent-token"
+        )
+    )
+
+    session = requests.Session()
+
+    session.auth = HTTPBasicAuth(
+        JENKINS_USER,
+        token,
+    )
+
+    session.verify = (
+        os.getenv(
+            "JENKINS_VERIFY_SSL",
+            "false",
+        ).lower() == "true"
+    )
+
+    if not session.verify:
+        requests.packages.urllib3.disable_warnings(
+            requests.packages.urllib3.exceptions.InsecureRequestWarning
+        )
+
+    # --------------------------------------------------------
+    # Discover Jenkins jobs
+    # --------------------------------------------------------
+
+    jobs = discover(session)
+    managed = managed_jobs()
+
+    paths = {
+        job["path"]
+        for job in jobs
+    }
+
+    noncompliant = paths - managed
+
+    # --------------------------------------------------------
+    # Generate existing text reports
+    # --------------------------------------------------------
+
+    write_lines(
+        "live_jenkins_jobs.txt",
+        paths,
+    )
+
+    write_lines(
+        "managed_jenkins_jobs.txt",
+        managed,
+    )
+
+    write_lines(
+        "noncompliant_jenkins_jobs.txt",
+        noncompliant,
+    )
+
+    # --------------------------------------------------------
+    # Console output
+    # --------------------------------------------------------
+
+    print(f"Total live jobs fetched: {len(paths)}")
+    print("Written to: live_jenkins_jobs.txt")
+
+    print(f"Total managed jobs : {len(managed)}")
+    print("Written to: managed_jenkins_jobs.txt")
+
+    print(
+        "Total Non-compliant Jenkins jobs found: "
+        f"{len(noncompliant)}"
+    )
+    print("Written to: noncompliant_jenkins_jobs.txt")
+
+    for path in sorted(noncompliant):
+        print(f" - {path}")
+
+    # --------------------------------------------------------
+    # Scan repositories
+    # --------------------------------------------------------
+
+    rows = []
+    cache = {}
+    failures = 0
+
+    with tempfile.TemporaryDirectory(
+        prefix="jenkins-audit-"
+    ) as temp:
+
+        git_env = git_environment(temp)
+
+        for index, job in enumerate(jobs, 1):
+            full_path = job["path"]
+
+            # Only Full Path.
+            # Project and Pipeline columns removed.
+            row = [
+                full_path,
+                (
+                    "Managed"
+                    if full_path in managed
+                    else "Non-Compliant"
+                ),
+            ]
+
+            parent_cfg = config(
+                session,
+                job["url"],
+            )
+
+            job_cfg = parent_cfg
+
+            # ------------------------------------------------
+            # Multibranch pipeline handling
+            # ------------------------------------------------
+
+            if job["multibranch"]:
+                main_url = (
+                    job["url"].rstrip("/")
+                    + "/job/main/"
+                )
+
+                main_cfg = config(
+                    session,
+                    main_url,
+                    quiet_404=True,
+                )
+
+                if main_cfg is not None:
+                    job_cfg = main_cfg
+
+                else:
+                    print(
+                        "INFO: No main branch "
+                        "configuration for "
+                        f"{full_path}; "
+                        "using parent configuration"
+                    )
+
+            # ------------------------------------------------
+            # Identify repository
+            # ------------------------------------------------
+
+            repo = (
+                repository(job_cfg)
+                or repository(parent_cfg)
+            )
+
+            if not repo:
+                rows.append(
+                    row + [
+                        "Not Found",
+                        "Repository Not Found",
+                        "Not Found",
+                        "N/A",
+                    ]
+                )
+                continue
+
+            # ------------------------------------------------
+            # Clone repository once
+            # ------------------------------------------------
+
+            if repo not in cache:
+                dest = (
+                    Path(temp) / f"repo-{index}"
+                )
+
+                if not clone(
+                    repo,
+                    dest,
+                    git_env,
+                ):
+                    cache[repo] = None
+                    failures += 1
+
+                else:
+                    cache[repo] = (
+                        dest,
+                        stack(dest),
+                    )
+
+            result = cache[repo]
+
+            # ------------------------------------------------
+            # Preserve clone failures
+            # ------------------------------------------------
+
+            if result is None:
+                rows.append(
+                    row + [
+                        repo,
+                        "Clone Failed",
+                        "Clone Failed",
+                        "Clone Failed",
+                    ]
+                )
+                continue
+
+            dest, technologies = result
+
+            # ------------------------------------------------
+            # Pipeline-specific LOC
+            # ------------------------------------------------
+
+            path, loc = pipeline_loc(
+                dest,
+                job_cfg,
+                parent_cfg,
+            )
+
+            rows.append(
+                row + [
+                    repo,
+                    technologies,
+                    path,
+                    loc,
+                ]
+            )
+
+    # --------------------------------------------------------
+    # Filter rows containing "Not Found"
+    # --------------------------------------------------------
+
+    filtered_rows = [
+        row
+        for row in rows
+        if not any(
+            "not found" in str(value).lower()
+            for value in row
+        )
+    ]
+
+    excluded_count = len(rows) - len(filtered_rows)
+
+    # --------------------------------------------------------
+    # Generate consolidated CSV
+    # --------------------------------------------------------
+
+    with open(
+        OUTPUT,
+        "w",
+        newline="",
+        encoding="utf-8",
+    ) as file:
+
+        writer = csv.writer(file)
+        writer.writerow(HEADERS)
+        writer.writerows(filtered_rows)
+
+    # --------------------------------------------------------
+    # Summary
+    # --------------------------------------------------------
+
+    print(f"CSV generated: {OUTPUT}")
+    print(f"Total pipelines discovered: {len(jobs)}")
+    print(f"Total pipelines written: {len(filtered_rows)}")
+    print(f"Excluded Not Found entries: {excluded_count}")
+    print(
+        "Unique repositories with clone failures: "
+        f"{failures}"
+    )
+
+
+if __name__ == "__main__":
+    main()
