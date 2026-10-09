@@ -1,26 +1,7 @@
-## PR Title
-Enhance Jenkins Jobs Audit with Consolidated Pipeline Inventory
+Full Path	Compliance Status	Repository	Tech Stack	Jenkinsfile Path	Jenkinsfile LOC
+CGAP/CGAP Code Deploy/CGAP DS Code Promote - Viz-Tools	Managed	https://git.aws.hhsoig.gov/CDO/cgap-ds.git	Clone Failed	Clone Failed	Clone Failed
 
-## Description
-Updated the Jenkins Jobs Audit script to generate a single consolidated CSV report containing Jenkins pipeline information, compliance status, Git repository details, technology stack, and pipeline-specific Jenkinsfile lines of code (LOC).
+CGAP/CGAP Code Deploy/CGAP DS Code Deploy - Viz-Tools	Managed	https://git.aws.hhsoig.gov/CDO/cgap-ds.git	Clone Failed	Clone Failed	Clone Failed
 
-### Changes Made
-- Consolidated pipeline inventory and technology-stack scanning into `audit_jenkins_jobs.py`.
-- Removed duplicate `Project` and `Pipeline` columns, retaining `Full Path` to identify each Jenkins job.
-- Improved Git clone failure diagnostics while ensuring failed repositories remain included in the CSV.
-- Updated multibranch pipeline handling to focus on the `main` branch and gracefully handle missing branch configurations.
-- Improved Jenkinsfile LOC calculation using pipeline-specific configuration rather than summing all Jenkinsfiles in a repository.
-- Preserved existing Jenkins job compliance checks and non-compliant job console reporting.
-- Generated a single CSV artifact: `jenkins_pipeline_catalog.csv`.
-- Eliminated the need for the separate `pipeline_tech_stack.py` script.
-
-### CSV Output
-`Full Path, Compliance Status, Repository, Tech Stack, Jenkinsfile Path, Jenkinsfile LOC`
-
-### Validation
-- Confirmed that all 124 discovered Jenkins pipelines were included in the generated CSV.
-- Identified 12 repository clone failures requiring Git authentication or access verification.
-- Additional validation is required for JTE pipelines using shared configurations to ensure accurate LOC reporting.
-
-### Expected Outcome
-Provide a centralized Jenkins pipeline inventory with compliance and technology-stack visibility, eliminate duplicate job information, and improve audit reporting and troubleshooting.
+CGAP/CGAP Code Deploy/CGAP DS Code Promote - Viz Tools	Non-Compliant	https://git.aws.hhsoig.gov/CDO-legacy/text-analytics.git	python	jenkins/Jenkinsfile-promote-viz-tools	Not Found
+Data Workbench/Data Workbench Packages/DWB Connector - Test Only	Managed	https://git.aws.hhsoig.gov/CDO/dwb-connectors.git	python,jenkins	jenkins/Jenkinsfile.test_only	Not Found
