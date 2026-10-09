@@ -1,84 +1,10 @@
+Credential ID : imac_jenkins_svc
+Type          : BasicSSHUserPrivateKey
+Description   : GitHub Service account for Jenkins
+Username      : aws_github_svc
+----------------------------------------------
+Credential ID : github_svc_account
+Type          : UsernamePasswordCredentialsImpl
+Description   : GitHub service account for Jenkins with token
+Username      : aws_github_svc
 
-import jenkins.model.Jenkins
-import com.cloudbees.plugins.credentials.CredentialsProvider
-import com.cloudbees.plugins.credentials.common.StandardCredentials
-import hudson.security.ACL
-
-def jenkins = Jenkins.get()
-
-def credentials = CredentialsProvider.lookupCredentialsInItemGroup(
-    StandardCredentials.class,
-    jenkins,
-    ACL.SYSTEM2,
-    Collections.emptyList()
-)
-
-println "=============================================="
-println "JENKINS CREDENTIALS"
-println "=============================================="
-
-credentials.each { cred ->
-
-    println "Credential ID : ${cred.id}"
-    println "Type          : ${cred.class.simpleName}"
-    println "Description   : ${cred.description ?: 'N/A'}"
-
-    if (cred.hasProperty('username')) {
-        println "Username      : ${cred.username}"
-    }
-
-    println "----------------------------------------------"
-}
-
-println "Total credentials found: ${credentials.size()}"
-
-
-
-
-
-
-##################
-
-
-
-import jenkins.model.Jenkins
-import com.cloudbees.plugins.credentials.CredentialsProvider
-import com.cloudbees.plugins.credentials.common.StandardCredentials
-import hudson.security.ACL
-
-def credentials = CredentialsProvider.lookupCredentialsInItemGroup(
-    StandardCredentials.class,
-    Jenkins.get(),
-    ACL.SYSTEM2,
-    Collections.emptyList()
-)
-
-def matches = credentials.findAll { cred ->
-
-    def username = cred.hasProperty('username')
-        ? cred.username
-        : ""
-
-    cred.id.toLowerCase().contains("aws_github_svc") ||
-    username.toLowerCase().contains("aws_github_svc") ||
-    (cred.description ?: "").toLowerCase().contains("github")
-}
-
-println "=============================================="
-println "GITHUB SERVICE ACCOUNT CREDENTIALS"
-println "=============================================="
-
-matches.each { cred ->
-
-    println "Credential ID : ${cred.id}"
-    println "Type          : ${cred.class.simpleName}"
-    println "Description   : ${cred.description ?: 'N/A'}"
-
-    if (cred.hasProperty('username')) {
-        println "Username      : ${cred.username}"
-    }
-
-    println "----------------------------------------------"
-}
-
-println "Total matching credentials: ${matches.size()}"
