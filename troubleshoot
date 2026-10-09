@@ -1,14 +1,102 @@
-Credential ID : imac_jenkins_svc
-Type          : BasicSSHUserPrivateKey
-Description   : GitHub Service account for Jenkins
-Username      : aws_github_svc
-----------------------------------------------
-Credential ID : github_svc_account
-Type          : UsernamePasswordCredentialsImpl
-Description   : GitHub service account for Jenkins with token
-Username      : aws_github_svc
 
+pipeline {
+    agent { label jte.keywords.project }
 
- ERROR: Could not find credentials entry with ID 'aws_github_svc'
-15:58:20  
-15:58:20  GitHub has been notified of this commit’s build result
+    environment {
+        JOB_LIST_FILE = 'jenkins_live_jobs.txt'
+        AUDIT_OUTPUT_FILE = 'untracked_jobs.txt'
+        JENKINS_RELEASE_SCOPE = "prod"
+    }
+
+    stages {
+        stage('Disable Concurrent Builds') {
+            steps {
+                echo "Disabling Concurrent Builds"
+                script {
+                    disable_concurrent_builds()
+                }
+            }
+        }
+
+        stage('Trigger Cron') {
+            steps {
+                echo "Triggering job per cron schedule specification"
+                echo "BRANCH_NAME = ${env.BRANCH_NAME}"
+
+                script {
+                    cron_trigger('0 13 * * 1', onlyOnBranch: 'main')
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    git_checkout()
+                }
+            }
+        }
+
+        stage('Audit Jenkins Jobs') {
+            steps {
+                script {
+                    setup()
+
+                    ws("workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}/scripts") {
+
+                        echo "======================================"
+                        echo "Starting Jenkins Jobs Audit"
+                        echo "======================================"
+
+                        // GitHub service account credential
+                        // Credential ID: github_svc_account
+                        // Username: aws_github_svc
+                        // Type: Username with password (token)
+
+                        withCredentials([
+                            usernamePassword(
+                                credentialsId: 'github_svc_account',
+                                usernameVariable: 'GIT_USERNAME',
+                                passwordVariable: 'GIT_TOKEN'
+                            )
+                        ]) {
+
+                            sh '''
+                                set -e
+
+                                echo "======================================"
+                                echo "Running Consolidated Jenkins Audit"
+                                echo "======================================"
+
+                                /home/jenkins/anaconda3/envs/python312/bin/python3 \
+                                    audit_jenkins_jobs.py "$JENKINS_RELEASE_SCOPE"
+
+                                echo "======================================"
+                                echo "Verifying Generated CSV"
+                                echo "======================================"
+
+                                test -s jenkins_pipeline_catalog.csv
+
+                                echo "CSV successfully generated:"
+                                ls -lh jenkins_pipeline_catalog.csv
+                            '''
+                        }
+
+                        echo "======================================"
+                        echo "Archiving Jenkins Audit CSV"
+                        echo "======================================"
+
+                        archiveArtifacts artifacts: 'jenkins_pipeline_catalog.csv',
+                                         allowEmptyArchive: false,
+                                         fingerprint: true,
+                                         onlyIfSuccessful: true
+
+                        echo "======================================"
+                        echo "Jenkins Jobs Audit Completed"
+                        echo "======================================"
+                    }
+                }
+            }
+        }
+    }
+}
