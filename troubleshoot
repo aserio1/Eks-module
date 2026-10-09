@@ -8,3 +8,7 @@ Type          : UsernamePasswordCredentialsImpl
 Description   : GitHub service account for Jenkins with token
 Username      : aws_github_svc
 
+
+ ERROR: Could not find credentials entry with ID 'aws_github_svc'
+15:58:20  
+15:58:20  GitHub has been notified of this commit’s build result
