@@ -1,79 +1,17 @@
-######### user_data.tpl
-
-#!/bin/bash
-
-################################################################################
-# jenkins_controller/scripts/user_data.tpl
-################################################################################
-
-# Redirect all output to user-data log and console
-exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
-
-# ------------------------------------------------------------------------
-# Amazon Linux 2 root volume auto-expands with EC2-provided AMI
-# LVM resize not needed and will fail – removing legacy logic
-# ------------------------------------------------------------------------
-
-# Update and install essential packages
-dnf -y upgrade --exclude=kernel*
-dnf install -y \
-  awscli \
-  jq \
-  python3 \
-  unzip \
-  wget \
-  docker \
-  amazon-efs-utils
-
-# Docker is available in the default AL2023 package repository,
-# so you can install it directly with dnf.
-systemctl enable docker
-systemctl start docker
-
-# Create Jenkins user and mount directory
-groupadd -g 2000 jenkins \
-  && useradd -N -u 2000 -g 2000 -l -m -s /bin/bash jenkins
-
-# Create mount point and mount EFS Write to fstab so it persists across reboots
-mkdir -p /jenkins_jobs
-echo "${efs_mount_target}:/ /jenkins_jobs efs _netdev,tls 0 0" >> /etc/fstab
-mount -a
-
-chown jenkins:jenkins /jenkins_jobs
-
-# Login to ECR
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 213141505949.dkr.ecr.us-east-1.amazonaws.com
-
-# Install Trivy on EC2
-export TRIVY_VERSION=0.69.2
-dnf install -y https://github.com/aquasecurity/trivy/releases/download/v$${TRIVY_VERSION}/trivy_$${TRIVY_VERSION}_Linux-64bit.rpm
-
-# Upgrade pip and install Python libraries
-python3 -m pip install --upgrade pip
-python3 -m pip install boto3 requests
-
-# Download the Trivy scan script for Jenkins controller node
-curl -k -o /usr/local/bin/trivy_jenkins_controller_scan.py "https://raw.git.aws.hhsoig.gov/CDO/imac-jenkins/main/infrastructure/terraform/modules/jenkins_main/scripts/trivy_jenkins_controller_scan.py"
-chmod +x /usr/local/bin/trivy_jenkins_controller_scan.py
-
-# Schedule daily Trivy scan at 07:00 AM ET (11:00 UTC)
-(crontab -l 2>/dev/null; echo "0 11 * * * /usr/local/bin/trivy_jenkins_controller_scan.py") | crontab -
-
-# Run Jenkins main container
-# Run Jenkins main container
-docker run -d -p 8080-8088:8080-8088 \
-    -p 8022:22 \
-    -e JENKINS_ADMIN_PASSWORD="$(aws secretsmanager get-secret-value --secret-id svc-jenkins-agent-password --region us-east-1 --query SecretString --output text)" \
-    -e LDAP_PASSWORD="$(aws secretsmanager get-secret-value --secret-id ldap-password --region us-east-1 --query SecretString --output text)" \
-    -e SONARQUBE_TOKEN="$(aws secretsmanager get-secret-value --secret-id sonarqube-token --region us-east-1 --query SecretString --output text)" \
-    -e NEXUS_USER="$(aws secretsmanager get-secret-value --secret-id NEXUS_SERVICE_ACCOUNT --region us-east-1 --query SecretString --output text | jq -r '.username')" \
-    -e NEXUS_PASSWORD="$(aws secretsmanager get-secret-value --secret-id NEXUS_SERVICE_ACCOUNT --region us-east-1 --query SecretString --output text | jq -r '.password')" \
-    -e SSH_GITHUB_SVC_KEY="$(aws secretsmanager get-secret-value --secret-id ssh-github-svc-key --region us-east-1 --query SecretString --output text)" \
-    -e GITHUB_SVC_TOKEN="$(aws secretsmanager get-secret-value --secret-id imac-github-svc-account-token --region us-east-1 --query SecretString --output text)" \
-    -e JENKINS_URL=${jenkins_url} \
-    -e JENKINS_IDP_ENTITY_ID=${jenkins_idp_entity_id} \
-    -e JENKINS_IDP_METADATA_URL=${jenkins_idp_metadata_url} \
-    --name=jenkins \
-    --restart always \
-    -v /jenkins_jobs:/home/jenkins/jobs \
-    ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/${controller_image}:${controller_tag}
+sh-5.2$ cat /etc/os-release
+NAME="Amazon Linux"
+VERSION="2023"
+ID="amzn"
+ID_LIKE="fedora"
+VERSION_ID="2023"
+PLATFORM_ID="platform:al2023"
+PRETTY_NAME="Amazon Linux 2023.12.20260831"
+ANSI_COLOR="0;33"
+CPE_NAME="cpe:2.3:o:amazon:amazon_linux:2023"
+HOME_URL="https://aws.amazon.com/linux/amazon-linux-2023/"
+DOCUMENTATION_URL="https://docs.aws.amazon.com/linux/"
+SUPPORT_URL="https://aws.amazon.com/premiumsupport/"
+BUG_REPORT_URL="https://github.com/amazonlinux/amazon-linux-2023"
+VENDOR_NAME="AWS"
+VENDOR_URL="https://aws.amazon.com/"
+SUPPORT_END="2029-06-30"
