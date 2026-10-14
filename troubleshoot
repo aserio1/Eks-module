@@ -1,4 +1,3 @@
-https://amazoncloudwatch-agent.s3.amazonaws.com/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm
+https://jenkins-binaries-213141505949.s3.us-east-1.amazonaws.com/amazon-cloudwatch-agent.rpm
 
-
-https://amazoncloudwatch-agent.s3.amazonaws.com/amazon_linux/arm64/latest/amazon-cloudwatch-agent.rpm
+s3://jenkins-binaries-213141505949/amazon-cloudwatch-agent.rpm
