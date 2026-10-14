@@ -1,8 +1,3 @@
-https://jenkins-binaries-213141505949.s3.us-east-1.amazonaws.com/amazon-cloudwatch-agent.rpm
-
-s3://jenkins-binaries-213141505949/amazon-cloudwatch-agent.rpm
-
-
 
 #!/bin/bash
 
@@ -28,6 +23,33 @@ dnf install -y \
   wget \
   docker \
   amazon-efs-utils
+
+# ------------------------------------------------------------------------
+# Install Amazon CloudWatch Agent from S3
+# ------------------------------------------------------------------------
+
+echo "Installing Amazon CloudWatch Agent..."
+
+# Download CloudWatch Agent RPM from S3
+aws s3 cp \
+  s3://jenkins-binaries-213141505949/amazon-cloudwatch-agent.rpm \
+  /tmp/amazon-cloudwatch-agent.rpm \
+  --region us-east-1
+
+# Install CloudWatch Agent
+dnf install -y /tmp/amazon-cloudwatch-agent.rpm
+
+# Enable CloudWatch Agent service at boot
+systemctl enable amazon-cloudwatch-agent
+
+# Verify CloudWatch Agent installation
+rpm -q amazon-cloudwatch-agent
+
+echo "Amazon CloudWatch Agent installation completed."
+
+# ------------------------------------------------------------------------
+# End CloudWatch Agent installation
+# ------------------------------------------------------------------------
 
 # Docker is available in the default AL2023 package repository,
 # so you can install it directly with dnf.
