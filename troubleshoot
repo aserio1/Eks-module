@@ -1,14 +1,13 @@
-aws iam attach-role-policy \
-  --role-name dev_jenkins_main_ssm_role \
-  --policy-arn arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy \
-  --region us-east-1
+Update the Jenkins controller IAM configuration to attach the AWS-managed CloudWatchAgentServerPolicy to the existing IAM role dev_jenkins_main_ssm_role.
 
+This change enables the Amazon CloudWatch Agent installed on the Jenkins controller EC2 instance to publish system metrics and logs to AWS CloudWatch for improved infrastructure monitoring and visibility.
 
-aws iam list-attached-role-policies \
-  --role-name dev_jenkins_main_ssm_role \
-  --query "AttachedPolicies[?PolicyName=='CloudWatchAgentServerPolicy']" \
-  --output table
+Changes:
 
-aws sts get-caller-identity
+Update the Jenkins controller iam.tf Terraform configuration.
 
-rpm -q amazon-cloudwatch-agent
+Attach the AWS-managed CloudWatchAgentServerPolicy to the existing IAM role.
+
+Enable permissions for publishing CPU, memory, disk utilization metrics, and CloudWatch logs.
+
+Preserve all existing IAM policies and Jenkins controller functionality.
