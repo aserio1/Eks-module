@@ -1,1 +1,178 @@
-CloudWatchAgentServerPolicy
+controller iam.tf
+##################
+resource "aws_iam_role" "jenkins_controller_ssm_role" {
+  name = "${var.prefix}-jenkins_main_ssm_role"
+  assume_role_policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "AssumeRoleSID",
+        "Effect" : "Allow",
+        "Principal" : {
+          "Service" : "ec2.amazonaws.com"
+        },
+        "Action" : "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "jenkins_policy_attachment" {
+  for_each = var.jenkins_controller_policies
+
+  role       = aws_iam_role.jenkins_controller_ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/${each.key}"
+}
+
+
+
+
+
+
+agent_iam.tf 
+##########################
+################################################################################
+# modules/jenkins_agent/iam.tf
+################################################################################
+
+resource "aws_iam_role" "jenkins_agent_role" {
+  name = "${var.prefix}_jenkins_agent_role_${var.project}"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AssumeRoleSID"
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+# Regular agent — broad policy set from controller (unchanged)
+resource "aws_iam_role_policy_attachment" "jenkins_agent_policy_attachment" {
+  for_each = local.is_scanner ? [] : var.jenkins_controller_policies
+
+  role       = aws_iam_role.jenkins_agent_role.name
+  policy_arn = "arn:aws:iam::aws:policy/${each.key}"
+}
+
+# Regular agent — cross-account role assumption
+data "aws_iam_policy_document" "agent_assume_target_role" {
+  dynamic "statement" {
+    for_each = var.environments
+    content {
+      actions   = ["sts:AssumeRole"]
+      resources = [statement.value.target_account_role]
+    }
+  }
+}
+
+resource "aws_iam_policy" "agent_assume_target_role" {
+  count = local.is_scanner ? 0 : 1
+
+  name        = "${var.prefix}_jenkins_agent_assume_target_policy_${var.project}"
+  description = "Allows Jenkins to assume all roles in the target accounts"
+  policy      = data.aws_iam_policy_document.agent_assume_target_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "jenkins_agent_assume_target_role_policy_attachment" {
+  count = local.is_scanner ? 0 : 1
+
+  role       = aws_iam_role.jenkins_agent_role.name
+  policy_arn = aws_iam_policy.agent_assume_target_role[0].arn
+}
+
+# ── Scanner-only policy ────────────────────────────────────────────────────
+data "aws_dynamodb_table" "imac_config" {
+  count = local.is_scanner ? 1 : 0
+
+  name = "dev-ImacConfigTable"
+}
+data "aws_iam_policy_document" "scanner_permissions" {
+  count = local.is_scanner ? 1 : 0
+
+  # ECR — pull agent image and trivy-db mirror only
+  statement {
+    sid       = "ECRAuth"
+    effect    = "Allow"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ECRPull"
+    effect = "Allow"
+    actions = [
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability",
+    ]
+    resources = [
+      "arn:aws:ecr:us-east-1:${var.ecr_repo_account_id}:repository/${var.agent_image}",
+      "arn:aws:ecr:us-east-1:${var.ecr_repo_account_id}:repository/ecr-public/aquasecurity/trivy-db",
+    ]
+  }
+
+  # S3 — put reports only
+  statement {
+    sid       = "S3PutReports"
+    effect    = "Allow"
+    actions   = ["s3:PutObject"]
+    resources = ["${var.reports_bucket_arn}/scanning/*"]
+  }
+
+  # Secrets Manager — agent token only
+  statement {
+    sid       = "GetAgentToken"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = ["arn:aws:secretsmanager:us-east-1:${var.ecr_repo_account_id}:secret:${var.prefix}-svc-jenkins-agent-token*"]
+  }
+
+  # DynamoDB — read single items only
+  statement {
+    sid       = "DynamoDBGetItem"
+    effect    = "Allow"
+    actions   = ["dynamodb:GetItem"]
+    resources = [data.aws_dynamodb_table.imac_config[0].arn]
+  }
+}
+
+resource "aws_iam_policy" "scanner" {
+  count = local.is_scanner ? 1 : 0
+
+  name   = "${var.prefix}_scanner_agent_${var.project}"
+  policy = data.aws_iam_policy_document.scanner_permissions[0].json
+}
+
+resource "aws_iam_role_policy_attachment" "scanner" {
+  count = local.is_scanner ? 1 : 0
+
+  role       = aws_iam_role.jenkins_agent_role.name
+  policy_arn = aws_iam_policy.scanner[0].arn
+}
+
+# SSM Session Manager — console access without SSH
+resource "aws_iam_role_policy_attachment" "scanner_ssm" {
+  count = local.is_scanner ? 1 : 0
+
+  role       = aws_iam_role.jenkins_agent_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+
+
+
+
+######## data.tf 
+  jenkins_controller_policies = toset([
+    "AmazonEC2FullAccess",
+    "SecretsManagerReadWrite",
+    "AmazonS3FullAccess",
+    "AmazonDynamoDBFullAccess",
+    "AmazonSSMManagedInstanceCore",
+    "AmazonEC2ContainerRegistryFullAccess",
+    "AmazonSSMFullAccess",
+    "AWSKeyManagementServicePowerUser"
+    ]
+  )
