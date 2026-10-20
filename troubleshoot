@@ -1,37 +1,37 @@
+exit
+exit
+
+sudo findmnt -t nfs,nfs4,efs
+
+df -hT | grep -E 'efs|nfs|amazonaws'
+
+mount | grep -E 'efs|nfs|fs-02f59d5ae317cf9fe'
+
+##
+sudo docker inspect jenkins \
+  --format '{{range .Mounts}}{{println .Type "SOURCE:" .Source "DESTINATION:" .Destination}}{{end}}'
+
 echo "$JENKINS_HOME"
 
-df -hT /home/jenkins
+ls -lah /home/jenkins
 
-findmnt -T /home/jenkins
+ls -lah /var/jenkins_home
 
-du -h --max-depth=2 /home/jenkins 2>/dev/null | sort -hr | head -30
-
-#############
-sh-5.2$ echo "$JENKINS_HOME"
-
-sh-5.2$ df -hT /home/jenkins
-Filesystem                     Type  Size  Used Avail Use% Mounted on
-/dev/mapper/VolGroup00-homeVol xfs    10G  105M  9.9G   2% /home
-sh-5.2$ findmnt -T /home/jenkins
-TARGET SOURCE                         FSTYPE OPTIONS
-/home  /dev/mapper/VolGroup00-homeVol xfs    rw,nodev,relatime,seclabel,inode64,logbufs=8,logbsize=32k,sunit=8,swidth=8,noquota
-sh-5.2$ du -h --max-depth=2 /home/jenkins 2>/dev/null | sort -hr | head -30
-0       /home/jenkins
-sh-5.2$ sudo docker exec -it jenkins bash
-[root@af682a0e87df jenkins]# su jenkins
-bash-5.2$ df -hT /home/jenkins
-Filesystem     Type     Size  Used Avail Use% Mounted on
-overlay        overlay  422G   11G  412G   3% /
-bash-5.2$ echo "$JENKINS_HOME"
-/home/jenkins
-bash-5.2$ df -hT /home/jenkins
-Filesystem     Type     Size  Used Avail Use% Mounted on
-overlay        overlay  422G   11G  412G   3% /
-bash-5.2$ findmnt -T /home/jenkins
-TARGET SOURCE  FSTYPE OPTIONS
-/      overlay overla rw,relatime,seclabel,lowerdir=/var/lib/docker/overlay2/l/FROIUM4PJBTQ4XI7KTQQM3Y5LX:/var/lib/docker/overlay2/l/O6UV7KP4MAMAMPEIGL5RY3V5YS:/var/lib/
-bash-5.2$ du -h --max-depth=2 /home/jenkins 2>/dev/null | sort -hr | head -30
+find / -maxdepth 4 -type d -name jobs 2>/dev/null | head -30
 
 
+aws efs describe-file-systems \
+  --file-system-id fs-02f59d5ae317cf9fe \
+  --region us-east-1 \
+  --query 'FileSystems[0].{
+    FileSystemId:FileSystemId,
+    SizeBytes:SizeInBytes.Value,
+    SizeTimestamp:SizeInBytes.Timestamp,
+    LifeCycleState:LifeCycleState
+  }'
 
 
+sudo findmnt -t nfs,nfs4
+
+sudo docker inspect jenkins \
+  --format '{{range .Mounts}}{{println .Type "SOURCE:" .Source "DESTINATION:" .Destination}}{{end}}'
