@@ -1,92 +1,365 @@
 #!/usr/bin/env python3
 
-# This script deletes recursively .terraform dirs
-# found in /home/jenkins/workspace.
-# Executed via a Jenkins job that runs daily during off hours.
+"""
+Jenkins EFS Workspace Cleanup
 
+Features:
+- Recursively identify .terraform directories.
+- Identify stale top-level workspaces older than 90 days.
+- Generate a CSV inventory.
+- Dry-run by default.
+- Delete .terraform directories when explicitly enabled.
+- Delete stale workspaces only from an approved CSV.
+- Limit concurrent EFS operations.
+- Avoid full EFS size scans.
+- Do not follow symbolic links.
+
+IMPORTANT:
+Workspace deletion requires external Jenkins active-build
+validation before execution.
+"""
+
+import argparse
+import csv
 import os
 import shutil
+import stat
+import time
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from pathlib import Path
 from threading import Lock
 
+
 ROOT_DIR = "/home/jenkins/workspace"
-MAX_WORKERS = 8  # Tune based on EFS throughput limits
+
+STALE_DAYS = 90
+MAX_WORKERS = 2
 
 print_lock = Lock()
-stats_lock = Lock()
-freed_space = 0
 
 
-def get_dir_size_fast(path):
-    """Use os.scandir recursively for faster size calculation."""
+def log(message):
+    with print_lock:
+        print(message, flush=True)
+
+
+def get_dir_size(path):
+    """Calculate logical file size without following symlinks."""
     total = 0
-    try:
-        with os.scandir(path) as it:
-            for entry in it:
-                try:
-                    if entry.is_file(follow_symlinks=False):
-                        total += entry.stat(follow_symlinks=False).st_size
-                    elif entry.is_dir(follow_symlinks=False):
-                        total += get_dir_size_fast(entry.path)
-                except (PermissionError, FileNotFoundError):
-                    pass
-    except (PermissionError, FileNotFoundError):
-        pass
+    stack = [path]
+
+    while stack:
+        current = stack.pop()
+
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_symlink():
+                            continue
+
+                        if entry.is_file(follow_symlinks=False):
+                            total += entry.stat(
+                                follow_symlinks=False
+                            ).st_size
+
+                        elif entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+
+                    except OSError as error:
+                        log(f"WARNING: {entry.path}: {error}")
+
+        except OSError as error:
+            log(f"WARNING: {current}: {error}")
+
     return total
 
 
-def delete_terraform_dir(path):
-    """Delete a single .terraform dir and return bytes freed."""
-    size = get_dir_size_fast(path)
-    try:
-        shutil.rmtree(path)
-        with print_lock:
-            print(f"Deleted: {path}")
-        return size
-    except Exception as e:
-        with print_lock:
-            print(f"Failed to delete {path}: {e}")
-        return 0
-
-
 def find_terraform_dirs(root):
-    """
-    Walk the tree with os.scandir and prune traversal into .terraform dirs
-    (no need to recurse into them — we're deleting the whole thing).
-    """
-    try:
-        with os.scandir(root) as it:
-            for entry in it:
+    """Find .terraform directories without descending into them."""
+    stack = [root]
+
+    while stack:
+        current = stack.pop()
+
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    if not entry.is_dir(follow_symlinks=False):
+                        continue
+
+                    if entry.name == ".terraform":
+                        yield entry.path
+                    else:
+                        stack.append(entry.path)
+
+        except OSError as error:
+            log(f"WARNING: Cannot scan {current}: {error}")
+
+
+def find_stale_workspaces(root, days):
+    """Find top-level directories older than the retention threshold."""
+    cutoff = time.time() - days * 86400
+
+    with os.scandir(root) as entries:
+        for entry in entries:
+            try:
                 if not entry.is_dir(follow_symlinks=False):
                     continue
-                if entry.name == ".terraform":
-                    yield entry.path
-                else:
-                    yield from find_terraform_dirs(entry.path)
-    except (PermissionError, FileNotFoundError) as e:
-        print(f"Cannot access {root}: {e}")
+
+                metadata = entry.stat(follow_symlinks=False)
+
+                if metadata.st_mtime < cutoff:
+                    yield {
+                        "path": entry.path,
+                        "modified": datetime.fromtimestamp(
+                            metadata.st_mtime
+                        ).isoformat(timespec="seconds"),
+                        "age_days": int(
+                            (time.time() - metadata.st_mtime) / 86400
+                        ),
+                    }
+
+            except OSError as error:
+                log(f"WARNING: {entry.path}: {error}")
+
+
+def classify_workspace(path):
+    name = os.path.basename(path)
+
+    if name.endswith("@tmp"):
+        return "Temporary workspace"
+
+    if "@2" in name or "@3" in name:
+        return "Concurrent workspace"
+
+    if "_PR-" in name:
+        return "Pull request workspace"
+
+    return "Standard workspace"
+
+
+def validate_target(path, root):
+    """Reject paths outside the configured workspace root."""
+    root_real = os.path.realpath(root)
+    path_real = os.path.realpath(path)
+
+    if os.path.commonpath([root_real, path_real]) != root_real:
+        raise ValueError(f"Path outside workspace root: {path}")
+
+    if path_real == root_real:
+        raise ValueError("Refusing to delete workspace root")
+
+    if os.path.islink(path):
+        raise ValueError("Refusing to delete symlink")
+
+
+def delete_directory(path, root):
+    """Delete a validated directory."""
+    try:
+        validate_target(path, root)
+
+        if not os.path.isdir(path):
+            return "SKIPPED"
+
+        shutil.rmtree(path)
+
+        log(f"DELETED: {path}")
+        return "DELETED"
+
+    except Exception as error:
+        log(f"ERROR: Failed to delete {path}: {error}")
+        return "FAILED"
+
+
+def write_csv(filename, records):
+    fields = [
+        "path",
+        "type",
+        "modified",
+        "age_days",
+        "size_gib",
+        "status",
+    ]
+
+    with open(filename, "w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(records)
+
+
+def load_approved_paths(filename):
+    approved = set()
+
+    if not filename:
+        return approved
+
+    with open(filename, newline="", encoding="utf-8") as source:
+        reader = csv.DictReader(source)
+
+        if not {"path", "approved"}.issubset(reader.fieldnames or []):
+            raise ValueError(
+                "Approval CSV must contain path and approved columns"
+            )
+
+        for row in reader:
+            if row["approved"].strip().lower() == "yes":
+                approved.add(row["path"].strip())
+
+    return approved
 
 
 def main():
-    global freed_space
+    parser = argparse.ArgumentParser()
 
-    print(f"Scanning: {ROOT_DIR}\n")
-    initial_size = get_dir_size_fast(ROOT_DIR)
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Enable deletion"
+    )
 
-    terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
-    print(f"Found {len(terraform_dirs)} .terraform director{'y' if len(terraform_dirs) == 1 else 'ies'}\n")
+    parser.add_argument(
+        "--cleanup-terraform",
+        action="store_true",
+        help="Include .terraform cleanup"
+    )
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {executor.submit(delete_terraform_dir, d): d for d in terraform_dirs}
-        for future in as_completed(futures):
-            with stats_lock:
-                freed_space += future.result()
+    parser.add_argument(
+        "--cleanup-workspaces",
+        action="store_true",
+        help="Include stale workspace cleanup"
+    )
 
-    final_size = initial_size - freed_space
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=STALE_DAYS
+    )
 
-    print(f"\nInitial size : {initial_size / (1024 ** 3):.2f} GB")
-    print(f"Final size   : {final_size / (1024 ** 3):.2f} GB")
-    print(f"Freed space  : {freed_space / (1024 ** 3):.2f} GB")
+    parser.add_argument(
+        "--approved-csv",
+        help="CSV containing approved workspace paths"
+    )
+
+    parser.add_argument(
+        "--jenkins-idle-confirmed",
+        action="store_true",
+        help="Operator attests Jenkins agent is drained and idle"
+    )
+
+    parser.add_argument(
+        "--report",
+        default="jenkins_efs_cleanup.csv"
+    )
+
+    args = parser.parse_args()
+
+    root = ROOT_DIR
+
+    if args.days < 1:
+        parser.error("--days must be at least 1")
+
+    if not os.path.isdir(root):
+        parser.error(f"Workspace root does not exist: {root}")
+
+    if args.execute and not args.jenkins_idle_confirmed:
+        parser.error(
+            "Execution requires --jenkins-idle-confirmed. "
+            "Drain the agent and verify no active builds first."
+        )
+
+    if args.execute and args.cleanup_workspaces and not args.approved_csv:
+        parser.error(
+            "Workspace deletion requires --approved-csv"
+        )
+
+    approved_paths = load_approved_paths(args.approved_csv)
+
+    records = []
+    targets = []
+
+    log("=" * 60)
+    log("JENKINS EFS CLEANUP")
+    log("=" * 60)
+
+    log(f"Root directory : {root}")
+    log(f"Retention days : {args.days}")
+    log(f"Mode           : {'EXECUTE' if args.execute else 'DRY-RUN'}")
+
+    if args.cleanup_workspaces:
+        log("\nScanning stale workspaces...")
+
+        for item in find_stale_workspaces(root, args.days):
+            path = item["path"]
+
+            record = {
+                "path": path,
+                "type": classify_workspace(path),
+                "modified": item["modified"],
+                "age_days": item["age_days"],
+                "size_gib": "",
+                "status": "REVIEW REQUIRED",
+            }
+
+            if args.execute and path in approved_paths:
+                record["status"] = "APPROVED"
+                targets.append((path, record))
+
+            records.append(record)
+
+    if args.cleanup_terraform:
+        log("\nScanning .terraform directories...")
+
+        for path in find_terraform_dirs(root):
+            record = {
+                "path": path,
+                "type": "Terraform cache",
+                "modified": "",
+                "age_days": "",
+                "size_gib": "",
+                "status": "PENDING" if args.execute else "DRY-RUN",
+            }
+
+            records.append(record)
+
+            if args.execute:
+                targets.append((path, record))
+
+    if args.execute:
+        log(f"\nDeleting {len(targets)} approved targets...")
+
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(delete_directory, path, root): record
+                for path, record in targets
+            }
+
+            for future in as_completed(futures):
+                record = futures[future]
+                record["status"] = future.result()
+
+    write_csv(args.report, records)
+
+    deleted = sum(
+        1 for record in records if record["status"] == "DELETED"
+    )
+
+    failed = sum(
+        1 for record in records if record["status"] == "FAILED"
+    )
+
+    log("\n" + "=" * 60)
+    log("CLEANUP SUMMARY")
+    log("=" * 60)
+
+    log(f"Total records : {len(records)}")
+    log(f"Deleted       : {deleted}")
+    log(f"Failed        : {failed}")
+    log(f"CSV report    : {args.report}")
+
+    log("\nCleanup completed.")
 
 
 if __name__ == "__main__":
