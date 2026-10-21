@@ -1,94 +1,19 @@
-sh-5.2$ sudo docker exec -it jenkins bash
-[root@c74a43d5165b jenkins]# su jenkins
-bash-5.2$ exit
-exit
-[root@c74a43d5165b jenkins]# exit
-exit
-sh-5.2$ sudo findmnt -t nfs,nfs4,efs
-TARGET        SOURCE      FSTYPE OPTIONS
-/jenkins_jobs 127.0.0.1:/ nfs4   rw,relatime,vers=4.1,rsize=1048576,wsize=1048576,namlen=255,hard,noresvport,fatal_neterrors=none,proto=tcp,port=20097,timeo=600,retrans=
-sh-5.2$ 
-sh-5.2$ df -hT | grep -E 'efs|nfs|amazonaws'
-127.0.0.1:/                    nfs4      8.0E  512G  8.0E   1% /jenkins_jobs
-sh-5.2$ 
-sh-5.2$ mount | grep -E 'efs|nfs|fs-02f59d5ae317cf9fe'
-tracefs on /sys/kernel/tracing type tracefs (rw,nosuid,nodev,noexec,relatime,seclabel)
-sunrpc on /var/lib/nfs/rpc_pipefs type rpc_pipefs (rw,relatime)
-127.0.0.1:/ on /jenkins_jobs type nfs4 (rw,relatime,vers=4.1,rsize=1048576,wsize=1048576,namlen=255,hard,noresvport,fatal_neterrors=none,proto=tcp,port=20097,timeo=600,retrans=2,sec=sys,clientaddr=127.0.0.1,local_lock=none,addr=127.0.0.1,_netdev)
-sh-5.2$ 
-sh-5.2$ sudo docker inspect jenkins \
-  --format '{{range .Mounts}}{{println .Type "SOURCE:" .Source "DESTINATION:" .Destination}}{{end}}'
-volume SOURCE: /var/lib/docker/volumes/b153efa68feb59e757938e7ee4cd1c8cdf89193e09e8fe4ad2a6e48bda8a4cef/_data DESTINATION: /var/lib/containers
-bind SOURCE: /var/run/docker.sock DESTINATION: /var/run/docker.sock
-bind SOURCE: /agent_ssh.pem DESTINATION: /home/jenkins/agent_ssh.pem
-bind SOURCE: /root/.ssh/authorized_keys DESTINATION: /home/jenkins/.ssh/host_authorized_keys
-bind SOURCE: /root/.aws/config DESTINATION: /home/jenkins/.aws/host_config
-bind SOURCE: /jenkins_jobs DESTINATION: /home/jenkins/workspace
+sudo du -h --max-depth=1 /jenkins_jobs 2>/dev/null \
+  | sort -hr | head -30
 
-sh-5.2$ sudo docker exec -it jenkins bash
-[root@c74a43d5165b jenkins]# su jenkins
-bash-5.2$ 
-bash-5.2$ echo "$JENKINS_HOME"
+sudo du -sh /jenkins_jobs
 
-ls -lah /home/jenkins
+sudo find /jenkins_jobs -type f -size +500M \
+  -printf '%s %p\n' 2>/dev/null \
+  | sort -nr | head -30 \
+  | awk '{printf "%.2f GiB %s\n", $1/1024/1024/1024, $2}'
 
-ls -lah /var/jenkins_home
 
-find / -maxdepth 4 -type d -name jobs 2>/dev/null | head -30
-/home/jenkins
-total 147M
-drwxr-xr-x.    1 jenkins jenkins 4.0K Oct 21 12:56 .
-drwxr-xr-x.    1 root    root      21 Aug 26 19:54 ..
-drwx------.    1 jenkins jenkins   39 Oct 21 11:04 .aws
--rw-------.    1 jenkins jenkins    5 Oct 21 12:56 .bash_history
-drwxr-xr-x.    1 jenkins jenkins   17 Oct 21 11:04 .cache
-drwxr-xr-x.    1 jenkins jenkins   47 Aug 26 19:56 .conda
-drwxr-xr-x.    1 jenkins jenkins   30 Aug 26 19:55 .nuclei
-drwxr-xr-x.    1 jenkins jenkins   28 Aug 26 19:55 .opengrep
-drwx------.    1 jenkins jenkins   57 Oct 21 11:04 .ssh
-drwxr-xr-x.    1 jenkins jenkins    6 Aug 26 19:55 .trivy
--rw-r--r--.    1 jenkins jenkins 133M Feb 13  2025 Miniconda3-py310_24.7.1-0-Linux-x86_64.sh
--rw-r--r--.    1 root    root    1.4M Sep  3 22:51 agent.jar
--rw-r--r--.    1 root    root    1.7K Oct 21 11:01 agent_ssh.pem
-drwxr-xr-x.    1 jenkins jenkins   48 Aug 26 19:57 anaconda3
--rwxrwxrwx.    1 root    root     525 Aug 26 19:49 cred.xml
--rw-r--r--.    1 root    root    2.2K Oct 21 11:04 cred_replaced.xml
--rw-r--r--.    1 root    root     12M Sep  3 22:51 jenkins-cli.jar
--rwxrwxrwx.    1 root    root     606 Aug 26 19:49 node.xml
--rw-r--r--.    1 root    root     579 Oct 21 11:04 node_replaced.xml
-drwxrwxr-x.    1 jenkins jenkins  149 Aug 26 19:55 nuclei-templates-10.3.9
--rwxrwxrwx.    1 root    root    1.3K Aug 26 19:49 python310.env.yml
--rwxrwxrwx.    1 root    root    1.3K Aug 26 19:49 python312.env.yml
--rwxrwxrwx.    1 root    root    1.6K Aug 26 19:49 python313.env.yml
--rwxrwxrwx.    1 root    root    1.7K Aug 26 19:49 python314.env.yml
--rwxr-xr-x.    1 root    root    4.0K Aug 26 19:49 register.sh
-drwx------.    4 jenkins jenkins   34 Oct 21 11:04 remoting
--rw-------.    1 jenkins jenkins 1.4M Oct 21 11:04 remoting.jar
-drwxr-xr-x. 1308 jenkins jenkins  70K Oct 21 08:15 workspace
-ls: cannot access '/var/jenkins_home': No such file or directory
-bash-5.2$ exit
-exit
-[root@c74a43d5165b jenkins]# exit
-exit
-sh-5.2$ aws efs describe-file-systems \
-  --file-system-id fs-02f59d5ae317cf9fe \
-  --region us-east-1 \
-  --query 'FileSystems[0].{
-    FileSystemId:FileSystemId,
-    SizeBytes:SizeInBytes.Value,
-    SizeTimestamp:SizeInBytes.Timestamp,
-    LifeCycleState:LifeCycleState
-  }'
+sudo find /jenkins_jobs -mindepth 1 -maxdepth 1 \
+  -type d -mtime +90 \
+  -printf '%TY-%Tm-%Td %p\n' \
+  | sort
 
-aws: [ERROR]: An error occurred (AccessDeniedException) when calling the DescribeFileSystems operation: User: arn:aws:sts::213141505949:assumed-role/prod_jenkins_agent_role_imac/i-0147c97655409fedd is not authorized to perform: elasticfilesystem:DescribeFileSystems on the specified resource
-sh-5.2$ sudo findmnt -t nfs,nfs4
-TARGET        SOURCE      FSTYPE OPTIONS
-/jenkins_jobs 127.0.0.1:/ nfs4   rw,relatime,vers=4.1,rsize=1048576,wsize=1048576,namlen=255,hard,noresvport,fatal_neterrors=none,proto=tcp,port=20097,timeo=600,retrans=
-sh-5.2$ sudo docker inspect jenkins \
-  --format '{{range .Mounts}}{{println .Type "SOURCE:" .Source "DESTINATION:" .Destination}}{{end}}'
-bind SOURCE: /agent_ssh.pem DESTINATION: /home/jenkins/agent_ssh.pem
-bind SOURCE: /root/.ssh/authorized_keys DESTINATION: /home/jenkins/.ssh/host_authorized_keys
-bind SOURCE: /root/.aws/config DESTINATION: /home/jenkins/.aws/host_config
-bind SOURCE: /jenkins_jobs DESTINATION: /home/jenkins/workspace
-volume SOURCE: /var/lib/docker/volumes/b153efa68feb59e757938e7ee4cd1c8cdf89193e09e8fe4ad2a6e48bda8a4cef/_data DESTINATION: /var/lib/containers
-bind SOURCE: /var/run/docker.sock DESTINATION: /var/run/docker.sock
+sudo find /jenkins_jobs -type d -name ".terraform" \
+  -prune -print | wc -l
+
