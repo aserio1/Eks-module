@@ -1,39 +1,93 @@
-sh-5.2$ sudo find /jenkins_jobs \
-  -mindepth 1 -maxdepth 1 \
-  -type d -mtime +90 \
-  -printf '%p\n' | wc -l
-1106
-sh-5.2$ 
-sh-5.2$ sudo find /jenkins_jobs \
-  -mindepth 1 -maxdepth 1 \
-  -type d -mtime +90 \
-  -name '*@tmp' \
-  -printf '%p\n' | wc -l
-530
-sh-5.2$ 
-sh-5.2$ sudo find /jenkins_jobs \
-  -mindepth 1 -maxdepth 1 \
-  -type d -mtime +90 \
-  -printf '%T@ %p\n' \
-  | sort -n \
-  | head -20
-1711395022.4590000000 /jenkins_jobs/Swift
-1714170751.7350000000 /jenkins_jobs/d_9_Instance_split-long-username
-1715198275.5050000000 /jenkins_jobs/d_9_Instance_split-long-username@tmp
-1716569727.3670000000 /jenkins_jobs/Roles_add-ml-engineering-project
-1716569800.6940000000 /jenkins_jobs/Roles_add-ml-engineering-project@tmp
-1716574233.0600000000 /jenkins_jobs/d_Job_add-ml-engineering-project@tmp
-1716574234.6830000000 /jenkins_jobs/Seed_Job_add_pipeline_complaints@tmp
-1716574235.2640000000 /jenkins_jobs/d_Job_add-ml-engineering-project
-1716574237.0000000000 /jenkins_jobs/Seed_Job_add_pipeline_complaints
-1717618972.7140000000 /jenkins_jobs/9_Instance_fix-deployment-branch
-1717618994.2350000000 /jenkins_jobs/9_Instance_fix-deployment-branch@tmp
-1718389177.6580000000 /jenkins_jobs/y_New_IAM_Roles_bug-add-ecr-imac
-1718390355.4680000000 /jenkins_jobs/y_New_IAM_Roles_bug-add-ecr-imac@tmp
-1722882983.3630000000 /jenkins_jobs/s_feature-aws-instance-scheduler
-1722883037.6570000000 /jenkins_jobs/s_feature-aws-instance-scheduler@2
-1722883044.6620000000 /jenkins_jobs/s_feature-aws-instance-scheduler@2@tmp
-1723132164.6570000000 /jenkins_jobs/s_feature-aws-instance-scheduler@tmp
-1723665686.2950000000 /jenkins_jobs/e_Instance_Refresh_add-sie-stage
-1723665687.8420000000 /jenkins_jobs/e_Instance_Refresh_add-sie-stage@tmp
-1723665688.7290000000 /jenkins_jobs/efresh_Ryan-McGirr-Add-CGAP-Jobs
+#!/usr/bin/env python3
+
+# This script deletes recursively .terraform dirs
+# found in /home/jenkins/workspace.
+# Executed via a Jenkins job that runs daily during off hours.
+
+import os
+import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+
+ROOT_DIR = "/home/jenkins/workspace"
+MAX_WORKERS = 8  # Tune based on EFS throughput limits
+
+print_lock = Lock()
+stats_lock = Lock()
+freed_space = 0
+
+
+def get_dir_size_fast(path):
+    """Use os.scandir recursively for faster size calculation."""
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        total += entry.stat(follow_symlinks=False).st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        total += get_dir_size_fast(entry.path)
+                except (PermissionError, FileNotFoundError):
+                    pass
+    except (PermissionError, FileNotFoundError):
+        pass
+    return total
+
+
+def delete_terraform_dir(path):
+    """Delete a single .terraform dir and return bytes freed."""
+    size = get_dir_size_fast(path)
+    try:
+        shutil.rmtree(path)
+        with print_lock:
+            print(f"Deleted: {path}")
+        return size
+    except Exception as e:
+        with print_lock:
+            print(f"Failed to delete {path}: {e}")
+        return 0
+
+
+def find_terraform_dirs(root):
+    """
+    Walk the tree with os.scandir and prune traversal into .terraform dirs
+    (no need to recurse into them — we're deleting the whole thing).
+    """
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if entry.name == ".terraform":
+                    yield entry.path
+                else:
+                    yield from find_terraform_dirs(entry.path)
+    except (PermissionError, FileNotFoundError) as e:
+        print(f"Cannot access {root}: {e}")
+
+
+def main():
+    global freed_space
+
+    print(f"Scanning: {ROOT_DIR}\n")
+    initial_size = get_dir_size_fast(ROOT_DIR)
+
+    terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
+    print(f"Found {len(terraform_dirs)} .terraform director{'y' if len(terraform_dirs) == 1 else 'ies'}\n")
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(delete_terraform_dir, d): d for d in terraform_dirs}
+        for future in as_completed(futures):
+            with stats_lock:
+                freed_space += future.result()
+
+    final_size = initial_size - freed_space
+
+    print(f"\nInitial size : {initial_size / (1024 ** 3):.2f} GB")
+    print(f"Final size   : {final_size / (1024 ** 3):.2f} GB")
+    print(f"Freed space  : {freed_space / (1024 ** 3):.2f} GB")
+
+
+if __name__ == "__main__":
+    main()
