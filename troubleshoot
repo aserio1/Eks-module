@@ -7,9 +7,12 @@ df -hT | grep -E 'efs|nfs|amazonaws'
 
 mount | grep -E 'efs|nfs|fs-02f59d5ae317cf9fe'
 
-##
+
 sudo docker inspect jenkins \
   --format '{{range .Mounts}}{{println .Type "SOURCE:" .Source "DESTINATION:" .Destination}}{{end}}'
+
+
+sudo docker exec -it jenkins bash
 
 echo "$JENKINS_HOME"
 
@@ -29,7 +32,6 @@ aws efs describe-file-systems \
     SizeTimestamp:SizeInBytes.Timestamp,
     LifeCycleState:LifeCycleState
   }'
-
 
 sudo findmnt -t nfs,nfs4
 
