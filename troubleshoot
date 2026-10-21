@@ -1,80 +1,40 @@
-################################################################################
-# IMAC Jenkins Controller Docker Image
-#
-################################################################################
-
-FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
-
-
-LABEL   oig.imac.base.image.purpose="Jenkins Controller Docker image" \
-        oig.imac.image.owner="Kate Rose" \
-        oig.imac.image.engineer="Kent Rockwell" \
-        oig.imac.base.image.parent="IMAC Jenkins base image" \
-        oig.imac.base.image.parent.registry="213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/base/jenkins:BASE_IMAGE_VERSION" \
-        oig.imac.base.image.ontogeny.registry="registry1.dso.mil/ironbank" \
-        oig.imac.base.image.ontogeny.image="registry1.dso.mil/ironbank/opensource/python:v3.14.5@sha256:be4255a2642bcf619c9594ebb4cbd8ac046ce9ce8c6e69b338048f53164e4b9a"
-
-ARG user=jenkins
-ARG group=jenkins
-ARG uid=2000
-ARG gid=2000
-ARG JENKINS_HOME=/home/jenkins
-ARG JENKINS_JAR_FILES="jenkins-jar-files-2026-10-13"
-
-USER root
-
-# Create User
-RUN mkdir -p $JENKINS_HOME \
-  && groupadd -g ${gid} ${group} \
-  && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user} \
-  && chown -R ${uid}:${gid} $JENKINS_HOME
-
-# Install OS Packages
-RUN yum -y update && \
-    yum -y install java-21-openjdk && \
-    yum clean all && \
-    rm -rf /var/cache/yum/*
-
-USER jenkins
-
-# Install Jenkins apps
-WORKDIR $JENKINS_HOME
-
-# Check Jenkins home directory permissions
-RUN echo "Checking Jenkins permissions..." && \
-    id && \
-    ls -ld $JENKINS_HOME && \
-    ls -l $JENKINS_HOME/jenkins.war $JENKINS_HOME/jpm.jar 2>/dev/null || true
-
-RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
-    unzip jenkins-zip-files.zip && \
-    mv ${JENKINS_JAR_FILES}/* . && \
-    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
-
-COPY dependencies/casc.yaml $JENKINS_HOME/casc.yaml
-COPY dependencies/jenkins.sh $JENKINS_HOME/jenkins.sh
-COPY dependencies/plugins.txt $JENKINS_HOME/plugins.txt
-
-RUN mkdir $JENKINS_HOME/init.groovy.d && \
-    chmod 755 $JENKINS_HOME/init.groovy.d
-
-COPY dependencies/user-token-gen.groovy $JENKINS_HOME/init.groovy.d/user-token-gen.groovy
-
-USER root
-
-RUN chmod 755 $JENKINS_HOME/init.groovy.d/user-token-gen.groovy && \
-    chmod 755 $JENKINS_HOME/jenkins.sh && \
-    chown -R ${uid}:${gid} $JENKINS_HOME
-
-USER jenkins
-
-ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
-ENV JENKINS_HOME $JENKINS_HOME
-# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
-ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
-
-RUN java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins && \
-    rm -rf $JENKINS_HOME/jpm.jar
-
-CMD [ "./jenkins.sh"]
-ENTRYPOINT []
+:58:48  
+16:58:48  #8 [ 4/13] WORKDIR /home/jenkins
+16:58:48  #8 DONE 0.1s
+16:58:48  
+16:58:48  #9 [ 5/13] RUN echo "Checking Jenkins permissions..." &&     id &&     ls -ld /home/jenkins &&     ls -l /home/jenkins/jenkins.war /home/jenkins/jpm.jar 2>/dev/null || true
+16:58:48  #9 0.372 Checking Jenkins permissions...
+16:58:49  #9 0.376 uid=2000(jenkins) gid=2000(jenkins) groups=2000(jenkins)
+16:58:49  #9 0.380 drwxr-xr-x. 2 jenkins jenkins 6 Oct 21 21:58 /home/jenkins
+16:58:49  #9 DONE 0.4s
+16:58:49  
+16:58:49  #10 [ 6/13] RUN aws s3 cp s3://jenkins-binaries-213141505949/jenkins-jar-files-2026-10-13.zip jenkins-zip-files.zip &&     unzip jenkins-zip-files.zip &&     mv jenkins-jar-files-2026-10-13/* . &&     rm -rf jenkins-zip-files.zip jenkins-jar-files-2026-10-13
+16:58:51  #10 2.372 Completed 57.5 MiB/57.5 MiB (119.8 MiB/s) with 1 file(s) remaining
+16:58:51  download: s3://jenkins-binaries-213141505949/jenkins-jar-files-2026-10-13.zip to ./jenkins-zip-files.zip
+16:58:51  #10 2.620 Archive:  jenkins-zip-files.zip
+16:58:51  #10 2.620    creating: jenkins-jar-files-2026-10-13/
+16:58:51  #10 2.620   inflating: jenkins-jar-files-2026-10-13/jenkins.war  
+16:58:52  #10 2.911   inflating: jenkins-jar-files-2026-10-13/jpm.jar  
+16:58:52  #10 2.973 mv: cannot move 'jenkins-jar-files-2026-10-13/jenkins.war' to './jenkins.war': Permission denied
+16:58:52  #10 2.973 mv: cannot move 'jenkins-jar-files-2026-10-13/jpm.jar' to './jpm.jar': Permission denied
+16:58:52  #10 ERROR: process "/bin/sh -c aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip &&     unzip jenkins-zip-files.zip &&     mv ${JENKINS_JAR_FILES}/* . &&     rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}" did not complete successfully: exit code: 1
+16:58:52  ------
+16:58:52   > [ 6/13] RUN aws s3 cp s3://jenkins-binaries-213141505949/jenkins-jar-files-2026-10-13.zip jenkins-zip-files.zip &&     unzip jenkins-zip-files.zip &&     mv jenkins-jar-files-2026-10-13/* . &&     rm -rf jenkins-zip-files.zip jenkins-jar-files-2026-10-13:
+16:58:52  2.372 Completed 57.5 MiB/57.5 MiB (119.8 MiB/s) with 1 file(s) remaining
+16:58:52  download: s3://jenkins-binaries-213141505949/jenkins-jar-files-2026-10-13.zip to ./jenkins-zip-files.zip
+16:58:52  2.620 Archive:  jenkins-zip-files.zip
+16:58:52  
+16:58:52  2.911   inflating: jenkins-jar-files-2026-10-13/jpm.jar  
+16:58:52  2.973 mv: cannot move 'jenkins-jar-files-2026-10-13/jenkins.war' to './jenkins.war': Permission denied
+16:58:52  2.973 mv: cannot move 'jenkins-jar-files-2026-10-13/jpm.jar' to './jpm.jar': Permission denied
+16:58:52  ------
+16:58:52  Dockerfile:49
+16:58:52  --------------------
+16:58:52    48 |     
+16:58:52    49 | >>> RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
+16:58:52    50 | >>>     unzip jenkins-zip-files.zip && \
+16:58:52    51 | >>>     mv ${JENKINS_JAR_FILES}/* . && \
+16:58:52    52 | >>>     rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
+16:58:52    53 |     
+16:58:52  --------------------
+16:58:52  ERROR: failed to build: failed to solve: process "/bin/sh -c aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip &&     unzip jenkins-zip-files.zip &&     mv ${JENKINS_JAR_FILES}/* . &&     rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}" did not complete successfully: exit code: 1
