@@ -40,6 +40,12 @@ USER jenkins
 # Install Jenkins apps
 WORKDIR $JENKINS_HOME
 
+# Check Jenkins home directory permissions
+RUN echo "Checking Jenkins permissions..." && \
+    id && \
+    ls -ld $JENKINS_HOME && \
+    ls -l $JENKINS_HOME/jenkins.war $JENKINS_HOME/jpm.jar 2>/dev/null || true
+
 RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
     unzip jenkins-zip-files.zip && \
     mv ${JENKINS_JAR_FILES}/* . && \
