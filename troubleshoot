@@ -1,27 +1,74 @@
-Got this comment on the PR 
+################################################################################
+# IMAC Jenkins Controller Docker Image
+#
+################################################################################
 
-We already set the permissions for the $JENKINS_HOME earlier in the DockerfileTemplate - see line 28 - I think the problem is that we do that before useradd which is actually acting on the existing $JENKINS_HOME folder which might be the problem here: useradd -l -m on an existing directory can reset ownership/permissions on that directory
-If u move the chown command after useradd it will get persisted for the later steps, e.g.:
+FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
 
+
+LABEL   oig.imac.base.image.purpose="Jenkins Controller Docker image" \
+        oig.imac.image.owner="Kate Rose" \
+        oig.imac.image.engineer="Kent Rockwell" \
+        oig.imac.base.image.parent="IMAC Jenkins base image" \
+        oig.imac.base.image.parent.registry="213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/base/jenkins:BASE_IMAGE_VERSION" \
+        oig.imac.base.image.ontogeny.registry="registry1.dso.mil/ironbank" \
+        oig.imac.base.image.ontogeny.image="registry1.dso.mil/ironbank/opensource/python:v3.14.5@sha256:be4255a2642bcf619c9594ebb4cbd8ac046ce9ce8c6e69b338048f53164e4b9a"
+
+ARG user=jenkins
+ARG group=jenkins
+ARG uid=2000
+ARG gid=2000
+ARG JENKINS_HOME=/home/jenkins
+ARG JENKINS_JAR_FILES="jenkins-jar-files-2026-10-13"
+
+USER root
+
+# Create User
 RUN mkdir -p $JENKINS_HOME \
   && groupadd -g ${gid} ${group} \
   && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user} \
   && chown -R ${uid}:${gid} $JENKINS_HOME
 
+# Install OS Packages
+RUN yum -y update && \
+    yum -y install java-21-openjdk && \
+    yum clean all && \
+    rm -rf /var/cache/yum/*
 
-RUN chown -R ${uid}:${gid} $JENKINS_HOME
-Member
-@Cosmina-Chindris Cosmina-Chindris 38 minutes ago
-this is not needed - see my prev comments
+USER jenkins
+
+# Install Jenkins apps
+WORKDIR $JENKINS_HOME
+
+RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
+    unzip jenkins-zip-files.zip && \
+    mv ${JENKINS_JAR_FILES}/* . && \
+    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
+
+COPY dependencies/casc.yaml $JENKINS_HOME/casc.yaml
+COPY dependencies/jenkins.sh $JENKINS_HOME/jenkins.sh
+COPY dependencies/plugins.txt $JENKINS_HOME/plugins.txt
+
+RUN mkdir $JENKINS_HOME/init.groovy.d && \
+    chmod 755 $JENKINS_HOME/init.groovy.d
+
+COPY dependencies/user-token-gen.groovy $JENKINS_HOME/init.groovy.d/user-token-gen.groovy
 
 USER root
-Member
-@Cosmina-Chindris Cosmina-Chindris 37 minutes ago
-this is not needed - see my prev comments
 
-    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES} && \
+RUN chmod 755 $JENKINS_HOME/init.groovy.d/user-token-gen.groovy && \
+    chmod 755 $JENKINS_HOME/jenkins.sh && \
     chown -R ${uid}:${gid} $JENKINS_HOME
-Member
-@Cosmina-Chindris Cosmina-Chindris 37 minutes ago
-another chown here is not needed - see prev comments
 
+USER jenkins
+
+ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
+ENV JENKINS_HOME $JENKINS_HOME
+# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
+ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
+
+RUN java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins && \
+    rm -rf $JENKINS_HOME/jpm.jar
+
+CMD [ "./jenkins.sh"]
+ENTRYPOINT []
