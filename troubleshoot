@@ -42,10 +42,15 @@ USER jenkins
 # Install Jenkins apps
 WORKDIR $JENKINS_HOME
 
+USER root
+
 RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
     unzip jenkins-zip-files.zip && \
     mv ${JENKINS_JAR_FILES}/* . && \
-    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
+    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES} && \
+    chown -R ${uid}:${gid} $JENKINS_HOME
+
+USER jenkins
 
 COPY dependencies/casc.yaml $JENKINS_HOME/casc.yaml
 COPY dependencies/jenkins.sh $JENKINS_HOME/jenkins.sh
