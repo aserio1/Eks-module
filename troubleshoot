@@ -1,18 +1,39 @@
-sudo find /jenkins_jobs \
+sh-5.2$ sudo find /jenkins_jobs \
   -mindepth 1 -maxdepth 1 \
   -type d -mtime +90 \
   -printf '%p\n' | wc -l
-
-sudo find /jenkins_jobs \
+1106
+sh-5.2$ 
+sh-5.2$ sudo find /jenkins_jobs \
   -mindepth 1 -maxdepth 1 \
   -type d -mtime +90 \
   -name '*@tmp' \
   -printf '%p\n' | wc -l
-
-
-sudo find /jenkins_jobs \
+530
+sh-5.2$ 
+sh-5.2$ sudo find /jenkins_jobs \
   -mindepth 1 -maxdepth 1 \
   -type d -mtime +90 \
   -printf '%T@ %p\n' \
   | sort -n \
   | head -20
+1711395022.4590000000 /jenkins_jobs/Swift
+1714170751.7350000000 /jenkins_jobs/d_9_Instance_split-long-username
+1715198275.5050000000 /jenkins_jobs/d_9_Instance_split-long-username@tmp
+1716569727.3670000000 /jenkins_jobs/Roles_add-ml-engineering-project
+1716569800.6940000000 /jenkins_jobs/Roles_add-ml-engineering-project@tmp
+1716574233.0600000000 /jenkins_jobs/d_Job_add-ml-engineering-project@tmp
+1716574234.6830000000 /jenkins_jobs/Seed_Job_add_pipeline_complaints@tmp
+1716574235.2640000000 /jenkins_jobs/d_Job_add-ml-engineering-project
+1716574237.0000000000 /jenkins_jobs/Seed_Job_add_pipeline_complaints
+1717618972.7140000000 /jenkins_jobs/9_Instance_fix-deployment-branch
+1717618994.2350000000 /jenkins_jobs/9_Instance_fix-deployment-branch@tmp
+1718389177.6580000000 /jenkins_jobs/y_New_IAM_Roles_bug-add-ecr-imac
+1718390355.4680000000 /jenkins_jobs/y_New_IAM_Roles_bug-add-ecr-imac@tmp
+1722882983.3630000000 /jenkins_jobs/s_feature-aws-instance-scheduler
+1722883037.6570000000 /jenkins_jobs/s_feature-aws-instance-scheduler@2
+1722883044.6620000000 /jenkins_jobs/s_feature-aws-instance-scheduler@2@tmp
+1723132164.6570000000 /jenkins_jobs/s_feature-aws-instance-scheduler@tmp
+1723665686.2950000000 /jenkins_jobs/e_Instance_Refresh_add-sie-stage
+1723665687.8420000000 /jenkins_jobs/e_Instance_Refresh_add-sie-stage@tmp
+1723665688.7290000000 /jenkins_jobs/efresh_Ryan-McGirr-Add-CGAP-Jobs
