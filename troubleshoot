@@ -1,3 +1,18 @@
+# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
+# ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
+
+RUN for i in 1 2 3; do \
+      timeout 900 java -jar jpm.jar --verbose \
+        --war $JENKINS_HOME/jenkins.war \
+        -f $JENKINS_HOME/plugins.txt \
+        -d $JENKINS_HOME/plugins \
+        --jenkins-update-center-download-url https://updates.jenkins.io/download && break || \
+      { echo "jpm attempt $i failed/timed out, retrying in 30s..."; sleep 30; }; \
+    done && \    
+    rm -rf $JENKINS_HOME/jpm.jar
+
+
+
 ################################################################################
 # IMAC Jenkins Controller Docker Image
 #
