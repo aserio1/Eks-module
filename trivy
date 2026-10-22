@@ -1,17 +1,9 @@
-The Jenkins logs present in the EFS are 1:1 with the builds in Jenkins - currently there is no enforcement 
-on keeping a certain amount of build logs per job (configurable in the Jenkins multibranch jobs) - 
-I think it is ok to remove all the PR stale branches as long as they are not currently present in Jenkins - 
-so when u remove the "stale" workspaces make sure there are no equivalent jobs in Jenkins for them (if there are - 
-it is possible that removing the logs older than 90 days - they won't show up in Jenkins console anymore) - 
-also there has been restructuring of jobs in Jenkins by a few teams - it is worth while to match them up and remove
-the stale folders
-
-
 #!/usr/bin/env python3
 
 # This script deletes recursively .terraform dirs
 # found in /home/jenkins/workspace.
-# Also deletes stale Jenkins workspaces older than 90 days.
+# Also deletes stale Jenkins workspaces older than 90 days
+# when the corresponding Jenkins job no longer exists.
 # Executed via a Jenkins job that runs daily during off hours.
 
 import os
@@ -19,6 +11,11 @@ import sys
 import time
 import shutil
 import argparse
+import json
+import urllib.request
+import urllib.parse
+import urllib.error
+import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
@@ -131,6 +128,99 @@ def find_stale_workspaces(root):
         print(f"Cannot access {root}: {e}")
 
 
+def get_jenkins_jobs():
+    """
+    Retrieve Jenkins jobs using the existing Jenkins controller environment.
+    No credential configuration is modified.
+    """
+    jenkins_url = os.environ.get("JENKINS_URL", "").rstrip("/")
+
+    if not jenkins_url:
+        raise RuntimeError("JENKINS_URL is not available")
+
+    jenkins_user = os.environ.get("JENKINS_USER", "")
+    jenkins_token = os.environ.get("JENKINS_API_TOKEN", "")
+
+    headers = {
+        "Accept": "application/json"
+    }
+
+    if jenkins_user and jenkins_token:
+        credentials = base64.b64encode(
+            f"{jenkins_user}:{jenkins_token}".encode()
+        ).decode()
+
+        headers["Authorization"] = f"Basic {credentials}"
+
+    jobs = {}
+    pending = [(jenkins_url, "")]
+
+    while pending:
+        url, parent = pending.pop()
+
+        request = urllib.request.Request(
+            url + "/api/json?tree=jobs[name,url,_class]",
+            headers=headers
+        )
+
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = json.load(response)
+
+        for job in data.get("jobs", []):
+            name = job["name"]
+            full_name = f"{parent}/{name}" if parent else name
+
+            jobs[full_name] = job
+
+            job_class = job.get("_class", "")
+
+            if any(value in job_class for value in (
+                "Folder",
+                "WorkflowMultiBranchProject",
+                "OrganizationFolder"
+            )):
+                pending.append((job["url"].rstrip("/"), full_name))
+
+    return jobs
+
+
+def get_workspace_job_name(path):
+    """
+    Normalize Jenkins workspace names.
+    Remove @tmp and concurrent workspace suffixes.
+    """
+    name = os.path.basename(path)
+
+    if name.endswith("@tmp"):
+        name = name[:-4]
+
+    import re
+    name = re.sub(r"@\d+$", "", name)
+
+    return name
+
+
+def find_matching_job(workspace, jobs):
+    """
+    Match workspace against existing Jenkins jobs.
+    """
+    name = get_workspace_job_name(workspace)
+
+    if name in jobs:
+        return name
+
+    matches = []
+
+    for full_name in jobs:
+        if full_name.replace("/", "_") == name:
+            matches.append(full_name)
+
+    if len(matches) == 1:
+        return matches[0]
+
+    return None
+
+
 def main():
     global freed_space
 
@@ -150,35 +240,42 @@ def main():
         print(f"ERROR: Workspace root not found: {ROOT_DIR}")
         sys.exit(1)
 
+    try:
+        jobs = get_jenkins_jobs()
+        print(f"Retrieved {len(jobs)} Jenkins jobs\n")
+
+    except Exception as e:
+        print(f"ERROR: Unable to validate Jenkins jobs: {e}")
+        print("Cleanup stopped to prevent accidental deletion.")
+        sys.exit(1)
+
     stale_workspaces = list(find_stale_workspaces(ROOT_DIR))
     print(f"Found {len(stale_workspaces)} stale workspaces\n")
 
+    approved_workspaces = []
+
     for workspace in stale_workspaces:
-        print(f"Stale workspace: {workspace}")
+        job = find_matching_job(workspace, jobs)
+
+        if job:
+            print(f"SKIPPED - Jenkins job exists: {workspace} ({job})")
+
+        else:
+            print(f"REVIEW REQUIRED - Jenkins job not matched: {workspace}")
 
     terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
-    print(f"\nFound {len(terraform_dirs)} .terraform director{'y' if len(terraform_dirs) == 1 else 'ies'}\n")
-
-    # Exclude Terraform directories already inside stale workspaces.
-    # Their contents will be removed with the parent workspace.
-
-    stale_paths = set(stale_workspaces)
-
-    terraform_dirs = [
-        path for path in terraform_dirs
-        if not any(
-            os.path.commonpath([path, workspace]) == workspace
-            for workspace in stale_paths
-        )
-    ]
+    print(f"\nFound {len(terraform_dirs)} .terraform directories\n")
 
     if not args.execute:
         print("DRY-RUN: No directories were deleted.")
         return
 
     # IMPORTANT:
-    # Execute only after the Jenkins agent has been drained
+    # Execute only after Jenkins agents have been drained
     # and all running builds have completed.
+    #
+    # Automatic stale workspace deletion remains disabled for
+    # unmatched jobs until workspace-to-job mapping is verified.
 
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {}
@@ -186,7 +283,7 @@ def main():
         for path in terraform_dirs:
             futures[executor.submit(delete_terraform_dir, path)] = path
 
-        for path in stale_workspaces:
+        for path in approved_workspaces:
             futures[executor.submit(delete_stale_workspace, path)] = path
 
         for future in as_completed(futures):
@@ -194,10 +291,9 @@ def main():
                 freed_space += future.result()
 
     print(f"\nFreed space  : {freed_space / (1024 ** 3):.2f} GiB")
-    print(f"Stale workspaces processed: {len(stale_workspaces)}")
+    print(f"Stale workspaces approved for deletion: {len(approved_workspaces)}")
     print("\nCleanup completed.")
 
 
 if __name__ == "__main__":
     main()
-
