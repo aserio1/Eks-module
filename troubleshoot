@@ -88,3 +88,14 @@ RUN success=0; \
 
 CMD [ "./jenkins.sh"]
 ENTRYPOINT []
+
+
+3:45  #16 996.5 	... 15 more
+10:13:45  #16 996.5 Downloading from mirrors failed, falling back to https://archives.jenkins.io/
+10:13:47  #16 999.4 Downloaded and validated plugin pipeline-model-extensions
+10:13:48  #16 999.4 Checksum valid for: pipeline-model-extensions
+10:13:48  #16 999.4 Will use url: https://updates.jenkins.io/download/commons-lang3-api/3.21.0-122.v6a_ea_4fd34049/commons-lang3-api.hpi to download commons-lang3-api plugin
+10:13:48  #16 999.5 Unable to resolve plugin URL https://updates.jenkins.io/download/commons-lang3-api/3.21.0-122.v6a_ea_4fd34049/commons-lang3-api.hpi, or download plugin commons-lang3-api to file: status code: 404, reason phrase: Not Found
+10:13:48  #16 999.6 Unable to resolve plugin URL https://updates.jenkins.io/download/commons-lang3-api/3.21.0-122.v6a_ea_4fd34049/commons-lang3-api.hpi, or download plugin commons-lang3-api to file: status code: 404, reason phrase: Not Found
+10:13:48  #16 999.7 Unable to resolve plugin URL https://updates.jenkins.io/download/commons-lang3-api/3.21.0-122.v6a_ea_4fd34049/commons-lang3-api.hpi, or download plugin commons-lang3-api to file: status code: 404, reason phrase: Not Found
+10:13:48  #16 999.7 java.io.IOException: Unable to resolve plugin URL https://updates.jenkins.io/download/commons-lang3-api/3.21.0-122.v6a_ea_4fd34049/commons-lang3-api.hpi, or download plugin commons-lang3-api to file: status code: 404, reason phrase: Not Found
