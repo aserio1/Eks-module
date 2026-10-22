@@ -1,18 +1,3 @@
-# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
-# ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
-
-RUN for i in 1 2 3; do \
-      timeout 900 java -jar jpm.jar --verbose \
-        --war $JENKINS_HOME/jenkins.war \
-        -f $JENKINS_HOME/plugins.txt \
-        -d $JENKINS_HOME/plugins \
-        --jenkins-update-center-download-url https://updates.jenkins.io/download && break || \
-      { echo "jpm attempt $i failed/timed out, retrying in 30s..."; sleep 30; }; \
-    done && \    
-    rm -rf $JENKINS_HOME/jpm.jar
-
-
-
 ################################################################################
 # IMAC Jenkins Controller Docker Image
 #
@@ -40,9 +25,9 @@ USER root
 
 # Create User
 RUN mkdir -p $JENKINS_HOME \
-  && chown ${uid}:${gid} $JENKINS_HOME \
   && groupadd -g ${gid} ${group} \
-  && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user}
+  && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user} \
+  && chown -R ${uid}:${gid} $JENKINS_HOME
 
 # Install OS Packages
 RUN yum -y update && \
@@ -79,10 +64,26 @@ USER jenkins
 
 ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
 ENV JENKINS_HOME $JENKINS_HOME
-# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
-ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
 
-RUN java -jar jpm.jar --war $JENKINS_HOME/jenkins.war -f $JENKINS_HOME/plugins.txt -d $JENKINS_HOME/plugins && \
+# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
+# ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
+
+RUN success=0; \
+    for i in 1 2 3; do \
+      if timeout 900 java -jar jpm.jar --verbose \
+        --war $JENKINS_HOME/jenkins.war \
+        -f $JENKINS_HOME/plugins.txt \
+        -d $JENKINS_HOME/plugins \
+        --jenkins-update-center-download-url https://updates.jenkins.io/download; then \
+        success=1; \
+        break; \
+      fi; \
+      if [ "$i" -lt 3 ]; then \
+        echo "jpm attempt $i failed/timed out, retrying in 30s..."; \
+        sleep 30; \
+      fi; \
+    done; \
+    [ "$success" -eq 1 ] && \
     rm -rf $JENKINS_HOME/jpm.jar
 
 CMD [ "./jenkins.sh"]
