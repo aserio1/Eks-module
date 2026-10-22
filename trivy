@@ -1,1 +1,203 @@
-The Jenkins logs present in the EFS are 1:1 with the builds in Jenkins - currently there is no enforcement on keeping a certain amount of build logs per job (configurable in the Jenkins multibranch jobs) - I think it is ok to remove all the PR stale branches as long as they are not currently present in Jenkins - so when u remove the "stale" workspaces make sure there are no equivalent jobs in Jenkins for them (if there are - it is possible that removing the logs older than 90 days - they won't show up in Jenkins console anymore) - also there has been restructuring of jobs in Jenkins by a few teams - it is worth while to match them up and remove the stale folders
+The Jenkins logs present in the EFS are 1:1 with the builds in Jenkins - currently there is no enforcement 
+on keeping a certain amount of build logs per job (configurable in the Jenkins multibranch jobs) - 
+I think it is ok to remove all the PR stale branches as long as they are not currently present in Jenkins - 
+so when u remove the "stale" workspaces make sure there are no equivalent jobs in Jenkins for them (if there are - 
+it is possible that removing the logs older than 90 days - they won't show up in Jenkins console anymore) - 
+also there has been restructuring of jobs in Jenkins by a few teams - it is worth while to match them up and remove
+the stale folders
+
+
+#!/usr/bin/env python3
+
+# This script deletes recursively .terraform dirs
+# found in /home/jenkins/workspace.
+# Also deletes stale Jenkins workspaces older than 90 days.
+# Executed via a Jenkins job that runs daily during off hours.
+
+import os
+import sys
+import time
+import shutil
+import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+
+ROOT_DIR = "/home/jenkins/workspace"
+MAX_WORKERS = 8  # Tune based on EFS throughput limits
+STALE_DAYS = 90
+
+print_lock = Lock()
+stats_lock = Lock()
+freed_space = 0
+
+
+def get_dir_size_fast(path):
+    """Use os.scandir recursively for faster size calculation."""
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        total += entry.stat(follow_symlinks=False).st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        total += get_dir_size_fast(entry.path)
+                except (PermissionError, FileNotFoundError):
+                    pass
+    except (PermissionError, FileNotFoundError):
+        pass
+    return total
+
+
+def delete_directory(path):
+    """Delete a directory and return estimated bytes freed."""
+    try:
+        root = os.path.realpath(ROOT_DIR)
+        target = os.path.realpath(path)
+
+        if os.path.commonpath([root, target]) != root:
+            raise ValueError("Directory is outside workspace root")
+
+        if target == root:
+            raise ValueError("Cannot delete workspace root")
+
+        if os.path.islink(path):
+            raise ValueError("Cannot delete symbolic link")
+
+        size = get_dir_size_fast(path)
+
+        shutil.rmtree(path)
+
+        with print_lock:
+            print(f"Deleted: {path}")
+
+        return size
+
+    except Exception as e:
+        with print_lock:
+            print(f"Failed to delete {path}: {e}")
+        return 0
+
+
+def delete_terraform_dir(path):
+    """Delete a single .terraform dir and return bytes freed."""
+    return delete_directory(path)
+
+
+def delete_stale_workspace(path):
+    """Delete a stale Jenkins workspace and return bytes freed."""
+    return delete_directory(path)
+
+
+def find_terraform_dirs(root):
+    """
+    Walk the tree with os.scandir and prune traversal into .terraform dirs
+    (no need to recurse into them — we're deleting the whole thing).
+    """
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if entry.name == ".terraform":
+                    yield entry.path
+                else:
+                    yield from find_terraform_dirs(entry.path)
+    except (PermissionError, FileNotFoundError) as e:
+        print(f"Cannot access {root}: {e}")
+
+
+def find_stale_workspaces(root):
+    """
+    Find top-level Jenkins workspace directories older than 90 days.
+    Includes old PR workspaces, @tmp, @2, and @3 directories.
+    """
+    cutoff = time.time() - (STALE_DAYS * 86400)
+
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                try:
+                    if not entry.is_dir(follow_symlinks=False):
+                        continue
+
+                    if entry.stat(follow_symlinks=False).st_mtime < cutoff:
+                        yield entry.path
+
+                except (PermissionError, FileNotFoundError):
+                    pass
+
+    except (PermissionError, FileNotFoundError) as e:
+        print(f"Cannot access {root}: {e}")
+
+
+def main():
+    global freed_space
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Automatically delete stale workspaces and .terraform dirs"
+    )
+    args = parser.parse_args()
+
+    print(f"Scanning: {ROOT_DIR}\n")
+    print(f"Retention period: {STALE_DAYS} days")
+    print(f"Mode: {'EXECUTE' if args.execute else 'DRY-RUN'}\n")
+
+    if not os.path.isdir(ROOT_DIR):
+        print(f"ERROR: Workspace root not found: {ROOT_DIR}")
+        sys.exit(1)
+
+    stale_workspaces = list(find_stale_workspaces(ROOT_DIR))
+    print(f"Found {len(stale_workspaces)} stale workspaces\n")
+
+    for workspace in stale_workspaces:
+        print(f"Stale workspace: {workspace}")
+
+    terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
+    print(f"\nFound {len(terraform_dirs)} .terraform director{'y' if len(terraform_dirs) == 1 else 'ies'}\n")
+
+    # Exclude Terraform directories already inside stale workspaces.
+    # Their contents will be removed with the parent workspace.
+
+    stale_paths = set(stale_workspaces)
+
+    terraform_dirs = [
+        path for path in terraform_dirs
+        if not any(
+            os.path.commonpath([path, workspace]) == workspace
+            for workspace in stale_paths
+        )
+    ]
+
+    if not args.execute:
+        print("DRY-RUN: No directories were deleted.")
+        return
+
+    # IMPORTANT:
+    # Execute only after the Jenkins agent has been drained
+    # and all running builds have completed.
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {}
+
+        for path in terraform_dirs:
+            futures[executor.submit(delete_terraform_dir, path)] = path
+
+        for path in stale_workspaces:
+            futures[executor.submit(delete_stale_workspace, path)] = path
+
+        for future in as_completed(futures):
+            with stats_lock:
+                freed_space += future.result()
+
+    print(f"\nFreed space  : {freed_space / (1024 ** 3):.2f} GiB")
+    print(f"Stale workspaces processed: {len(stale_workspaces)}")
+    print("\nCleanup completed.")
+
+
+if __name__ == "__main__":
+    main()
+
