@@ -1,409 +1,79 @@
-
-#!/usr/bin/env python3
-
-# This script identifies recursively .terraform dirs
-# found in /home/jenkins/workspace.
-# Also identifies stale Jenkins workspaces older than 90 days
-# and checks whether the corresponding Jenkins job still exists.
-# Executed via a Jenkins job that runs daily during off hours.
-# DRY-RUN only until active-build validation is implemented.
-
-import os
-import sys
-import time
-import shutil
-import argparse
-import json
-import urllib.request
-import urllib.parse
-import urllib.error
-import base64
-import re
-import ssl
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
-
-ROOT_DIR = "/home/jenkins/workspace"
-MAX_WORKERS = 8  # Tune based on EFS throughput limits
-STALE_DAYS = 90
-
-print_lock = Lock()
-stats_lock = Lock()
-freed_space = 0
-
-
-def get_dir_size_fast(path):
-    """Use os.scandir recursively for faster size calculation."""
-    total = 0
-
-    try:
-        with os.scandir(path) as it:
-            for entry in it:
-                try:
-                    if entry.is_file(follow_symlinks=False):
-                        total += entry.stat(
-                            follow_symlinks=False
-                        ).st_size
-
-                    elif entry.is_dir(follow_symlinks=False):
-                        total += get_dir_size_fast(entry.path)
-
-                except (PermissionError, FileNotFoundError):
-                    pass
-
-    except (PermissionError, FileNotFoundError):
-        pass
-
-    return total
-
-
-def find_terraform_dirs(root):
-    """
-    Walk the tree with os.scandir and prune traversal
-    into .terraform directories.
-    """
-    try:
-        with os.scandir(root) as it:
-            for entry in it:
-                if not entry.is_dir(follow_symlinks=False):
-                    continue
-
-                if entry.name == ".terraform":
-                    yield entry.path
-                else:
-                    yield from find_terraform_dirs(entry.path)
-
-    except (PermissionError, FileNotFoundError) as e:
-        print(f"Cannot access {root}: {e}", file=sys.stderr)
-
-
-def find_stale_workspaces(root):
-    """
-    Find top-level Jenkins workspace directories
-    older than 90 days.
-    """
-    cutoff = time.time() - (STALE_DAYS * 86400)
-
-    try:
-        with os.scandir(root) as it:
-            for entry in it:
-                try:
-                    if not entry.is_dir(follow_symlinks=False):
-                        continue
-
-                    if entry.stat(
-                        follow_symlinks=False
-                    ).st_mtime < cutoff:
-                        yield entry.path
-
-                except (PermissionError, FileNotFoundError):
-                    pass
-
-    except (PermissionError, FileNotFoundError) as e:
-        print(f"Cannot access {root}: {e}", file=sys.stderr)
-
-
-def get_jenkins_ssl_context():
-    """
-    Create a verified SSL context using an optional
-    Jenkins internal CA bundle or the system trust store.
-
-    SSL verification is never disabled.
-    """
-    ca_bundle = os.environ.get(
-        "JENKINS_CA_BUNDLE", ""
-    ).strip()
-
-    if ca_bundle:
-        if not os.path.isfile(ca_bundle):
-            raise RuntimeError(
-                f"Jenkins CA bundle not found: {ca_bundle}"
-            )
-
-        print(f"Using Jenkins CA bundle: {ca_bundle}")
-
-        return ssl.create_default_context(
-            cafile=ca_bundle
-        )
-
-    ca_paths = [
-        "/etc/pki/tls/certs/ca-bundle.crt",
-        "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
-        "/etc/ssl/certs/ca-certificates.crt"
-    ]
-
-    for path in ca_paths:
-        if os.path.isfile(path):
-            print(f"Using system CA bundle: {path}")
-
-            return ssl.create_default_context(
-                cafile=path
-            )
-
-    print("Using Python default SSL trust store.")
-
-    return ssl.create_default_context()
-
-
-def get_jenkins_jobs():
-    """
-    Retrieve Jenkins jobs using the existing Jenkins
-    controller environment.
-
-    No Jenkins credential configuration is modified.
-    """
-    jenkins_url = os.environ.get(
-        "JENKINS_URL", ""
-    ).rstrip("/")
-
-    if not jenkins_url:
-        raise RuntimeError(
-            "JENKINS_URL is not available"
-        )
-
-    jenkins_user = os.environ.get(
-        "JENKINS_USER", ""
-    )
-
-    jenkins_token = os.environ.get(
-        "JENKINS_API_TOKEN", ""
-    )
-
-    headers = {
-        "Accept": "application/json"
-    }
-
-    if jenkins_user and jenkins_token:
-        credentials = base64.b64encode(
-            f"{jenkins_user}:{jenkins_token}".encode()
-        ).decode()
-
-        headers["Authorization"] = (
-            f"Basic {credentials}"
-        )
-
-    ssl_context = get_jenkins_ssl_context()
-
-    jobs = {}
-    pending = [(jenkins_url, "")]
-    visited = set()
-
-    while pending:
-        url, parent = pending.pop()
-
-        if url in visited:
-            continue
-
-        visited.add(url)
-
-        request = urllib.request.Request(
-            url + "/api/json?tree=jobs[name,url,_class]",
-            headers=headers
-        )
-
-        try:
-            with urllib.request.urlopen(
-                request,
-                timeout=30,
-                context=ssl_context
-            ) as response:
-                data = json.load(response)
-
-        except urllib.error.URLError as e:
-            if isinstance(
-                e.reason,
-                ssl.SSLCertVerificationError
-            ):
-                raise RuntimeError(
-                    "Jenkins SSL certificate verification failed. "
-                    "The utility agent does not trust the CA "
-                    "used by the Jenkins controller. "
-                    "Install the internal CA certificate or set "
-                    "JENKINS_CA_BUNDLE to its trusted PEM bundle."
-                ) from e
-
-            raise RuntimeError(
-                f"Unable to access Jenkins API at {url}: {e}"
-            ) from e
-
-        if "jobs" not in data:
-            raise RuntimeError(
-                f"Jenkins job listing unavailable at {url}"
-            )
-
-        for job in data["jobs"]:
-            name = job["name"]
-
-            full_name = (
-                f"{parent}/{name}"
-                if parent else name
-            )
-
-            jobs[full_name] = job
-
-            job_class = job.get(
-                "_class", ""
-            )
-
-            if any(value in job_class for value in (
-                "Folder",
-                "WorkflowMultiBranchProject",
-                "OrganizationFolder"
-            )):
-                pending.append((
-                    job["url"].rstrip("/"),
-                    full_name
-                ))
-
-    return jobs
-
-
-def get_workspace_job_name(path):
-    """
-    Normalize Jenkins workspace names.
-    Remove @tmp and concurrent workspace suffixes.
-    """
-    name = os.path.basename(path)
-
-    if name.endswith("@tmp"):
-        name = name[:-4]
-
-    name = re.sub(r"@\d+$", "", name)
-
-    return name
-
-
-def find_matching_job(workspace, jobs):
-    """
-    Match workspace against existing Jenkins jobs.
-    Matching is informational, not deletion authorization.
-    """
-    name = get_workspace_job_name(workspace)
-
-    if name in jobs:
-        return name
-
-    matches = []
-
-    for full_name in jobs:
-        if full_name.replace("/", "_") == name:
-            matches.append(full_name)
-
-    if len(matches) == 1:
-        return matches[0]
-
-    return None
-
-
-def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Not supported in this report-only version"
-    )
-
-    args = parser.parse_args()
-
-    if args.execute:
-        print(
-            "ERROR: This script is report-only. "
-            "No deletion is supported."
-        )
-        sys.exit(1)
-
-    print(f"Scanning: {ROOT_DIR}\n")
-    print(f"Retention period: {STALE_DAYS} days")
-    print("Mode: DRY-RUN\n")
-
-    if not os.path.isdir(ROOT_DIR):
-        print(
-            f"ERROR: Workspace root not found: {ROOT_DIR}"
-        )
-        sys.exit(1)
-
-    try:
-        jobs = get_jenkins_jobs()
-
-        print(
-            f"Retrieved {len(jobs)} Jenkins jobs\n"
-        )
-
-    except Exception as e:
-        print(
-            f"ERROR: Unable to validate Jenkins jobs: {e}"
-        )
-
-        print(
-            "No cleanup candidates listed because "
-            "job validation failed."
-        )
-
-        sys.exit(1)
-
-    stale_workspaces = set(
-        find_stale_workspaces(ROOT_DIR)
-    )
-
-    terraform_dirs = list(
-        find_terraform_dirs(ROOT_DIR)
-    )
-
-    terraform_candidates = []
-
-    for path in terraform_dirs:
-        workspace = os.path.dirname(path)
-
-        # Find the top-level workspace directory.
-        while (
-            workspace != ROOT_DIR
-            and os.path.dirname(workspace) != ROOT_DIR
-        ):
-            workspace = os.path.dirname(workspace)
-
-        if workspace not in stale_workspaces:
-            continue
-
-        if find_matching_job(workspace, jobs):
-            terraform_candidates.append(path)
-
-    print("======================================")
-    print("JENKINS EFS CLEANUP - DRY RUN")
-    print("======================================")
-    print(f"Retention period: {STALE_DAYS} days")
-    print("Mode: DRY-RUN")
-    print()
-
-    total_size = 0
-
-    for path in terraform_candidates:
-        size = get_dir_size_fast(path)
-
-        total_size += size
-
-        print(f"WOULD DELETE: {path}")
-        print(
-            f"Size        : "
-            f"{size / (1024 ** 3):.2f} GiB"
-        )
-        print()
-
-    print("======================================")
-    print("DRY-RUN SUMMARY")
-    print("======================================")
-    print(
-        f"Directories listed : "
-        f"{len(terraform_candidates)}"
-    )
-    print(
-        f"Estimated size     : "
-        f"{total_size / (1024 ** 3):.2f} GiB"
-    )
-    print("Directories deleted: 0")
-    print("======================================")
-    print("DRY-RUN: No directories were deleted.")
-
-
-if __name__ == "__main__":
-    main()
+  Starting EFS Cleanup...
+16:08:28  [Pipeline] script (hide)
+16:08:28  [Pipeline] {
+16:08:29  [JTE][Step - python/setup.call()]
+16:08:29  [Pipeline] stage
+16:08:29  [Pipeline] { (Py Setup)
+16:08:29  [Pipeline] node
+16:08:29  Running on utility in /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32@2
+16:08:29  [Pipeline] {
+16:08:29  [Pipeline] ws
+16:08:29  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/4
+16:08:29  [Pipeline] {
+16:08:29  [Pipeline] echo
+16:08:29  Installing Build Tool
+16:08:29  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named env_name (to a value of type String) which could lead to memory leaks or other issues.
+16:08:29  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named requirements (to a value of type String) which could lead to memory leaks or other issues.
+16:08:29  [Pipeline] withEnv
+16:08:29  [Pipeline] {
+16:08:30  [Pipeline] sh
+16:08:31  Activating Conda environment: python312
+16:08:31  + python --version
+16:08:31  Python 3.12.4
+16:08:31  + python -m pip --version
+16:08:31  pip 24.2 from /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages/pip (python 3.12)
+16:08:31  + PIP_INSTALL='python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir'
+16:08:31  + python -m pip check
+16:08:31  No broken requirements found.
+16:08:31  + for req_file in $REQUIREMENTS
+16:08:31  + IFS=
+16:08:31  + read -r requirements_file
+16:08:31  + find . -iname requirements.txt
+16:08:31  + eval 'python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r "./requirements.txt"'
+16:08:31  ++ python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r ./requirements.txt
+16:08:32  Looking in indexes: https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
+16:08:32  Requirement already satisfied: boto3 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from -r ./requirements.txt (line 1)) (1.43.117)
+16:08:32  Requirement already satisfied: PyGithub in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from -r ./requirements.txt (line 2)) (2.10.0)
+16:08:32  Requirement already satisfied: requests in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from -r ./requirements.txt (line 3)) (2.34.2)
+16:08:32  Requirement already satisfied: botocore<1.44.0,>=1.43.117 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from boto3->-r ./requirements.txt (line 1)) (1.43.117)
+16:08:32  Requirement already satisfied: jmespath<2.0.0,>=0.7.1 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from boto3->-r ./requirements.txt (line 1)) (1.1.0)
+16:08:32  Requirement already satisfied: s3transfer<0.20.0,>=0.19.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from boto3->-r ./requirements.txt (line 1)) (0.19.3)
+16:08:32  Requirement already satisfied: pynacl>=1.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (1.6.2)
+16:08:32  Requirement already satisfied: pyjwt>=2.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2)) (2.15.1)
+16:08:32  Requirement already satisfied: typing-extensions>=4.5.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (4.16.0)
+16:08:32  Requirement already satisfied: urllib3>=1.26.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (2.7.0)
+16:08:32  Requirement already satisfied: charset_normalizer<4,>=2 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from requests->-r ./requirements.txt (line 3)) (3.5.2)
+16:08:32  Requirement already satisfied: idna<4,>=2.5 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from requests->-r ./requirements.txt (line 3)) (3.20)
+16:08:32  Requirement already satisfied: certifi>=2023.5.7 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from requests->-r ./requirements.txt (line 3)) (2026.10.19)
+16:08:32  Requirement already satisfied: python-dateutil<3.0.0,>=2.1 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from botocore<1.44.0,>=1.43.117->boto3->-r ./requirements.txt (line 1)) (2.9.0.post0)
+16:08:32  Requirement already satisfied: cryptography>=3.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2)) (50.0.1)
+16:08:32  Requirement already satisfied: cffi>=2.0.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (2.1.1)
+16:08:32  Requirement already satisfied: pycparser in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from cffi>=2.0.0->pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (3.0)
+16:08:32  Requirement already satisfied: six>=1.5 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from python-dateutil<3.0.0,>=2.1->botocore<1.44.0,>=1.43.117->boto3->-r ./requirements.txt (line 1)) (1.17.0)
+16:08:32  + IFS=
+16:08:32  + read -r requirements_file
+16:08:32  + for req_file in $REQUIREMENTS
+16:08:32  + IFS=
+16:08:32  + read -r requirements_file
+16:08:32  + find . -iname requirements-dev.txt
+16:08:32  [Pipeline] }
+16:08:32  [Pipeline] // withEnv
+16:08:32  [Pipeline] }
+16:08:33  [Pipeline] // ws
+16:08:33  [Pipeline] }
+16:08:33  [Pipeline] // node
+16:08:33  [Pipeline] }
+16:08:33  [Pipeline] // stage
+16:08:33  [Pipeline] ws
+16:08:33  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/4/admin/scripts
+16:08:33  [Pipeline] {
+16:08:33  [Pipeline] sh
+16:08:34  + /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
+16:08:34  Scanning: /home/jenkins/workspace
+16:08:34  
+16:08:34  Retention period: 90 days
+16:08:34  Mode: DRY-RUN
+16:08:34  
+16:08:34  Using system CA bundle: /etc/pki/tls/certs/ca-bundle.crt
+16:08:34  ERROR: Unable to validate Jenkins jobs: Unable to access Jenkins API at https://jenkins.aws.hhsoig.gov: HTTP Error 403: Forbidden
+16:08:34  No cleanup candidates listed because job validation failed.
