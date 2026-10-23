@@ -1,10 +1,12 @@
+
 #!/usr/bin/env python3
 
-# This script deletes recursively .terraform dirs
+# This script identifies recursively .terraform dirs
 # found in /home/jenkins/workspace.
-# Also deletes stale Jenkins workspaces older than 90 days
-# when the corresponding Jenkins job no longer exists.
+# Also identifies stale Jenkins workspaces older than 90 days
+# and checks whether the corresponding Jenkins job still exists.
 # Executed via a Jenkins job that runs daily during off hours.
+# DRY-RUN only until active-build validation is implemented.
 
 import os
 import sys
@@ -16,6 +18,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 import base64
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
@@ -131,7 +134,7 @@ def find_stale_workspaces(root):
 def get_jenkins_jobs():
     """
     Retrieve Jenkins jobs using the existing Jenkins controller environment.
-    No credential configuration is modified.
+    No Jenkins credential configuration is modified.
     """
     jenkins_url = os.environ.get("JENKINS_URL", "").rstrip("/")
 
@@ -166,7 +169,12 @@ def get_jenkins_jobs():
         with urllib.request.urlopen(request, timeout=30) as response:
             data = json.load(response)
 
-        for job in data.get("jobs", []):
+        if "jobs" not in data:
+            raise RuntimeError(
+                f"Jenkins job listing unavailable at {url}"
+            )
+
+        for job in data["jobs"]:
             name = job["name"]
             full_name = f"{parent}/{name}" if parent else name
 
@@ -194,7 +202,6 @@ def get_workspace_job_name(path):
     if name.endswith("@tmp"):
         name = name[:-4]
 
-    import re
     name = re.sub(r"@\d+$", "", name)
 
     return name
@@ -203,6 +210,7 @@ def get_workspace_job_name(path):
 def find_matching_job(workspace, jobs):
     """
     Match workspace against existing Jenkins jobs.
+    Matching is informational, not deletion authorization.
     """
     name = get_workspace_job_name(workspace)
 
@@ -228,7 +236,7 @@ def main():
     parser.add_argument(
         "--execute",
         action="store_true",
-        help="Automatically delete stale workspaces and .terraform dirs"
+        help="Reserved for validated production cleanup"
     )
     args = parser.parse_args()
 
@@ -240,59 +248,68 @@ def main():
         print(f"ERROR: Workspace root not found: {ROOT_DIR}")
         sys.exit(1)
 
+    if args.execute:
+        print("ERROR: Execution is disabled until active-build")
+        print("and Jenkins workspace validation are implemented.")
+        sys.exit(1)
+
     try:
         jobs = get_jenkins_jobs()
         print(f"Retrieved {len(jobs)} Jenkins jobs\n")
 
     except Exception as e:
-        print(f"ERROR: Unable to validate Jenkins jobs: {e}")
-        print("Cleanup stopped to prevent accidental deletion.")
-        sys.exit(1)
+        print(f"WARNING: Unable to validate Jenkins jobs: {e}")
+        print("Workspace matches will be reported as UNKNOWN.\n")
+        jobs = None
 
     stale_workspaces = list(find_stale_workspaces(ROOT_DIR))
     print(f"Found {len(stale_workspaces)} stale workspaces\n")
 
-    approved_workspaces = []
+    stale_space = 0
 
     for workspace in stale_workspaces:
-        job = find_matching_job(workspace, jobs)
+        size = get_dir_size_fast(workspace)
+        stale_space += size
 
-        if job:
-            print(f"SKIPPED - Jenkins job exists: {workspace} ({job})")
-
+        if jobs is None:
+            status = "UNKNOWN - Jenkins API unavailable"
         else:
-            print(f"REVIEW REQUIRED - Jenkins job not matched: {workspace}")
+            job = find_matching_job(workspace, jobs)
+
+            if job:
+                status = f"SKIPPED - Jenkins job exists ({job})"
+            else:
+                status = "REVIEW REQUIRED - Jenkins job not matched"
+
+        print(f"Workspace: {workspace}")
+        print(f"Status   : {status}")
+        print(f"Size     : {size / (1024 ** 3):.2f} GiB\n")
 
     terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
+
     print(f"\nFound {len(terraform_dirs)} .terraform directories\n")
 
-    if not args.execute:
-        print("DRY-RUN: No directories were deleted.")
-        return
+    terraform_space = 0
 
-    # IMPORTANT:
-    # Execute only after Jenkins agents have been drained
-    # and all running builds have completed.
-    #
-    # Automatic stale workspace deletion remains disabled for
-    # unmatched jobs until workspace-to-job mapping is verified.
+    for path in terraform_dirs:
+        size = get_dir_size_fast(path)
+        terraform_space += size
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {}
+        print(f"Terraform directory: {path}")
+        print(f"Size               : {size / (1024 ** 3):.2f} GiB\n")
 
-        for path in terraform_dirs:
-            futures[executor.submit(delete_terraform_dir, path)] = path
-
-        for path in approved_workspaces:
-            futures[executor.submit(delete_stale_workspace, path)] = path
-
-        for future in as_completed(futures):
-            with stats_lock:
-                freed_space += future.result()
-
-    print(f"\nFreed space  : {freed_space / (1024 ** 3):.2f} GiB")
-    print(f"Stale workspaces approved for deletion: {len(approved_workspaces)}")
-    print("\nCleanup completed.")
+    print("======================================")
+    print("JENKINS EFS CLEANUP DRY-RUN SUMMARY")
+    print("======================================")
+    print(f"Jenkins jobs found       : {len(jobs) if jobs is not None else 'UNKNOWN'}")
+    print(f"Stale workspaces found   : {len(stale_workspaces)}")
+    print(f"Stale workspace size     : {stale_space / (1024 ** 3):.2f} GiB")
+    print(f"Terraform dirs found     : {len(terraform_dirs)}")
+    print(f"Terraform directory size : {terraform_space / (1024 ** 3):.2f} GiB")
+    print("Estimated space freed    : Not calculated (deletion not approved)")
+    print("======================================")
+    print("DRY-RUN: No directories were deleted.")
+    print("Cleanup scan completed.")
 
 
 if __name__ == "__main__":
