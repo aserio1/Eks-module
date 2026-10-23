@@ -1,89 +1,299 @@
-################################################################################
-# IMAC Jenkins Controller Docker Image
-#
-################################################################################
+#!/usr/bin/env python3
 
-FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
+# This script deletes recursively .terraform dirs
+# found in /home/jenkins/workspace.
+# Also deletes stale Jenkins workspaces older than 90 days
+# when the corresponding Jenkins job no longer exists.
+# Executed via a Jenkins job that runs daily during off hours.
+
+import os
+import sys
+import time
+import shutil
+import argparse
+import json
+import urllib.request
+import urllib.parse
+import urllib.error
+import base64
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+
+ROOT_DIR = "/home/jenkins/workspace"
+MAX_WORKERS = 8  # Tune based on EFS throughput limits
+STALE_DAYS = 90
+
+print_lock = Lock()
+stats_lock = Lock()
+freed_space = 0
 
 
-LABEL   oig.imac.base.image.purpose="Jenkins Controller Docker image" \
-        oig.imac.image.owner="Kate Rose" \
-        oig.imac.image.engineer="Kent Rockwell" \
-        oig.imac.base.image.parent="IMAC Jenkins base image" \
-        oig.imac.base.image.parent.registry="213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/base/jenkins:BASE_IMAGE_VERSION" \
-        oig.imac.base.image.ontogeny.registry="registry1.dso.mil/ironbank" \
-        oig.imac.base.image.ontogeny.image="registry1.dso.mil/ironbank/opensource/python:v3.14.5@sha256:be4255a2642bcf619c9594ebb4cbd8ac046ce9ce8c6e69b338048f53164e4b9a"
+def get_dir_size_fast(path):
+    """Use os.scandir recursively for faster size calculation."""
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        total += entry.stat(follow_symlinks=False).st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        total += get_dir_size_fast(entry.path)
+                except (PermissionError, FileNotFoundError):
+                    pass
+    except (PermissionError, FileNotFoundError):
+        pass
+    return total
 
-ARG user=jenkins
-ARG group=jenkins
-ARG uid=2000
-ARG gid=2000
-ARG JENKINS_HOME=/home/jenkins
-ARG JENKINS_JAR_FILES="jenkins-jar-files-2026-10-13"
 
-USER root
+def delete_directory(path):
+    """Delete a directory and return estimated bytes freed."""
+    try:
+        root = os.path.realpath(ROOT_DIR)
+        target = os.path.realpath(path)
 
-# Create User
-RUN mkdir -p $JENKINS_HOME \
-  && groupadd -g ${gid} ${group} \
-  && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user} \
-  && chown -R ${uid}:${gid} $JENKINS_HOME
+        if os.path.commonpath([root, target]) != root:
+            raise ValueError("Directory is outside workspace root")
 
-# Install OS Packages
-RUN yum -y update && \
-    yum -y install java-21-openjdk && \
-    yum clean all && \
-    rm -rf /var/cache/yum/*
+        if target == root:
+            raise ValueError("Cannot delete workspace root")
 
-USER jenkins
+        if os.path.islink(path):
+            raise ValueError("Cannot delete symbolic link")
 
-# Install Jenkins apps
-WORKDIR $JENKINS_HOME
+        size = get_dir_size_fast(path)
 
-RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
-    unzip jenkins-zip-files.zip && \
-    mv ${JENKINS_JAR_FILES}/* . && \
-    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
+        shutil.rmtree(path)
 
-COPY dependencies/casc.yaml $JENKINS_HOME/casc.yaml
-COPY dependencies/jenkins.sh $JENKINS_HOME/jenkins.sh
-COPY dependencies/plugins.txt $JENKINS_HOME/plugins.txt
+        with print_lock:
+            print(f"Deleted: {path}")
 
-RUN mkdir $JENKINS_HOME/init.groovy.d && \
-    chmod 755 $JENKINS_HOME/init.groovy.d
+        return size
 
-COPY dependencies/user-token-gen.groovy $JENKINS_HOME/init.groovy.d/user-token-gen.groovy
+    except Exception as e:
+        with print_lock:
+            print(f"Failed to delete {path}: {e}")
+        return 0
 
-USER root
 
-RUN chmod 755 $JENKINS_HOME/init.groovy.d/user-token-gen.groovy && \
-    chmod 755 $JENKINS_HOME/jenkins.sh && \
-    chown -R ${uid}:${gid} $JENKINS_HOME
+def delete_terraform_dir(path):
+    """Delete a single .terraform dir and return bytes freed."""
+    return delete_directory(path)
 
-USER jenkins
 
-ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
-ENV JENKINS_HOME $JENKINS_HOME
+def delete_stale_workspace(path):
+    """Delete a stale Jenkins workspace and return bytes freed."""
+    return delete_directory(path)
 
-# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
-# ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
 
-RUN success=0; \
-    for i in 1 2 3; do \
-      if timeout 900 java -jar jpm.jar --verbose \
-        --war $JENKINS_HOME/jenkins.war \
-        -f $JENKINS_HOME/plugins.txt \
-        -d $JENKINS_HOME/plugins; then \
-        success=1; \
-        break; \
-      fi; \
-      if [ "$i" -lt 3 ]; then \
-        echo "jpm attempt $i failed/timed out, retrying in 30s..."; \
-        sleep 30; \
-      fi; \
-    done; \
-    [ "$success" -eq 1 ] && \
-    rm -rf $JENKINS_HOME/jpm.jar
+def find_terraform_dirs(root):
+    """
+    Walk the tree with os.scandir and prune traversal into .terraform dirs
+    (no need to recurse into them — we're deleting the whole thing).
+    """
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if entry.name == ".terraform":
+                    yield entry.path
+                else:
+                    yield from find_terraform_dirs(entry.path)
+    except (PermissionError, FileNotFoundError) as e:
+        print(f"Cannot access {root}: {e}")
 
-CMD [ "./jenkins.sh"]
-ENTRYPOINT []
+
+def find_stale_workspaces(root):
+    """
+    Find top-level Jenkins workspace directories older than 90 days.
+    Includes old PR workspaces, @tmp, @2, and @3 directories.
+    """
+    cutoff = time.time() - (STALE_DAYS * 86400)
+
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                try:
+                    if not entry.is_dir(follow_symlinks=False):
+                        continue
+
+                    if entry.stat(follow_symlinks=False).st_mtime < cutoff:
+                        yield entry.path
+
+                except (PermissionError, FileNotFoundError):
+                    pass
+
+    except (PermissionError, FileNotFoundError) as e:
+        print(f"Cannot access {root}: {e}")
+
+
+def get_jenkins_jobs():
+    """
+    Retrieve Jenkins jobs using the existing Jenkins controller environment.
+    No credential configuration is modified.
+    """
+    jenkins_url = os.environ.get("JENKINS_URL", "").rstrip("/")
+
+    if not jenkins_url:
+        raise RuntimeError("JENKINS_URL is not available")
+
+    jenkins_user = os.environ.get("JENKINS_USER", "")
+    jenkins_token = os.environ.get("JENKINS_API_TOKEN", "")
+
+    headers = {
+        "Accept": "application/json"
+    }
+
+    if jenkins_user and jenkins_token:
+        credentials = base64.b64encode(
+            f"{jenkins_user}:{jenkins_token}".encode()
+        ).decode()
+
+        headers["Authorization"] = f"Basic {credentials}"
+
+    jobs = {}
+    pending = [(jenkins_url, "")]
+
+    while pending:
+        url, parent = pending.pop()
+
+        request = urllib.request.Request(
+            url + "/api/json?tree=jobs[name,url,_class]",
+            headers=headers
+        )
+
+        with urllib.request.urlopen(request, timeout=30) as response:
+            data = json.load(response)
+
+        for job in data.get("jobs", []):
+            name = job["name"]
+            full_name = f"{parent}/{name}" if parent else name
+
+            jobs[full_name] = job
+
+            job_class = job.get("_class", "")
+
+            if any(value in job_class for value in (
+                "Folder",
+                "WorkflowMultiBranchProject",
+                "OrganizationFolder"
+            )):
+                pending.append((job["url"].rstrip("/"), full_name))
+
+    return jobs
+
+
+def get_workspace_job_name(path):
+    """
+    Normalize Jenkins workspace names.
+    Remove @tmp and concurrent workspace suffixes.
+    """
+    name = os.path.basename(path)
+
+    if name.endswith("@tmp"):
+        name = name[:-4]
+
+    import re
+    name = re.sub(r"@\d+$", "", name)
+
+    return name
+
+
+def find_matching_job(workspace, jobs):
+    """
+    Match workspace against existing Jenkins jobs.
+    """
+    name = get_workspace_job_name(workspace)
+
+    if name in jobs:
+        return name
+
+    matches = []
+
+    for full_name in jobs:
+        if full_name.replace("/", "_") == name:
+            matches.append(full_name)
+
+    if len(matches) == 1:
+        return matches[0]
+
+    return None
+
+
+def main():
+    global freed_space
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Automatically delete stale workspaces and .terraform dirs"
+    )
+    args = parser.parse_args()
+
+    print(f"Scanning: {ROOT_DIR}\n")
+    print(f"Retention period: {STALE_DAYS} days")
+    print(f"Mode: {'EXECUTE' if args.execute else 'DRY-RUN'}\n")
+
+    if not os.path.isdir(ROOT_DIR):
+        print(f"ERROR: Workspace root not found: {ROOT_DIR}")
+        sys.exit(1)
+
+    try:
+        jobs = get_jenkins_jobs()
+        print(f"Retrieved {len(jobs)} Jenkins jobs\n")
+
+    except Exception as e:
+        print(f"ERROR: Unable to validate Jenkins jobs: {e}")
+        print("Cleanup stopped to prevent accidental deletion.")
+        sys.exit(1)
+
+    stale_workspaces = list(find_stale_workspaces(ROOT_DIR))
+    print(f"Found {len(stale_workspaces)} stale workspaces\n")
+
+    approved_workspaces = []
+
+    for workspace in stale_workspaces:
+        job = find_matching_job(workspace, jobs)
+
+        if job:
+            print(f"SKIPPED - Jenkins job exists: {workspace} ({job})")
+
+        else:
+            print(f"REVIEW REQUIRED - Jenkins job not matched: {workspace}")
+
+    terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
+    print(f"\nFound {len(terraform_dirs)} .terraform directories\n")
+
+    if not args.execute:
+        print("DRY-RUN: No directories were deleted.")
+        return
+
+    # IMPORTANT:
+    # Execute only after Jenkins agents have been drained
+    # and all running builds have completed.
+    #
+    # Automatic stale workspace deletion remains disabled for
+    # unmatched jobs until workspace-to-job mapping is verified.
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {}
+
+        for path in terraform_dirs:
+            futures[executor.submit(delete_terraform_dir, path)] = path
+
+        for path in approved_workspaces:
+            futures[executor.submit(delete_stale_workspace, path)] = path
+
+        for future in as_completed(futures):
+            with stats_lock:
+                freed_space += future.result()
+
+    print(f"\nFreed space  : {freed_space / (1024 ** 3):.2f} GiB")
+    print(f"Stale workspaces approved for deletion: {len(approved_workspaces)}")
+    print("\nCleanup completed.")
+
+
+if __name__ == "__main__":
+    main()
