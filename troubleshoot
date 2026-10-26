@@ -1,44 +1,10 @@
-#### got this comment for PR 
-/DockerfileTemplate
-        success=1; \
-        break; \
-      fi; \
-      if [ "$i" -lt 3 ]; then \
-Member
-@Cosmina-Chindris Cosmina-Chindris 1 hour ago
-u might not need the if [ "$i" -lt 3 ] here instead remove it and add || { echo "All jpm attempts failed" >&2; exit 1; }; as seen below:
 
-RUN set -e; \
-    success=0; \
-    for i in 1 2 3; do \
-      if timeout 900 java -jar jpm.jar --verbose \
-        --war $JENKINS_HOME/jenkins.war \
-        -f $JENKINS_HOME/plugins.txt \
-        -d $JENKINS_HOME/plugins; then \
-        success=1; \
-        break; \
-      fi; \
-      echo "jpm attempt $i failed/timed out, retrying in 30s..."; \
-      sleep 30; \
-    done; \
-    [ "$success" -eq 1 ] || { echo "All jpm attempts failed" >&2; exit 1; }; \
-    rm -rf $JENKINS_HOME/jpm.jar
-
-
-
-
-
-
-
-
-########
 ################################################################################
 # IMAC Jenkins Controller Docker Image
 #
 ################################################################################
 
 FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
-
 
 LABEL   oig.imac.base.image.purpose="Jenkins Controller Docker image" \
         oig.imac.image.owner="Kate Rose" \
@@ -102,7 +68,9 @@ ENV JENKINS_HOME $JENKINS_HOME
 # This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
 # ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
 
-RUN success=0; \
+# Install Jenkins plugins with retry logic
+RUN set -e; \
+    success=0; \
     for i in 1 2 3; do \
       if timeout 900 java -jar jpm.jar --verbose \
         --war $JENKINS_HOME/jenkins.war \
@@ -116,10 +84,8 @@ RUN success=0; \
         sleep 30; \
       fi; \
     done; \
-    [ "$success" -eq 1 ] && \
+    [ "$success" -eq 1 ] || { echo "All jpm attempts failed" >&2; exit 1; }; \
     rm -rf $JENKINS_HOME/jpm.jar
 
 CMD [ "./jenkins.sh"]
 ENTRYPOINT []
-
-
