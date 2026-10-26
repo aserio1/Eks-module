@@ -4,7 +4,7 @@
 # This script identifies recursively .terraform dirs
 # found in /home/jenkins/workspace.
 # Lists .terraform directories older than 90 days.
-# Displays ls -lrt information and generates a CSV report.
+# Displays ls -lrt style information and generates a CSV report.
 # Executed via a Jenkins job that runs daily during off hours.
 # DRY-RUN ONLY - no directories are deleted.
 
@@ -16,39 +16,43 @@ import stat
 import pwd
 import grp
 import argparse
-import subprocess
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
 ROOT_DIR = "/home/jenkins/workspace"
 MAX_WORKERS = 8  # Tune based on EFS throughput limits
 STALE_DAYS = 90
+PROGRESS_INTERVAL = 1000
 
 print_lock = Lock()
 
 
 def get_dir_size_fast(path):
-    """Use os.scandir recursively for faster size calculation."""
+    """Use os.scandir recursively for directory size calculation."""
     total = 0
+    stack = [path]
 
-    try:
-        with os.scandir(path) as it:
-            for entry in it:
-                try:
-                    if entry.is_file(follow_symlinks=False):
-                        total += entry.stat(
-                            follow_symlinks=False
-                        ).st_size
+    while stack:
+        current = stack.pop()
 
-                    elif entry.is_dir(follow_symlinks=False):
-                        total += get_dir_size_fast(entry.path)
+        try:
+            with os.scandir(current) as it:
+                for entry in it:
+                    try:
+                        if entry.is_file(follow_symlinks=False):
+                            total += entry.stat(
+                                follow_symlinks=False
+                            ).st_size
 
-                except (PermissionError, FileNotFoundError):
-                    pass
+                        elif entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
 
-    except (PermissionError, FileNotFoundError):
-        pass
+                    except (PermissionError, FileNotFoundError):
+                        pass
+
+        except (PermissionError, FileNotFoundError):
+            pass
 
     return total
 
@@ -56,12 +60,26 @@ def get_dir_size_fast(path):
 def find_terraform_dirs(root):
     """
     Find all .terraform directories recursively.
-    Do not traverse inside .terraform directories.
+
+    Uses os.scandir and skips traversing inside
+    .terraform directories to reduce EFS metadata I/O.
+
+    Prints progress every 1000 scanned directories.
     """
     stack = [root]
+    scanned_count = 0
+    terraform_count = 0
 
     while stack:
         current = stack.pop()
+        scanned_count += 1
+
+        if scanned_count % PROGRESS_INTERVAL == 0:
+            print(
+                f"Progress: scanned {scanned_count} directories, "
+                f"found {terraform_count} .terraform directories",
+                flush=True
+            )
 
         try:
             with os.scandir(current) as it:
@@ -73,6 +91,7 @@ def find_terraform_dirs(root):
                             continue
 
                         if entry.name == ".terraform":
+                            terraform_count += 1
                             yield entry.path
                         else:
                             stack.append(entry.path)
@@ -83,14 +102,21 @@ def find_terraform_dirs(root):
         except (PermissionError, FileNotFoundError) as e:
             print(
                 f"Cannot access {current}: {e}",
-                file=sys.stderr
+                file=sys.stderr,
+                flush=True
             )
+
+    print(
+        f"Scan completed: {scanned_count} directories scanned, "
+        f"{terraform_count} .terraform directories found",
+        flush=True
+    )
 
 
 def get_stale_directory_info(path, cutoff):
     """
-    Return metadata for directories older than
-    the configured retention period.
+    Return metadata for .terraform directories
+    older than the configured retention period.
     """
     try:
         info = os.stat(
@@ -128,37 +154,28 @@ def get_stale_directory_info(path, cutoff):
         return None
 
 
-def get_ls_lrt(path):
+def get_ls_lrt_output(candidate):
     """
-    Execute ls -lrt -d to display metadata
-    for the candidate directory itself.
+    Generate ls -lrt -d style output using
+    already collected directory metadata.
+
+    Avoids launching an ls subprocess for each directory.
     """
-    try:
-        result = subprocess.run(
-            ["ls", "-lrt", "-d", "--", path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False
-        )
-
-        if result.returncode == 0:
-            return result.stdout.strip()
-
-        return f"ERROR: {result.stderr.strip()}"
-
-    except Exception as e:
-        return f"ERROR: {e}"
-
-
-def inspect_candidate(candidate, calculate_size):
-    """
-    Inspect candidate metadata and optionally
-    calculate recursive directory size.
-    """
-    candidate["ls_output"] = get_ls_lrt(
-        candidate["path"]
+    return (
+        f"{candidate['permissions']} "
+        f"{candidate['owner']} "
+        f"{candidate['group']} "
+        f"{candidate['modified']} "
+        f"{candidate['path']}"
     )
+
+
+def inspect_candidate(candidate, calculate_size=False):
+    """
+    Inspect candidate and optionally calculate
+    recursive directory size.
+    """
+    candidate["ls_output"] = get_ls_lrt_output(candidate)
 
     if calculate_size:
         candidate["size"] = get_dir_size_fast(
@@ -178,9 +195,9 @@ def main():
     )
 
     parser.add_argument(
-        "--fast",
+        "--calculate-size",
         action="store_true",
-        help="Skip recursive size calculations"
+        help="Calculate recursive directory sizes (slower on EFS)"
     )
 
     parser.add_argument(
@@ -208,14 +225,20 @@ def main():
     print(f"Scanning         : {ROOT_DIR}")
     print(f"Retention period : {STALE_DAYS} days")
     print(f"Workers          : {MAX_WORKERS}")
-    print(f"Mode             : DRY-RUN")
-    print(f"Fast mode        : {'YES' if args.fast else 'NO'}")
+    print("Mode             : DRY-RUN")
+    print(
+        f"Calculate sizes  : "
+        f"{'YES' if args.calculate_size else 'NO'}"
+    )
     print()
 
     terraform_count = 0
     candidates = []
 
-    print("Scanning for stale .terraform directories...")
+    print(
+        "Scanning for stale .terraform directories...",
+        flush=True
+    )
 
     for path in find_terraform_dirs(ROOT_DIR):
         terraform_count += 1
@@ -228,56 +251,55 @@ def main():
         if candidate:
             candidates.append(candidate)
 
-    candidates.sort(
-        key=lambda item: item["mtime"]
-    )
+    # Sort oldest to newest, matching ls -lrt ordering.
+    candidates.sort(key=lambda item: item["mtime"])
 
-    print(f"Found {terraform_count} .terraform directories")
-    print(f"Found {len(candidates)} cleanup candidates")
     print()
+    print("======================================")
+    print("PROPOSED DELETION ITEMS - LS -LRT")
+    print("======================================")
 
     total_size = 0
 
-    with ThreadPoolExecutor(
-        max_workers=MAX_WORKERS
-    ) as executor:
+    if args.calculate_size:
+        with ThreadPoolExecutor(
+            max_workers=MAX_WORKERS
+        ) as executor:
+            sizes = list(
+                executor.map(
+                    get_dir_size_fast,
+                    [item["path"] for item in candidates]
+                )
+            )
 
-        results = executor.map(
-            lambda candidate: inspect_candidate(
-                candidate,
-                not args.fast
-            ),
-            candidates
+        for candidate, size in zip(candidates, sizes):
+            candidate["size"] = size
+
+    for candidate in candidates:
+        candidate = inspect_candidate(
+            candidate,
+            calculate_size=False
         )
 
-        print("======================================")
-        print("PROPOSED DELETION ITEMS - LS -LRT")
-        print("======================================")
+        print()
+        print(f"STATUS       : {candidate['status']}")
+        print(f"DIRECTORY    : {candidate['path']}")
+        print(f"LAST MODIFIED: {candidate['modified']}")
+        print(f"OWNER        : {candidate['owner']}")
+        print(f"GROUP        : {candidate['group']}")
+        print(f"PERMISSIONS  : {candidate['permissions']}")
+        print("LS -LRT:")
+        print(candidate["ls_output"])
 
-        completed = []
+        if candidate["size"] is not None:
+            total_size += candidate["size"]
 
-        for result in results:
-            completed.append(result)
+            print(
+                f"ESTIMATED SIZE: "
+                f"{candidate['size'] / (1024 ** 3):.2f} GiB"
+            )
 
-            print()
-            print(f"STATUS       : {result['status']}")
-            print(f"DIRECTORY    : {result['path']}")
-            print(f"LAST MODIFIED: {result['modified']}")
-            print(f"OWNER        : {result['owner']}")
-            print(f"GROUP        : {result['group']}")
-            print(f"PERMISSIONS  : {result['permissions']}")
-            print("LS -LRT:")
-            print(result["ls_output"])
-
-            if result["size"] is not None:
-                total_size += result["size"]
-
-                print(
-                    f"ESTIMATED SIZE: "
-                    f"{result['size'] / (1024 ** 3):.2f} GiB"
-                )
-
-            print("--------------------------------------")
+        print("--------------------------------------")
 
     with open(
         args.output,
@@ -299,20 +321,20 @@ def main():
             "LS -LRT"
         ])
 
-        for item in completed:
+        for candidate in candidates:
             writer.writerow([
-                item["status"],
-                item["path"],
-                item["modified"],
-                item["owner"],
-                item["group"],
-                item["permissions"],
+                candidate["status"],
+                candidate["path"],
+                candidate["modified"],
+                candidate["owner"],
+                candidate["group"],
+                candidate["permissions"],
                 (
-                    f"{item['size'] / (1024 ** 3):.2f}"
-                    if item["size"] is not None
+                    f"{candidate['size'] / (1024 ** 3):.2f}"
+                    if candidate["size"] is not None
                     else "Not calculated"
                 ),
-                item["ls_output"]
+                candidate["ls_output"]
             ])
 
     elapsed = time.monotonic() - start_time
@@ -324,13 +346,16 @@ def main():
     print(f"Terraform directories found : {terraform_count}")
     print(f"Proposed deletion items      : {len(candidates)}")
 
-    if not args.fast:
+    if args.calculate_size:
         print(
             f"Estimated candidate size     : "
             f"{total_size / (1024 ** 3):.2f} GiB"
         )
     else:
-        print("Estimated candidate size     : Not calculated")
+        print(
+            "Estimated candidate size     : "
+            "Not calculated (fast mode)"
+        )
 
     print("Directories deleted          : 0")
     print(f"CSV report                   : {args.output}")
