@@ -1,27 +1,449 @@
-13:41:03  ======================================
-13:41:03  Scanning         : /home/jenkins/workspace
-13:41:03  Retention period : 90 days
-13:41:03  Workers          : 8
-13:41:03  Mode             : DRY-RUN
-13:41:03  Calculate sizes  : NO
-13:41:03  
-13:41:03  Scanning for stale .terraform directories...
-13:41:08  Progress: scanned 1000 directories, found 0 .terraform directories
-13:41:15  Progress: scanned 2000 directories, found 0 .terraform directories
-13:41:20  Progress: scanned 3000 directories, found 0 .terraform directories
-13:41:27  Progress: scanned 4000 directories, found 0 .terraform directories
-13:41:32  Progress: scanned 5000 directories, found 0 .terraform directories
-13:41:37  Progress: scanned 6000 directories, found 0 .terraform directories
-13:41:42  Progress: scanned 7000 directories, found 0 .terraform directories
-13:41:48  Progress: scanned 8000 directories, found 0 .terraform directories
-13:41:53  Progress: scanned 9000 directories, found 0 .terraform directories
-13:41:58  Progress: scanned 10000 directories, found 0 .terraform directories
-13:42:05  Progress: scanned 11000 directories, found 0 .terraform directories
-13:42:12  Progress: scanned 12000 directories, found 0 .terraform directories
-13:42:17  Progress: scanned 13000 directories, found 0 .terraform directories
-13:42:22  Progress: scanned 14000 directories, found 0 .terraform directories
-13:42:29  Progress: scanned 15000 directories, found 0 .terraform directories
-13:42:34  Progress: scanned 16000 directories, found 0 .terraform directories
-13:42:39  Progress: scanned 17000 directories, found 0 .terraform directories
-13:42:45  Progress: scanned 18000 directories, found 0 .terraform directories
-13:42:50  Progress: scanned 19000 directories, found 0 .terraform directories
+
+#!/usr/bin/env python3
+
+# Jenkins EFS Cleanup
+# Identify .terraform directories older than 90 days.
+# Skip irrelevant directories for faster scanning.
+# Display ls -lrt style details and generate a CSV.
+# DRY-RUN ONLY - no directories are deleted.
+
+import os
+import sys
+import time
+import csv
+import stat
+import pwd
+import grp
+import argparse
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+
+ROOT_DIR = "/home/jenkins/workspace"
+MAX_WORKERS = 8
+STALE_DAYS = 90
+
+MAX_DEPTH = 8
+MAX_SCAN_SECONDS = 300
+PROGRESS_INTERVAL = 1000
+
+# Ignore directories that are not relevant to Terraform discovery.
+# Remove an entry if your Terraform projects can be nested under it.
+SKIP_DIRS = {
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    ".gradle",
+    ".m2",
+    "target",
+    "dist",
+    "build",
+    "coverage",
+    ".next",
+    ".idea",
+    ".vscode"
+}
+
+
+def get_dir_size_fast(path):
+    """
+    Calculate recursive size only when requested.
+    This is expensive on EFS.
+    """
+    total = 0
+    stack = [path]
+
+    while stack:
+        current = stack.pop()
+
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_file(follow_symlinks=False):
+                            total += entry.stat(
+                                follow_symlinks=False
+                            ).st_size
+
+                        elif entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+
+                    except (PermissionError, FileNotFoundError):
+                        pass
+
+        except (PermissionError, FileNotFoundError):
+            pass
+
+    return total
+
+
+def get_stale_directory_info(path, cutoff):
+    """
+    Collect metadata for .terraform directories
+    older than 90 days.
+    """
+    try:
+        info = os.stat(path, follow_symlinks=False)
+
+        if info.st_mtime >= cutoff:
+            return None
+
+        try:
+            owner = pwd.getpwuid(info.st_uid).pw_name
+        except KeyError:
+            owner = str(info.st_uid)
+
+        try:
+            group = grp.getgrgid(info.st_gid).gr_name
+        except KeyError:
+            group = str(info.st_gid)
+
+        return {
+            "path": path,
+            "mtime": info.st_mtime,
+            "modified": datetime.fromtimestamp(
+                info.st_mtime
+            ).strftime("%Y-%m-%d %H:%M:%S"),
+            "owner": owner,
+            "group": group,
+            "permissions": stat.filemode(info.st_mode),
+            "size": None,
+            "status": "PROPOSED DELETE - REVIEW REQUIRED"
+        }
+
+    except (PermissionError, FileNotFoundError):
+        return None
+
+
+def find_terraform_dirs(root, max_depth, max_scan_seconds):
+    """
+    Scan for stale .terraform directories.
+
+    Optimizations:
+      - Skip irrelevant directories.
+      - Skip files and symlinks.
+      - Do not descend into .terraform.
+      - Limit depth and elapsed time.
+      - Print periodic progress.
+
+    Returns candidate list and scan statistics.
+    """
+    stack = [(root, 0)]
+    candidates = []
+
+    scanned_count = 0
+    terraform_count = 0
+    skipped_count = 0
+    depth_limited_count = 0
+    access_errors = 0
+    timed_out = False
+
+    start_time = time.monotonic()
+    cutoff = time.time() - (STALE_DAYS * 86400)
+
+    while stack:
+        elapsed = time.monotonic() - start_time
+
+        if elapsed >= max_scan_seconds:
+            timed_out = True
+            print(
+                f"WARNING: Scan time limit reached "
+                f"after {elapsed:.0f} seconds.",
+                flush=True
+            )
+            break
+
+        current, depth = stack.pop()
+        scanned_count += 1
+
+        if scanned_count % PROGRESS_INTERVAL == 0:
+            print(
+                f"Progress: scanned {scanned_count} directories, "
+                f"found {terraform_count} .terraform directories, "
+                f"skipped {skipped_count} irrelevant directories, "
+                f"elapsed {elapsed:.0f}s",
+                flush=True
+            )
+
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if not entry.is_dir(
+                            follow_symlinks=False
+                        ):
+                            continue
+
+                        if entry.name == ".terraform":
+                            terraform_count += 1
+
+                            candidate = get_stale_directory_info(
+                                entry.path,
+                                cutoff
+                            )
+
+                            if candidate:
+                                candidates.append(candidate)
+
+                            continue
+
+                        if entry.name in SKIP_DIRS:
+                            skipped_count += 1
+                            continue
+
+                        if depth < max_depth:
+                            stack.append(
+                                (entry.path, depth + 1)
+                            )
+                        else:
+                            depth_limited_count += 1
+
+                    except (PermissionError, FileNotFoundError):
+                        access_errors += 1
+
+        except (PermissionError, FileNotFoundError) as e:
+            access_errors += 1
+            print(
+                f"Cannot access {current}: {e}",
+                file=sys.stderr,
+                flush=True
+            )
+
+    return {
+        "candidates": candidates,
+        "scanned": scanned_count,
+        "terraform_found": terraform_count,
+        "skipped": skipped_count,
+        "depth_limited": depth_limited_count,
+        "access_errors": access_errors,
+        "timed_out": timed_out
+    }
+
+
+def get_ls_lrt_output(candidate):
+    """
+    Generate ls -lrt -d style metadata without
+    launching a separate shell process.
+    """
+    return (
+        f"{candidate['permissions']} "
+        f"{candidate['owner']} "
+        f"{candidate['group']} "
+        f"{candidate['modified']} "
+        f"{candidate['path']}"
+    )
+
+
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Deletion is disabled"
+    )
+
+    parser.add_argument(
+        "--calculate-size",
+        action="store_true",
+        help="Calculate recursive sizes (slower on EFS)"
+    )
+
+    parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=MAX_DEPTH
+    )
+
+    parser.add_argument(
+        "--max-seconds",
+        type=int,
+        default=MAX_SCAN_SECONDS
+    )
+
+    parser.add_argument(
+        "--output",
+        default="jenkins_efs_cleanup_dry_run.csv"
+    )
+
+    args = parser.parse_args()
+
+    if args.execute:
+        print("ERROR: Deletion is disabled.")
+        sys.exit(1)
+
+    if args.max_depth < 0 or args.max_seconds <= 0:
+        parser.error(
+            "--max-depth must be >= 0 and "
+            "--max-seconds must be > 0"
+        )
+
+    if not os.path.isdir(ROOT_DIR):
+        print(
+            f"ERROR: Workspace root not found: {ROOT_DIR}",
+            file=sys.stderr
+        )
+        sys.exit(1)
+
+    start_time = time.monotonic()
+
+    print("======================================")
+    print("JENKINS EFS CLEANUP - DRY RUN")
+    print("======================================")
+    print(f"Scanning         : {ROOT_DIR}")
+    print(f"Retention period : {STALE_DAYS} days")
+    print(f"Workers          : {MAX_WORKERS}")
+    print(f"Max depth        : {args.max_depth}")
+    print(f"Max scan time    : {args.max_seconds} seconds")
+    print("Mode             : DRY-RUN")
+    print(
+        f"Calculate sizes  : "
+        f"{'YES' if args.calculate_size else 'NO'}"
+    )
+    print()
+
+    print(
+        "Scanning for stale .terraform directories...",
+        flush=True
+    )
+
+    stats = find_terraform_dirs(
+        ROOT_DIR,
+        args.max_depth,
+        args.max_seconds
+    )
+
+    candidates = stats["candidates"]
+    candidates.sort(key=lambda item: item["mtime"])
+
+    if args.calculate_size and candidates:
+        with ThreadPoolExecutor(
+            max_workers=MAX_WORKERS
+        ) as executor:
+            sizes = executor.map(
+                get_dir_size_fast,
+                [item["path"] for item in candidates]
+            )
+
+            for candidate, size in zip(candidates, sizes):
+                candidate["size"] = size
+
+    print()
+    print("======================================")
+    print("PROPOSED DELETION ITEMS - LS -LRT")
+    print("======================================")
+
+    total_size = 0
+
+    for candidate in candidates:
+        candidate["ls_output"] = get_ls_lrt_output(candidate)
+
+        print()
+        print(f"STATUS       : {candidate['status']}")
+        print(f"DIRECTORY    : {candidate['path']}")
+        print(f"LAST MODIFIED: {candidate['modified']}")
+        print(f"OWNER        : {candidate['owner']}")
+        print(f"GROUP        : {candidate['group']}")
+        print(f"PERMISSIONS  : {candidate['permissions']}")
+        print("LS -LRT:")
+        print(candidate["ls_output"])
+
+        if candidate["size"] is not None:
+            total_size += candidate["size"]
+
+            print(
+                f"ESTIMATED SIZE: "
+                f"{candidate['size'] / (1024 ** 3):.2f} GiB"
+            )
+
+        print("--------------------------------------")
+
+    scan_status = (
+        "PARTIAL"
+        if (
+            stats["timed_out"]
+            or stats["depth_limited"] > 0
+            or stats["access_errors"] > 0
+        )
+        else "COMPLETE WITH CONFIGURED EXCLUSIONS"
+    )
+
+    with open(
+        args.output,
+        "w",
+        newline="",
+        encoding="utf-8"
+    ) as csvfile:
+
+        writer = csv.writer(csvfile)
+
+        writer.writerow([
+            "Status",
+            "Directory",
+            "Last Modified",
+            "Owner",
+            "Group",
+            "Permissions",
+            "Estimated Size GiB",
+            "LS -LRT",
+            "Scan Status"
+        ])
+
+        for candidate in candidates:
+            writer.writerow([
+                candidate["status"],
+                candidate["path"],
+                candidate["modified"],
+                candidate["owner"],
+                candidate["group"],
+                candidate["permissions"],
+                (
+                    f"{candidate['size'] / (1024 ** 3):.2f}"
+                    if candidate["size"] is not None
+                    else "Not calculated"
+                ),
+                candidate["ls_output"],
+                scan_status
+            ])
+
+    elapsed = time.monotonic() - start_time
+
+    print()
+    print("======================================")
+    print("DRY-RUN SUMMARY")
+    print("======================================")
+    print(f"Directories scanned           : {stats['scanned']}")
+    print(f"Terraform directories found   : {stats['terraform_found']}")
+    print(f"Irrelevant directories skipped: {stats['skipped']}")
+    print(f"Depth-limited directories     : {stats['depth_limited']}")
+    print(f"Access errors                 : {stats['access_errors']}")
+    print(f"Proposed deletion items       : {len(candidates)}")
+
+    if args.calculate_size:
+        print(
+            f"Estimated candidate size      : "
+            f"{total_size / (1024 ** 3):.2f} GiB"
+        )
+    else:
+        print(
+            "Estimated candidate size      : "
+            "Not calculated (fast mode)"
+        )
+
+    print(f"Scan status                   : {scan_status}")
+    print("Directories deleted           : 0")
+    print(f"CSV report                    : {args.output}")
+    print(f"Execution time                : {elapsed:.2f} seconds")
+    print("======================================")
+    print("DRY-RUN: No directories were deleted.")
+
+
+if __name__ == "__main__":
+    main()
