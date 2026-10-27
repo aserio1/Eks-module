@@ -1,232 +1,50 @@
+do dry run to list files in root directory, excluding major folders listed below, some old job feature branch jobs, some truncated
+job names as well.
+sh-5.2$ df -h
+Filesystem                      Size  Used Avail Use% Mounted on
+devtmpfs                        4.0M     0  4.0M   0% /dev
+tmpfs                           3.9G     0  3.9G   0% /dev/shm
+tmpfs                           1.6G  8.9M  1.6G   1% /run
+efivarfs                        128K  2.7K  121K   3% /sys/firmware/efi/efivars
+/dev/nvme0n1p1                   20G  3.7G   17G  19% /
+/dev/mapper/VolGroup00-homeVol   10G  105M  9.9G   2% /home
+/dev/mapper/VolGroup00-optVol    25G  942M   25G   4% /opt
+/dev/mapper/VolGroup00-tmpVol    15G  140M   15G   1% /tmp
+/dev/mapper/VolGroup00-varVol   166G   32G  135G  19% /var
+/dev/mapper/VolGroup00-logVol    20G  201M   20G   1% /var/log
+/dev/nvme0n1p128                 10M  1.3M  8.7M  13% /boot/efi
+127.0.0.1:/                     8.0E  562G  8.0E   1% /jenkins_jobs
+tmpfs                           782M     0  782M   0% /run/user/0
 
-#!/usr/bin/env python3
-
-# Jenkins EFS Cleanup
-# Fast dry-run to count stale .terraform directories.
-# Ignore irrelevant directories during scanning.
-# No ls -lrt, size calculations, or CSV reports.
-# DRY-RUN ONLY - no directories are deleted.
-
-import os
-import sys
-import time
-import argparse
-
-ROOT_DIR = "/home/jenkins/workspace"
-MAX_WORKERS = 8
-STALE_DAYS = 90
-
-MAX_DEPTH = 8
-MAX_SCAN_SECONDS = 300
-PROGRESS_INTERVAL = 5000
-
-# Skip irrelevant directories during scanning.
-# Remove any entry if Terraform projects exist beneath it.
-SKIP_DIRS = {
-    ".git",
-    ".svn",
-    ".hg",
-    "node_modules",
-    "__pycache__",
-    ".venv",
-    "venv",
-    ".cache",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".tox",
-    ".gradle",
-    ".m2",
-    "target",
-    "dist",
-    "build",
-    "coverage",
-    ".next",
-    ".idea",
-    ".vscode"
-}
+ ls -altr /jenkins_jobs/
 
 
-def scan_terraform_dirs(root, max_depth, max_seconds):
-    """
-    Fast directory scan.
+Folder
+CGAP
 
-    Counts .terraform directories older than STALE_DAYS.
+Folder
+Data Workbench
+	
+Folder
+GIS
+	
+Folder
+IDES
+	
+Folder
+IMAC
+	
+Folder
+ML Engineering
+		
+Folder
+OAMS
 
-    Does not:
-      - Calculate directory sizes
-      - Execute ls -lrt
-      - Generate CSV files
-      - Delete files or directories
-    """
+Folder
+SALT
+	
+Folder
+Swift Insights Explorer
 
-    stack = [(root, 0)]
-    cutoff = time.time() - (STALE_DAYS * 86400)
-    start_time = time.monotonic()
-
-    scanned_count = 0
-    terraform_count = 0
-    stale_count = 0
-    skipped_count = 0
-    depth_limited = 0
-    access_errors = 0
-    timed_out = False
-
-    while stack:
-
-        if time.monotonic() - start_time >= max_seconds:
-            timed_out = True
-            break
-
-        current, depth = stack.pop()
-        scanned_count += 1
-
-        if scanned_count % PROGRESS_INTERVAL == 0:
-            print(
-                f"Scanned: {scanned_count} | "
-                f"Terraform found: {terraform_count} | "
-                f"Stale: {stale_count}",
-                flush=True
-            )
-
-        try:
-            with os.scandir(current) as entries:
-                for entry in entries:
-
-                    try:
-                        if not entry.is_dir(
-                            follow_symlinks=False
-                        ):
-                            continue
-
-                        if entry.name == ".terraform":
-                            terraform_count += 1
-
-                            info = entry.stat(
-                                follow_symlinks=False
-                            )
-
-                            if info.st_mtime < cutoff:
-                                stale_count += 1
-
-                            continue
-
-                        if entry.name in SKIP_DIRS:
-                            skipped_count += 1
-                            continue
-
-                        if depth < max_depth:
-                            stack.append(
-                                (entry.path, depth + 1)
-                            )
-                        else:
-                            depth_limited += 1
-
-                    except (PermissionError, FileNotFoundError):
-                        access_errors += 1
-
-        except (PermissionError, FileNotFoundError):
-            access_errors += 1
-
-    elapsed = time.monotonic() - start_time
-
-    return {
-        "scanned": scanned_count,
-        "terraform_found": terraform_count,
-        "stale": stale_count,
-        "skipped": skipped_count,
-        "depth_limited": depth_limited,
-        "access_errors": access_errors,
-        "timed_out": timed_out,
-        "elapsed": elapsed
-    }
-
-
-def main():
-
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Deletion disabled - dry-run only"
-    )
-
-    parser.add_argument(
-        "--max-depth",
-        type=int,
-        default=MAX_DEPTH
-    )
-
-    parser.add_argument(
-        "--max-seconds",
-        type=int,
-        default=MAX_SCAN_SECONDS
-    )
-
-    args = parser.parse_args()
-
-    if args.execute:
-        print("ERROR: Deletion is disabled.")
-        sys.exit(1)
-
-    if args.max_depth < 0 or args.max_seconds <= 0:
-        parser.error(
-            "--max-depth must be >= 0 and "
-            "--max-seconds must be > 0"
-        )
-
-    if not os.path.isdir(ROOT_DIR):
-        print(
-            f"ERROR: Directory not found: {ROOT_DIR}"
-        )
-        sys.exit(1)
-
-    print("======================================")
-    print("JENKINS EFS CLEANUP - FAST DRY RUN")
-    print("======================================")
-    print(f"Scanning         : {ROOT_DIR}")
-    print(f"Retention period : {STALE_DAYS} days")
-    print(f"Max depth        : {args.max_depth}")
-    print(f"Max scan time    : {args.max_seconds} seconds")
-    print("Mode             : DRY-RUN")
-    print()
-
-    results = scan_terraform_dirs(
-        ROOT_DIR,
-        args.max_depth,
-        args.max_seconds
-    )
-
-    complete = (
-        not results["timed_out"]
-        and results["depth_limited"] == 0
-        and results["access_errors"] == 0
-    )
-
-    print()
-    print("======================================")
-    print("DRY-RUN SUMMARY")
-    print("======================================")
-    print(f"Directories scanned          : {results['scanned']}")
-    print(f"Terraform directories found  : {results['terraform_found']}")
-    print(f"Irrelevant directories skipped: {results['skipped']}")
-    print(f"Stale directories identified : {results['stale']}")
-    print(f"Directories actually deleted : 0")
-    print(f"Execution time               : {results['elapsed']:.2f} seconds")
-    print(
-        f"Scan status                  : "
-        f"{'COMPLETE WITH EXCLUSIONS' if complete else 'PARTIAL'}"
-    )
-
-    if not complete:
-        print(
-            "WARNING: Count may be incomplete due to "
-            "depth, time, or access limits."
-        )
-
-    print("======================================")
-    print("DRY-RUN: No directories were deleted.")
-
-
-if __name__ == "__main__":
-    main()
+Folder
+Utility
