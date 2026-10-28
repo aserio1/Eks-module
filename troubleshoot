@@ -1,3 +1,43 @@
+ ERROR: process "/bin/sh -c set -e;     success=0;     for i in 1 2 3; do       if timeout 900 java -jar jpm.jar --verbose         --war $JENKINS_HOME/jenkins.war         -f $JENKINS_HOME/plugins.txt         -d $JENKINS_HOME/plugins; then         success=1;         break;       fi;       echo \"jpm attempt $i failed/timed out, retrying in 30s...\";       sleep 30;     done;     [ \"$success\" -eq 1 ] || { echo \"All jpm attempts failed\" >&2; exit 1; };     rm -rf $JENKINS_HOME/jpm.jar" did not complete successfully: exit code: 1
+12:27:15  ------
+12:27:15   > [12/12] RUN set -e;     success=0;     for i in 1 2 3; do       if timeout 900 java -jar jpm.jar --verbose         --war /home/jenkins/jenkins.war         -f /home/jenkins/plugins.txt         -d /home/jenkins/plugins; then         success=1;         break;       fi;       echo "jpm attempt $i failed/timed out, retrying in 30s...";       sleep 30;     done;     [ "$success" -eq 1 ] || { echo "All jpm attempts failed" >&2; exit 1; };     rm -rf /home/jenkins/jpm.jar:
+12:27:15  2679.0 Downloaded and validated plugin display-url-api
+12:27:15  2679.0 Checksum valid for: display-url-api
+12:27:15  2683.3 Downloaded and validated plugin pipeline-model-definition
+12:27:15  2683.3 Checksum valid for: pipeline-model-definition
+12:27:15  2686.3 Downloaded and validated plugin ssh-credentials
+12:27:15  2686.3 Checksum valid for: ssh-credentials
+12:27:15  2698.2 Downloaded and validated plugin scm-api
+12:27:15  2698.2 Checksum valid for: scm-api
+12:27:15  2761.4 jpm attempt 3 failed/timed out, retrying in 30s...
+12:27:15  2791.4 All jpm attempts failed
+12:27:15  ------
+12:27:15  Dockerfile:75
+12:27:15  --------------------
+12:27:15    74 |     # Install Jenkins plugins with retry logic
+12:27:15    75 | >>> RUN set -e; \
+12:27:15    76 | >>>     success=0; \
+12:27:15    77 | >>>     for i in 1 2 3; do \
+12:27:15    78 | >>>       if timeout 900 java -jar jpm.jar --verbose \
+12:27:15    79 | >>>         --war $JENKINS_HOME/jenkins.war \
+12:27:15    80 | >>>         -f $JENKINS_HOME/plugins.txt \
+12:27:15    81 | >>>         -d $JENKINS_HOME/plugins; then \
+12:27:15    82 | >>>         success=1; \
+12:27:15    83 | >>>         break; \
+12:27:15    84 | >>>       fi; \
+12:27:15    85 | >>>       echo "jpm attempt $i failed/timed out, retrying in 30s..."; \
+12:27:15    86 | >>>       sleep 30; \
+12:27:15    87 | >>>     done; \
+12:27:15    88 | >>>     [ "$success" -eq 1 ] || { echo "All jpm attempts failed" >&2; exit 1; }; \
+12:27:15    89 | >>>     rm -rf $JENKINS_HOME/jpm.jar
+12:27:15    90 |     
+12:27:15  --------------------
+12:27:15  ERROR: failed to build: failed to solve: process "/bin/sh -c set -e;     success=0;     for i in 1 2 3; do       if timeout 900 java -jar jpm.jar --verbose         --war $JENKINS_HOME/jenkins.war         -f $JENKINS_HOME/plugins.txt         -d $JENKINS_HOME/plugins; then         success=1;         break;       fi;       echo \"jpm attempt $i failed/timed out, retrying in 30s...\";       sleep 30;     done;     [ \"$success\" -eq 1 ] || { echo \"All jpm attempts failed\" >&2; exit 1; };     rm -rf $JENKINS_HOME/jpm.jar" did not complete successfully: exit code: 1
+12:27:15  [Pipeline] }
+
+
+############
+DcokerTemplate
 
 ################################################################################
 # IMAC Jenkins Controller Docker Image
@@ -24,9 +64,13 @@ ARG JENKINS_JAR_FILES="jenkins-jar-files-2026-10-22"
 USER root
 
 # Create User
+# disables max password age and clears any account expiration date
+# remove password entirely since we use key-only auth
 RUN mkdir -p $JENKINS_HOME \
   && groupadd -g ${gid} ${group} \
   && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user} \
+  && chage -M -1 -E -1 ${user} \ 
+  && passwd -d ${user} \
   && chown -R ${uid}:${gid} $JENKINS_HOME
 
 # Install OS Packages
@@ -66,7 +110,7 @@ ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
 ENV JENKINS_HOME $JENKINS_HOME
 
 # This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
-# ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
+ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
 
 # Install Jenkins plugins with retry logic
 RUN set -e; \
@@ -87,3 +131,6 @@ RUN set -e; \
 
 CMD [ "./jenkins.sh"]
 ENTRYPOINT []
+
+
+
