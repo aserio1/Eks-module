@@ -70,7 +70,7 @@ ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
 ENV JENKINS_HOME $JENKINS_HOME
 
 # This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
-ENV JENKINS_UC_DOWNLOAD_URL="https://updates.jenkins.io/download/plugins/"
+ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
 
 # Install Jenkins plugins with retry logic
 RUN set -e; \
@@ -97,7 +97,7 @@ RUN set -e; \
       fi; \
     done; \
     [ "$success" -eq 1 ] || { echo "All jpm attempts failed" >&2; exit 1; }; \
-    rm -f $JENKINS_HOME/jpm.jar
+    rm -rf $JENKINS_HOME/jpm.jar
 
 CMD [ "./jenkins.sh"]
 ENTRYPOINT []
