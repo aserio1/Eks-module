@@ -1,1 +1,191 @@
-ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER")
+
+#!/usr/bin/env python3
+
+# Jenkins EFS Cleanup
+# Dynamic workspace discovery
+# No hardcoded Jenkins job names
+# Fast dry-run only
+# No deletion
+
+import os
+import sys
+import time
+import argparse
+
+ROOT_DIR = "/jenkins_jobs"
+STALE_DAYS = 90
+
+SKIP_DIRS = {
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".cache",
+    ".terraform",
+    ".m2",
+    ".gradle"
+}
+
+
+def scan_workspaces(workspace_root, stale_days, current_workspace=None):
+    """
+    Scan workspace hierarchy dynamically.
+
+    Jenkins workspace pattern:
+      workspace/JOB_NAME/BUILD_NUMBER
+
+    JOB_NAME may contain nested folders and branch names.
+
+    This function identifies numeric build directories
+    older than the retention threshold.
+
+    DRY-RUN ONLY.
+    """
+
+    cutoff = time.time() - (stale_days * 86400)
+
+    scanned = 0
+    stale = 0
+    skipped = 0
+    errors = 0
+
+    current_workspace = (
+        os.path.realpath(current_workspace)
+        if current_workspace
+        else None
+    )
+
+    stack = [workspace_root]
+
+    while stack:
+        current = stack.pop()
+
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+
+                    try:
+                        if not entry.is_dir(
+                            follow_symlinks=False
+                        ):
+                            continue
+
+                        if entry.name in SKIP_DIRS:
+                            skipped += 1
+                            continue
+
+                        scanned += 1
+
+                        path = entry.path
+
+                        if current_workspace and (
+                            os.path.realpath(path) == current_workspace
+                            or current_workspace.startswith(
+                                os.path.realpath(path) + os.sep
+                            )
+                        ):
+                            skipped += 1
+                            continue
+
+                        # Jenkins BUILD_NUMBER is numeric.
+                        if entry.name.isdigit():
+                            info = entry.stat(
+                                follow_symlinks=False
+                            )
+
+                            if info.st_mtime < cutoff:
+                                stale += 1
+
+                            # Never recurse into build directories.
+                            continue
+
+                        stack.append(path)
+
+                    except OSError:
+                        errors += 1
+
+        except OSError:
+            errors += 1
+
+    return {
+        "scanned": scanned,
+        "stale": stale,
+        "skipped": skipped,
+        "errors": errors
+    }
+
+
+def main():
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument(
+        "--root",
+        default=os.environ.get(
+            "JENKINS_WORKSPACE_ROOT",
+            os.path.join(ROOT_DIR, "workspace")
+        )
+    )
+
+    parser.add_argument(
+        "--stale-days",
+        type=int,
+        default=STALE_DAYS
+    )
+
+    parser.add_argument(
+        "--execute",
+        action="store_true"
+    )
+
+    args = parser.parse_args()
+
+    if args.execute:
+        print("ERROR: Deletion is disabled.")
+        sys.exit(1)
+
+    if args.stale_days < 0:
+        parser.error("--stale-days must be >= 0")
+
+    if not os.path.isdir(args.root):
+        print(
+            f"ERROR: Workspace root not found: {args.root}"
+        )
+        sys.exit(1)
+
+    start = time.monotonic()
+
+    print("======================================")
+    print("JENKINS EFS CLEANUP - FAST DRY RUN")
+    print("======================================")
+    print(f"Workspace root : {args.root}")
+    print(f"Retention      : {args.stale_days} days")
+    print("Job folders    : Dynamic discovery")
+    print("Mode           : DRY-RUN")
+    print()
+
+    results = scan_workspaces(
+        args.root,
+        args.stale_days,
+        os.environ.get("WORKSPACE")
+    )
+
+    print("======================================")
+    print("DRY-RUN SUMMARY")
+    print("======================================")
+    print(f"Directories inspected       : {results['scanned']}")
+    print(f"Stale build directories     : {results['stale']}")
+    print(f"Directories skipped         : {results['skipped']}")
+    print(f"Scan errors                 : {results['errors']}")
+    print(f"Directories actually deleted: 0")
+    print(f"Execution time              : {time.monotonic() - start:.2f}s")
+    print("======================================")
+    print("DRY-RUN COMPLETE - NO DELETION")
+    print("======================================")
+
+
+if __name__ == "__main__":
+    main()
