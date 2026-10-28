@@ -2,166 +2,133 @@
 #!/usr/bin/env python3
 
 # Jenkins EFS Cleanup
-# Fast root-level dry run.
+# Fast dynamic dry-run
 #
-# Scan /jenkins_jobs and exclude major Jenkins folders.
-# Identify unexpected root files and directories.
-# Flag potential old feature branch and truncated job names.
+# EFS Mount: /jenkins_jobs
+# Retention: 90 days
 #
-# DRY-RUN ONLY - nothing is deleted.
+# No hardcoded Jenkins job folders.
+# No ls -lrt.
+# No recursive size calculations.
+# No deletion.
 
 import os
 import sys
 import time
-import stat
 import argparse
-from datetime import datetime
 
 ROOT_DIR = "/jenkins_jobs"
 STALE_DAYS = 90
 
-EXCLUDED_FOLDERS = {
-    "CGAP",
-    "Data Workbench",
-    "GIS",
-    "IDES",
-    "IMAC",
-    "ML Engineering",
-    "OAMS",
-    "SALT",
-    "Swift Insights Explorer",
-    "Utility"
+PROGRESS_INTERVAL = 5000
+
+# Exclude only common generated/internal directories
+# when optional recursive scanning is enabled.
+SKIP_DIRS = {
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    ".gradle",
+    ".m2",
+    ".terraform"
 }
 
-# Common patterns in Jenkins multibranch job names.
-FEATURE_PATTERNS = (
-    "feature-",
-    "feature/",
-    "bugfix-",
-    "bugfix/",
-    "hotfix-",
-    "hotfix/",
-    "release-",
-    "release/",
-    "PR-"
-)
 
-
-def format_date(timestamp):
-    return datetime.fromtimestamp(
-        timestamp
-    ).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def classify_entry(name, is_dir):
+def scan_efs(root, stale_days, recursive=False):
     """
-    Classify root-level entries for manual review.
+    Scan EFS dynamically.
 
-    Name-based classifications are only hints.
-    They do not verify whether a Jenkins job exists.
-    """
+    Default:
+        Scan immediate children of /jenkins_jobs.
 
-    lower_name = name.lower()
+    Optional recursive mode:
+        Inspect nested job directories.
 
-    if not is_dir:
-        return "ROOT FILE"
-
-    if any(
-        pattern.lower() in lower_name
-        for pattern in FEATURE_PATTERNS
-    ):
-        return "POSSIBLE FEATURE/PR JOB"
-
-    return "OTHER ROOT DIRECTORY - REVIEW"
-
-
-def scan_root(root, stale_days):
-    """
-    Scan immediate children of /jenkins_jobs.
-
-    No recursive traversal.
-    No directory size calculations.
-    No Jenkins API calls.
-    No deletion.
+    This is a dry-run inventory only.
     """
 
     cutoff = time.time() - (stale_days * 86400)
+    start_time = time.monotonic()
 
     results = {
-        "total_entries": 0,
-        "excluded": 0,
+        "scanned": 0,
         "files": 0,
         "directories": 0,
         "stale_files": 0,
         "stale_directories": 0,
-        "feature_jobs": 0,
-        "errors": 0,
-        "candidates": []
+        "skipped": 0,
+        "errors": 0
     }
 
-    with os.scandir(root) as entries:
+    stack = [root]
 
-        for entry in entries:
+    while stack:
+        current = stack.pop()
 
-            results["total_entries"] += 1
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
 
-            try:
-                is_dir = entry.is_dir(
-                    follow_symlinks=False
-                )
+                    try:
+                        results["scanned"] += 1
 
-                # Exclude the major Jenkins folders.
-                if is_dir and entry.name in EXCLUDED_FOLDERS:
-                    results["excluded"] += 1
-                    continue
+                        is_dir = entry.is_dir(
+                            follow_symlinks=False
+                        )
 
-                info = entry.stat(
-                    follow_symlinks=False
-                )
+                        if is_dir and entry.name in SKIP_DIRS:
+                            results["skipped"] += 1
+                            continue
 
-                if is_dir:
-                    results["directories"] += 1
-                else:
-                    results["files"] += 1
+                        info = entry.stat(
+                            follow_symlinks=False
+                        )
 
-                # Only list entries older than retention.
-                if info.st_mtime >= cutoff:
-                    continue
+                        is_stale = info.st_mtime < cutoff
 
-                category = classify_entry(
-                    entry.name,
-                    is_dir
-                )
+                        if is_dir:
+                            results["directories"] += 1
 
-                if is_dir:
-                    results["stale_directories"] += 1
-                else:
-                    results["stale_files"] += 1
+                            if is_stale:
+                                results["stale_directories"] += 1
 
-                if category == "POSSIBLE FEATURE/PR JOB":
-                    results["feature_jobs"] += 1
+                            if recursive:
+                                stack.append(entry.path)
 
-                results["candidates"].append({
-                    "name": entry.name,
-                    "path": entry.path,
-                    "type": "DIRECTORY" if is_dir else "FILE",
-                    "category": category,
-                    "modified": format_date(info.st_mtime),
-                    "mtime": info.st_mtime,
-                    "age_days": int(
-                        (time.time() - info.st_mtime) / 86400
-                    ),
-                    "permissions": stat.filemode(info.st_mode)
-                })
+                        else:
+                            results["files"] += 1
 
-            except (PermissionError, FileNotFoundError, OSError) as e:
-                results["errors"] += 1
+                            if is_stale:
+                                results["stale_files"] += 1
 
-                print(
-                    f"WARNING: Cannot inspect {entry.path}: {e}",
-                    file=sys.stderr,
-                    flush=True
-                )
+                        if (
+                            results["scanned"] %
+                            PROGRESS_INTERVAL == 0
+                        ):
+                            print(
+                                f"Scanned: {results['scanned']} | "
+                                f"Stale directories: "
+                                f"{results['stale_directories']} | "
+                                f"Stale files: "
+                                f"{results['stale_files']}",
+                                flush=True
+                            )
+
+                    except OSError:
+                        results["errors"] += 1
+
+        except OSError:
+            results["errors"] += 1
+
+    results["elapsed"] = time.monotonic() - start_time
 
     return results
 
@@ -169,25 +136,30 @@ def scan_root(root, stale_days):
 def main():
 
     parser = argparse.ArgumentParser(
-        description="Fast Jenkins EFS root dry-run cleanup"
-    )
-
-    parser.add_argument(
-        "--execute",
-        action="store_true",
-        help="Deletion is disabled"
+        description="Fast Jenkins EFS dry-run inventory"
     )
 
     parser.add_argument(
         "--root",
-        default=ROOT_DIR,
-        help="Root directory to scan"
+        default=ROOT_DIR
     )
 
     parser.add_argument(
         "--stale-days",
         type=int,
         default=STALE_DAYS
+    )
+
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Scan nested directories (slower)"
+    )
+
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Deletion is disabled"
     )
 
     args = parser.parse_args()
@@ -201,70 +173,44 @@ def main():
 
     if not os.path.isdir(args.root):
         print(
-            f"ERROR: Directory not found: {args.root}",
+            f"ERROR: EFS mount not found: {args.root}",
             file=sys.stderr
         )
         sys.exit(1)
 
-    start_time = time.monotonic()
+    start = time.monotonic()
 
     print("======================================")
-    print("JENKINS EFS CLEANUP - ROOT DRY RUN")
+    print("JENKINS EFS CLEANUP - FAST DRY RUN")
     print("======================================")
-    print(f"Root directory  : {args.root}")
-    print(f"Retention period: {args.stale_days} days")
-    print(f"Excluded folders: {len(EXCLUDED_FOLDERS)}")
-    print("Recursive scan  : NO")
-    print("Mode            : DRY-RUN")
+    print(f"EFS root         : {args.root}")
+    print(f"Retention period : {args.stale_days} days")
+    print(f"Recursive scan   : {'YES' if args.recursive else 'NO'}")
+    print("Mode             : DRY-RUN")
     print()
 
-    results = scan_root(
+    results = scan_efs(
         args.root,
-        args.stale_days
+        args.stale_days,
+        args.recursive
     )
-
-    # Oldest entries first.
-    results["candidates"].sort(
-        key=lambda item: item["mtime"]
-    )
-
-    print("======================================")
-    print("STALE ROOT ENTRIES - REVIEW REQUIRED")
-    print("======================================")
-
-    if not results["candidates"]:
-        print("No stale root-level entries found.")
-
-    for item in results["candidates"]:
-        print(
-            f"{item['type']:10} | "
-            f"{item['age_days']:5} days | "
-            f"{item['modified']} | "
-            f"{item['category']} | "
-            f"{item['path']}"
-        )
-
-    elapsed = time.monotonic() - start_time
 
     print()
     print("======================================")
     print("DRY-RUN SUMMARY")
     print("======================================")
-    print(f"Total root entries scanned    : {results['total_entries']}")
-    print(f"Major folders excluded        : {results['excluded']}")
-    print(f"Other root directories        : {results['directories']}")
-    print(f"Other root files              : {results['files']}")
-    print(f"Stale directories (>90 days)  : {results['stale_directories']}")
-    print(f"Stale files (>90 days)        : {results['stale_files']}")
-    print(f"Possible feature/PR jobs      : {results['feature_jobs']}")
-    print(f"Total proposed review items   : {len(results['candidates'])}")
-    print(f"Access errors                 : {results['errors']}")
-    print(f"Execution time                : {elapsed:.2f} seconds")
-    print("Directories deleted           : 0")
-    print("Files deleted                 : 0")
+    print(f"Entries scanned            : {results['scanned']}")
+    print(f"Directories found          : {results['directories']}")
+    print(f"Files found                : {results['files']}")
+    print(f"Stale directories          : {results['stale_directories']}")
+    print(f"Stale files                : {results['stale_files']}")
+    print(f"Directories skipped        : {results['skipped']}")
+    print(f"Scan errors                : {results['errors']}")
+    print(f"Execution time             : {results['elapsed']:.2f} seconds")
+    print("Directories deleted        : 0")
+    print("Files deleted              : 0")
     print("======================================")
     print("DRY-RUN COMPLETE - NOTHING DELETED")
-    print("All candidates require manual review.")
     print("======================================")
 
 
