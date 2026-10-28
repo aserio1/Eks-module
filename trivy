@@ -1,2 +1,98 @@
 + /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
 10:08:01  ERROR: EFS mount not found: /jenkins_jobs
+
+
+######## original
+#!/usr/bin/env python3
+
+# This script deletes recursively .terraform dirs
+# found in /home/jenkins/workspace.
+# Executed via a Jenkins job that runs daily during off hours.
+
+import os
+import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+
+ROOT_DIR = "/home/jenkins/workspace"
+MAX_WORKERS = 8  # Tune based on EFS throughput limits
+
+print_lock = Lock()
+stats_lock = Lock()
+freed_space = 0
+
+
+def get_dir_size_fast(path):
+    """Use os.scandir recursively for faster size calculation."""
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        total += entry.stat(follow_symlinks=False).st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        total += get_dir_size_fast(entry.path)
+                except (PermissionError, FileNotFoundError):
+                    pass
+    except (PermissionError, FileNotFoundError):
+        pass
+    return total
+
+
+def delete_terraform_dir(path):
+    """Delete a single .terraform dir and return bytes freed."""
+    size = get_dir_size_fast(path)
+    try:
+        shutil.rmtree(path)
+        with print_lock:
+            print(f"Deleted: {path}")
+        return size
+    except Exception as e:
+        with print_lock:
+            print(f"Failed to delete {path}: {e}")
+        return 0
+
+
+def find_terraform_dirs(root):
+    """
+    Walk the tree with os.scandir and prune traversal into .terraform dirs
+    (no need to recurse into them — we're deleting the whole thing).
+    """
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if entry.name == ".terraform":
+                    yield entry.path
+                else:
+                    yield from find_terraform_dirs(entry.path)
+    except (PermissionError, FileNotFoundError) as e:
+        print(f"Cannot access {root}: {e}")
+
+
+def main():
+    global freed_space
+
+    print(f"Scanning: {ROOT_DIR}\n")
+    initial_size = get_dir_size_fast(ROOT_DIR)
+
+    terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
+    print(f"Found {len(terraform_dirs)} .terraform director{'y' if len(terraform_dirs) == 1 else 'ies'}\n")
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(delete_terraform_dir, d): d for d in terraform_dirs}
+        for future in as_completed(futures):
+            with stats_lock:
+                freed_space += future.result()
+
+    final_size = initial_size - freed_space
+
+    print(f"\nInitial size : {initial_size / (1024 ** 3):.2f} GB")
+    print(f"Final size   : {final_size / (1024 ** 3):.2f} GB")
+    print(f"Freed space  : {freed_space / (1024 ** 3):.2f} GB")
+
+
+if __name__ == "__main__":
+    main()
