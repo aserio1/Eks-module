@@ -1,30 +1,103 @@
-plugin.txt
-##############
-active-directory:latest
-authorize-project:latest
-aws-secrets-manager-credentials-provider:latest
-build-name-setter:latest
-configuration-as-code:latest
-commons-httpclient3-api:latest
-email-ext:latest
-git:latest
-github:latest
-matrix-auth:latest
-pipeline-graph-view:latest
-pipeline-stage-view:latest
-pipeline-utility-steps:latest
-purge-build-queue-plugin:latest
-sonar:latest
-ssh-agent:latest
-ssh-slaves:latest
-ssh-credentials:latest
-templating-engine:latest
-joda-time-api:latest
-saml:latest
-role-strategy:latest
-timestamper:latest
-jjwt-api:latest
-github-branch-source:latest
-groovy-events-listener-plugin:latest
-aws-java-sdk2-core:2.33.4-62.vc1a_8df64b_4c9
-aws-java-sdk2-secretsmanager:2.33.4-62.vc1a_8df64b_4c9
+
+################################################################################
+# IMAC Jenkins Controller Docker Image
+#
+################################################################################
+
+FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
+
+LABEL   oig.imac.base.image.purpose="Jenkins Controller Docker image" \
+        oig.imac.image.owner="Kate Rose" \
+        oig.imac.image.engineer="Kent Rockwell" \
+        oig.imac.base.image.parent="IMAC Jenkins base image" \
+        oig.imac.base.image.parent.registry="213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/base/jenkins:BASE_IMAGE_VERSION" \
+        oig.imac.base.image.ontogeny.registry="registry1.dso.mil/ironbank" \
+        oig.imac.base.image.ontogeny.image="registry1.dso.mil/ironbank/opensource/python:v3.14.5@sha256:be4255a2642bcf619c9594ebb4cbd8ac046ce9ce8c6e69b338048f53164e4b9a"
+
+ARG user=jenkins
+ARG group=jenkins
+ARG uid=2000
+ARG gid=2000
+ARG JENKINS_HOME=/home/jenkins
+ARG JENKINS_JAR_FILES="jenkins-jar-files-2026-10-22"
+
+USER root
+
+# Create User
+# disables max password age and clears any account expiration date
+# remove password entirely since we use key-only auth
+RUN mkdir -p $JENKINS_HOME \
+  && groupadd -g ${gid} ${group} \
+  && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user} \
+  && chage -M -1 -E -1 ${user} \
+  && passwd -d ${user} \
+  && chown -R ${uid}:${gid} $JENKINS_HOME
+
+# Install OS Packages
+RUN yum -y update && \
+    yum -y install java-21-openjdk && \
+    yum clean all && \
+    rm -rf /var/cache/yum/*
+
+USER jenkins
+
+# Install Jenkins apps
+WORKDIR $JENKINS_HOME
+
+RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
+    unzip jenkins-zip-files.zip && \
+    mv ${JENKINS_JAR_FILES}/* . && \
+    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
+
+COPY dependencies/casc.yaml $JENKINS_HOME/casc.yaml
+COPY dependencies/jenkins.sh $JENKINS_HOME/jenkins.sh
+COPY dependencies/plugins.txt $JENKINS_HOME/plugins.txt
+
+RUN mkdir $JENKINS_HOME/init.groovy.d && \
+    chmod 755 $JENKINS_HOME/init.groovy.d
+
+COPY dependencies/user-token-gen.groovy $JENKINS_HOME/init.groovy.d/user-token-gen.groovy
+
+USER root
+
+RUN chmod 755 $JENKINS_HOME/init.groovy.d/user-token-gen.groovy && \
+    chmod 755 $JENKINS_HOME/jenkins.sh && \
+    chown -R ${uid}:${gid} $JENKINS_HOME
+
+USER jenkins
+
+ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
+ENV JENKINS_HOME $JENKINS_HOME
+
+# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
+ENV JENKINS_UC_DOWNLOAD_URL="https://updates.jenkins.io/download/plugins/"
+
+# Install Jenkins plugins with retry logic
+RUN set -e; \
+    success=0; \
+    for i in 1 2 3; do \
+      echo "Starting jpm installation attempt $i"; \
+      rc=0; \
+      timeout 1800 java -jar jpm.jar --verbose \
+        --war $JENKINS_HOME/jenkins.war \
+        -f $JENKINS_HOME/plugins.txt \
+        -d $JENKINS_HOME/plugins || rc=$?; \
+      if [ "$rc" -eq 0 ]; then \
+        success=1; \
+        echo "Jenkins plugins installed successfully"; \
+        break; \
+      fi; \
+      echo "jpm attempt $i failed with exit code $rc"; \
+      if [ "$rc" -eq 124 ]; then \
+        echo "jpm attempt $i timed out after 1800 seconds"; \
+      fi; \
+      if [ "$i" -lt 3 ]; then \
+        echo "Retrying in 30 seconds..."; \
+        sleep 30; \
+      fi; \
+    done; \
+    [ "$success" -eq 1 ] || { echo "All jpm attempts failed" >&2; exit 1; }; \
+    rm -f $JENKINS_HOME/jpm.jar
+
+CMD [ "./jenkins.sh"]
+ENTRYPOINT []
