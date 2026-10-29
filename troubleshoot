@@ -1,2 +1,3 @@
-Risk Assessment:
-Low.Regal is used as a CI-time linter for Rego policies. It is not exposed as a running network service in our environment, and the affected stdlib packages (net/url parsing, TLS/x509 handling, net/mail, HTTP/2 framing) are primarily exercised during local linting of Rego files in CI, with no untrusted network input or certificate validation involved. Given the tool's usage pattern, exploitability in our context is low. This ignore is scoped and time-bound — we will revisit as soon as a patched Regal release is available (tracked via the JIRA ticket below).
+**Risk Assessment:**
+
+Low (provisional). The `msgpack` vulnerability could cause a denial of service through excessive memory consumption when processing malicious data. We have updated the package to the fixed version (`1.2.3`), but the scan still detects the older version (`1.1.2`). This ignore is temporary while we investigate the remaining finding and will be removed once remediation is confirmed. Actual exposure remains under investigation.
