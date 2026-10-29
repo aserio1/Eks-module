@@ -1,16 +1,10 @@
-Adding ignores for found vulnerabilities in gobinary:
-https://jenkins.aws.hhsoig.gov/job/IMAC/job/IMAC%20Jenkins%20Main%20and%20Jenkins%20Agent%20-%20Docker%20Builds/view/change-requests/job/PR-125/32/consoleFull
-{F1993D18-15FB-4C1A-9CF5-3358F7D630E2}
-Ignore Reason: This ignore is being added for a newly detected vulnerability in Go‑based tooling included in our Jenkins agent image. These tools are distributed as precompiled Go binaries with embedded dependencies, and several of those dependencies currently contain known vulnerabilities. Because the binaries cannot be rebuilt or patched within our image, we rely on upstream maintainers to publish refreshed releases that incorporate fixed dependency versions.
+**Summary:**
 
-Python (python-pkg)
-15:40:53  ===================
-15:40:53  Total: 1 (HIGH: 1, CRITICAL: 0)
-15:40:53  
-15:40:53  ┌─────────┬─────────────────┬──────────┬────────┬───────────────────┬───────────────┬────────────────────────────────────────────────────────────┐
-15:40:53  │ Library │  Vulnerability  │ Severity │ Status │ Installed Version │ Fixed Version │                           Title                            │
-15:40:53  ├─────────┼─────────────────┼──────────┼────────┼───────────────────┼───────────────┼────────────────────────────────────────────────────────────┤
-15:40:53  │ msgpack │ CVE-2026-114613 │ HIGH     │ fixed  │ 1.1.2             │ 1.2.3         │ msgpack: msgpack: Denial of Service via memory leak during │
-15:40:53  │         │                 │          │        │                   │               │ map deserialization                                        │
-15:40:53  │         │                 │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-114613                │
-15:40:53  └─────────┴─────────────────┴──────────┴────────┴───────────────────┴───────────────┴─────────────────────────────────────────────────────
+Adding a temporary ignore for CVE-2026-114613 (HIGH) detected in the Python `msgpack` package during the Jenkins Docker image vulnerability scan.
+
+**Ignore Reason:**
+
+This ignore is being added for a HIGH-severity vulnerability detected in the `msgpack` Python package. We have already updated the package requirement to
+the fixed version (`msgpack>=1.2.3`) in both the `ib-python312` and `ib-python314` base images. However, the vulnerability scan continues to report the older version (`1.1.2`)
+despite the dependency updates. We are temporarily ignoring this finding while we investigate why the scanner continues to detect the outdated version.
+The ignore will be reviewed and removed once the underlying issue is resolved and the vulnerability is no longer detected.
