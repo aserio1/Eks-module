@@ -1,10 +1,2 @@
-**Summary:**
-
-Adding a temporary ignore for CVE-2026-114613 (HIGH) detected in the Python `msgpack` package during the Jenkins Docker image vulnerability scan.
-
-**Ignore Reason:**
-
-This ignore is being added for a HIGH-severity vulnerability detected in the `msgpack` Python package. We have already updated the package requirement to
-the fixed version (`msgpack>=1.2.3`) in both the `ib-python312` and `ib-python314` base images. However, the vulnerability scan continues to report the older version (`1.1.2`)
-despite the dependency updates. We are temporarily ignoring this finding while we investigate why the scanner continues to detect the outdated version.
-The ignore will be reviewed and removed once the underlying issue is resolved and the vulnerability is no longer detected.
+Risk Assessment:
+Low.Regal is used as a CI-time linter for Rego policies. It is not exposed as a running network service in our environment, and the affected stdlib packages (net/url parsing, TLS/x509 handling, net/mail, HTTP/2 framing) are primarily exercised during local linting of Rego files in CI, with no untrusted network input or certificate validation involved. Given the tool's usage pattern, exploitability in our context is low. This ignore is scoped and time-bound — we will revisit as soon as a patched Regal release is available (tracked via the JIRA ticket below).
