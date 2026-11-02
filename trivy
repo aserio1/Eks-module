@@ -1,98 +1,391 @@
-17:17:44  + for req_file in $REQUIREMENTS
-17:17:44  + IFS=
-17:17:44  + read -r requirements_file
-17:17:44  + find . -iname requirements-dev.txt
-17:17:44  [Pipeline] }
-17:17:45  [Pipeline] // withEnv
-17:17:45  [Pipeline] }
-17:17:45  [Pipeline] // ws
-17:17:45  [Pipeline] }
-17:17:45  [Pipeline] // node
-17:17:45  [Pipeline] }
-17:17:45  [Pipeline] // stage
-17:17:45  [Pipeline] ws
-17:17:45  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts
-17:17:45  [Pipeline] {
-17:17:46  [Pipeline] sh
-17:17:46  + /home/jenkins/anaconda3/envs/python312/bin/python3 -u cleanup_jenkins_efs.py --stale-days 90 --max-seconds 300 --csv jenkins_stale_list.csv
-17:17:46  ======================================
-17:17:46  JENKINS EFS CLEANUP
-17:17:46  ======================================
-17:17:46  Scanning          : /home/jenkins/workspace
-17:17:46  Retention period  : 90 days
-17:17:46  Max scan time     : 300 seconds
-17:17:46  CSV report        : /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts/jenkins_stale_list.csv
-17:17:46  Terraform cleanup : ENABLED
-17:17:46  Stale builds      : REPORT ONLY
-17:17:46  
-17:17:46  Initial filesystem used: 564.36 GB
-17:18:25  Scanned: 5000 | Terraform: 0 | Stale builds: 36
-17:18:57  Scanned: 10000 | Terraform: 0 | Stale builds: 44
-17:19:29  Scanned: 15000 | Terraform: 0 | Stale builds: 50
-17:20:08  Scanned: 20000 | Terraform: 0 | Stale builds: 58
-17:20:40  Scanned: 25000 | Terraform: 0 | Stale builds: 66
-17:21:12  Scanned: 30000 | Terraform: 0 | Stale builds: 77
-17:21:44  Scanned: 35000 | Terraform: 0 | Stale builds: 85
-17:22:16  Scanned: 40000 | Terraform: 0 | Stale builds: 89
-17:22:48  CSV report generated: /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts/jenkins_stale_list.csv
-17:22:48  
-17:22:48  ======================================
-17:22:48  JENKINS EFS CLEANUP SUMMARY
-17:22:48  ======================================
-17:22:48  Directories scanned          : 44798
-17:22:48  Terraform directories found  : 0
-17:22:48  Stale Terraform directories  : 0
-17:22:48  Terraform directories deleted: 0
-17:22:48  Terraform deletion failures  : 0
-17:22:48  Numeric directories found    : 153
-17:22:48  Stale build directories      : 103
-17:22:48  Scan errors                  : 0
-17:22:48  Directory inventory time     : 300.00 seconds
-17:22:48  Initial filesystem usage     : 564.36 GB
-17:22:48  Final filesystem usage       : 564.36 GB
-17:22:48  Filesystem usage reduction   : 0.00 GB
-17:22:48  Estimated Terraform reclaimed: 0.00 GB
-17:22:48  CSV report                   : /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts/jenkins_stale_list.csv
-17:22:48  Scan status                  : PARTIAL
-17:22:48  Stale build folders deleted  : 0
-17:22:48  ======================================
-17:22:48  WARNING: Inventory reached its time limit. The CSV contains only directories discovered so far.
-17:22:48  [Pipeline] }
-17:22:48  [Pipeline] // ws
-17:22:48  [Pipeline] }
-17:22:48  [Pipeline] // script
-17:22:48  [Pipeline] }
-17:22:49  [Pipeline] // stage
-17:22:49  [Pipeline] stage
-17:22:49  [Pipeline] { (Declarative: Post Actions)
-17:22:49  [Pipeline] script
-17:22:49  [Pipeline] {
-17:22:49  [Pipeline] ws
-17:22:49  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts
-17:22:49  [Pipeline] {
-17:22:49  [Pipeline] echo
-17:22:49  ======================================
-17:22:50  [Pipeline] echo
-17:22:50  Archiving Jenkins dry-run CSV
-17:22:50  [Pipeline] echo
-17:22:50  ======================================
-17:22:50  [Pipeline] archiveArtifacts
-17:22:50  Archiving artifacts
-17:22:50  Recording fingerprints
-17:22:50  [Pipeline] }
-17:22:50  [Pipeline] // ws
-17:22:50  [Pipeline] }
-17:22:51  [Pipeline] // script
-17:22:51  [Pipeline] echo
-17:22:51  EFS Cleanup dry run failed. Check console output.
-17:22:51  [Pipeline] }
-17:22:51  [Pipeline] // stage
-17:22:51  [Pipeline] }
-17:22:51  [Pipeline] // withEnv
-17:22:51  [Pipeline] }
-17:22:51  [Pipeline] // node
-17:22:52  [Pipeline] End of Pipeline
-17:22:53  
-17:22:53  GitHub has been notified of this commit’s build result
-17:22:53  
-17:22:54  Finished: FAILURE
+
+#!/usr/bin/env python3
+
+# Jenkins EFS Cleanup - DRY RUN
+#
+# Identifies .terraform directories without deleting them.
+# Identifies potential Jenkins build directories older than 90 days.
+# Generates a CSV report for Jenkins artifacts.
+# Uses df to retrieve filesystem usage without recursive size calculation.
+#
+# DRY RUN ONLY - NO WORKSPACE FILES OR DIRECTORIES ARE DELETED.
+
+import os
+import sys
+import csv
+import time
+import argparse
+import subprocess
+
+from datetime import datetime, timezone
+
+ROOT_DIR = "/home/jenkins/workspace"
+MAX_WORKERS = 8
+STALE_DAYS = 90
+
+MAX_SCAN_SECONDS = 300
+PROGRESS_INTERVAL = 5000
+
+CSV_FILE = "jenkins_stale_list.csv"
+
+DRY_RUN = True
+
+
+def format_date(timestamp):
+    """Convert modification timestamp to readable UTC date."""
+
+    return datetime.fromtimestamp(
+        timestamp,
+        tz=timezone.utc
+    ).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def get_filesystem_usage(path):
+    """
+    Retrieve filesystem usage using df.
+
+    Reports usage of the mounted filesystem,
+    not the workspace directory alone.
+    """
+
+    try:
+        result = subprocess.run(
+            ["df", "-B1", "-P", path],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30
+        )
+
+        lines = result.stdout.strip().splitlines()
+
+        if len(lines) < 2:
+            raise RuntimeError("Unexpected df output")
+
+        fields = lines[-1].split()
+
+        return {
+            "filesystem": fields[0],
+            "total": int(fields[1]),
+            "used": int(fields[2]),
+            "available": int(fields[3])
+        }
+
+    except Exception as error:
+        print(
+            f"WARNING: Unable to retrieve filesystem usage: {error}",
+            flush=True
+        )
+        return None
+
+
+def scan_workspaces(root, stale_days, max_seconds):
+    """
+    Discover:
+      1. All .terraform directories.
+      2. Numeric Jenkins build-directory candidates
+         older than the retention period.
+
+    No deletion is performed.
+
+    Stop scanning when the configured time limit is reached.
+    """
+
+    cutoff = time.time() - (stale_days * 86400)
+    start_time = time.monotonic()
+
+    stack = [root]
+
+    terraform_dirs = []
+    stale_build_dirs = []
+
+    stats = {
+        "directories_scanned": 0,
+        "terraform_found": 0,
+        "stale_terraform": 0,
+        "build_dirs_found": 0,
+        "stale_build_dirs": 0,
+        "errors": 0,
+        "timed_out": False
+    }
+
+    while stack:
+
+        if time.monotonic() - start_time >= max_seconds:
+            stats["timed_out"] = True
+            break
+
+        current = stack.pop()
+        stats["directories_scanned"] += 1
+
+        if stats["directories_scanned"] % PROGRESS_INTERVAL == 0:
+            print(
+                f"Scanned: {stats['directories_scanned']} | "
+                f"Terraform: {stats['terraform_found']} | "
+                f"Stale builds: {stats['stale_build_dirs']}",
+                flush=True
+            )
+
+        try:
+            with os.scandir(current) as entries:
+
+                for entry in entries:
+
+                    if time.monotonic() - start_time >= max_seconds:
+                        stats["timed_out"] = True
+                        break
+
+                    try:
+                        if not entry.is_dir(follow_symlinks=False):
+                            continue
+
+                        if entry.name == ".terraform":
+
+                            info = entry.stat(follow_symlinks=False)
+
+                            stats["terraform_found"] += 1
+
+                            if info.st_mtime < cutoff:
+                                stats["stale_terraform"] += 1
+
+                            terraform_dirs.append({
+                                "path": entry.path,
+                                "mtime": info.st_mtime
+                            })
+
+                            continue
+
+                        if entry.name.isdigit():
+
+                            info = entry.stat(follow_symlinks=False)
+
+                            stats["build_dirs_found"] += 1
+
+                            if info.st_mtime < cutoff:
+
+                                stats["stale_build_dirs"] += 1
+
+                                stale_build_dirs.append({
+                                    "path": entry.path,
+                                    "mtime": info.st_mtime
+                                })
+
+                        stack.append(entry.path)
+
+                    except OSError as error:
+
+                        stats["errors"] += 1
+
+                        print(
+                            f"WARNING: Cannot inspect "
+                            f"{entry.path}: {error}",
+                            flush=True
+                        )
+
+        except OSError as error:
+
+            stats["errors"] += 1
+
+            print(
+                f"WARNING: Cannot scan {current}: {error}",
+                flush=True
+            )
+
+        if stats["timed_out"]:
+            break
+
+    stats["elapsed"] = time.monotonic() - start_time
+
+    return terraform_dirs, stale_build_dirs, stats
+
+
+def write_csv(filename, terraform_dirs, stale_build_dirs):
+    """
+    Generate a dry-run CSV report.
+
+    No workspace files or directories are modified or deleted.
+    """
+
+    now = time.time()
+
+    with open(
+        filename,
+        "w",
+        newline="",
+        encoding="utf-8"
+    ) as csvfile:
+
+        writer = csv.writer(csvfile)
+
+        writer.writerow([
+            "Type",
+            "Directory Path",
+            "Last Modified",
+            "Age (Days)",
+            "Cleanup Status"
+        ])
+
+        for item in sorted(
+            terraform_dirs,
+            key=lambda x: x["path"]
+        ):
+
+            writer.writerow([
+                ".terraform",
+                item["path"],
+                format_date(item["mtime"]),
+                int((now - item["mtime"]) / 86400),
+                "Dry Run - Not Deleted"
+            ])
+
+        for item in sorted(
+            stale_build_dirs,
+            key=lambda x: x["path"]
+        ):
+
+            writer.writerow([
+                "Stale Build Directory",
+                item["path"],
+                format_date(item["mtime"]),
+                int((now - item["mtime"]) / 86400),
+                "Dry Run - Not Deleted"
+            ])
+
+    print(
+        f"CSV report generated: {os.path.abspath(filename)}",
+        flush=True
+    )
+
+
+def main():
+
+    parser = argparse.ArgumentParser(
+        description="Jenkins EFS cleanup - dry run only"
+    )
+
+    parser.add_argument(
+        "--root",
+        default=ROOT_DIR
+    )
+
+    parser.add_argument(
+        "--stale-days",
+        type=int,
+        default=STALE_DAYS
+    )
+
+    parser.add_argument(
+        "--max-seconds",
+        type=int,
+        default=MAX_SCAN_SECONDS
+    )
+
+    parser.add_argument(
+        "--csv",
+        default=CSV_FILE
+    )
+
+    args = parser.parse_args()
+
+    if args.stale_days < 0 or args.max_seconds <= 0:
+        parser.error("Invalid retention or scan-time value")
+
+    root = os.path.abspath(args.root)
+    csv_path = os.path.abspath(args.csv)
+
+    print("======================================")
+    print("JENKINS EFS CLEANUP - DRY RUN")
+    print("======================================")
+    print(f"Scanning          : {root}")
+    print(f"Retention period  : {args.stale_days} days")
+    print(f"Max scan time     : {args.max_seconds} seconds")
+    print(f"CSV report        : {csv_path}")
+    print("Terraform cleanup : DRY RUN")
+    print("Stale builds      : DRY RUN")
+    print("Deletion enabled  : NO")
+    print()
+
+    if not os.path.isdir(root):
+        print(
+            f"ERROR: Workspace directory not accessible: {root}",
+            file=sys.stderr
+        )
+        sys.exit(1)
+
+    # Retrieve filesystem usage without recursive scanning.
+    initial_usage = get_filesystem_usage(root)
+
+    if initial_usage:
+        print(
+            f"Initial filesystem used: "
+            f"{initial_usage['used'] / (1024 ** 3):.2f} GB",
+            flush=True
+        )
+
+    # Discover Terraform and stale build directories.
+    terraform_dirs, stale_build_dirs, stats = scan_workspaces(
+        root,
+        args.stale_days,
+        args.max_seconds
+    )
+
+    # DRY RUN: No deletion function is called.
+    # Only generate the CSV report.
+    write_csv(
+        csv_path,
+        terraform_dirs,
+        stale_build_dirs
+    )
+
+    final_usage = get_filesystem_usage(root)
+
+    print()
+    print("======================================")
+    print("JENKINS EFS CLEANUP SUMMARY")
+    print("======================================")
+    print(f"Directories scanned          : {stats['directories_scanned']}")
+    print(f"Terraform directories found  : {stats['terraform_found']}")
+    print(f"Stale Terraform directories  : {stats['stale_terraform']}")
+    print("Terraform directories deleted: 0")
+    print(f"Numeric directories found    : {stats['build_dirs_found']}")
+    print(f"Stale build directories      : {stats['stale_build_dirs']}")
+    print("Stale build folders deleted  : 0")
+    print(f"Scan errors                  : {stats['errors']}")
+    print(f"Directory inventory time     : {stats['elapsed']:.2f} seconds")
+
+    if initial_usage:
+        print(
+            f"Initial filesystem usage     : "
+            f"{initial_usage['used'] / (1024 ** 3):.2f} GB"
+        )
+
+    if final_usage:
+        print(
+            f"Final filesystem usage       : "
+            f"{final_usage['used'] / (1024 ** 3):.2f} GB"
+        )
+
+    print("Space reclaimed              : 0.00 GB (Dry Run)")
+    print(f"CSV report                   : {csv_path}")
+
+    print(
+        f"Scan status                  : "
+        f"{'PARTIAL' if stats['timed_out'] or stats['errors'] else 'COMPLETE'}"
+    )
+
+    print("DRY RUN COMPLETE - NO WORKSPACE FILES DELETED")
+    print("======================================")
+
+    if stats["timed_out"]:
+        print(
+            "WARNING: Inventory reached its time limit. "
+            "The CSV contains only directories discovered so far.",
+            flush=True
+        )
+
+    if stats["errors"]:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
