@@ -3,16 +3,15 @@
 
 # Jenkins EFS Cleanup
 #
-# Deletes .terraform directories found in Jenkins workspace.
-# Identifies potential Jenkins build directories older than 90 days.
+# Deletes recursively .terraform directories
+# found in /home/jenkins/workspace.
+#
+# Identifies stale Jenkins build directories older than 90 days.
 # Generates a CSV report for Jenkins artifacts.
-# Displays estimated space reclaimed.
+# Calculates entire workspace size and estimated space reclaimed.
 #
-# Terraform directories: DELETE
-# Stale build directories: REPORT ONLY
-#
-# No hardcoded project names.
-# No full workspace size calculation.
+# .terraform directories: DELETE
+# Stale Jenkins build directories: REPORT ONLY
 
 import os
 import sys
@@ -38,7 +37,8 @@ print_lock = Lock()
 
 
 def format_date(timestamp):
-    """Convert a timestamp to a readable UTC date."""
+    """Convert modification timestamp to readable UTC date."""
+
     return datetime.fromtimestamp(
         timestamp,
         tz=timezone.utc
@@ -47,33 +47,40 @@ def format_date(timestamp):
 
 def get_dir_size_fast(path):
     """
-    Calculate file sizes inside a .terraform directory.
+    Calculate total file size recursively using os.scandir.
 
-    Does not calculate the size of the entire workspace.
+    Used for:
+      1. Entire workspace size before cleanup.
+      2. Individual .terraform directories before deletion.
     """
 
     total = 0
     stack = [path]
 
     while stack:
+
         current = stack.pop()
 
         try:
             with os.scandir(current) as entries:
+
                 for entry in entries:
+
                     try:
                         if entry.is_file(follow_symlinks=False):
+
                             total += entry.stat(
                                 follow_symlinks=False
                             ).st_size
 
                         elif entry.is_dir(follow_symlinks=False):
+
                             stack.append(entry.path)
 
-                    except OSError:
+                    except (PermissionError, FileNotFoundError):
                         pass
 
-        except OSError:
+        except (PermissionError, FileNotFoundError):
             pass
 
     return total
@@ -81,15 +88,15 @@ def get_dir_size_fast(path):
 
 def scan_workspaces(root, stale_days, max_seconds):
     """
-    Scan Jenkins workspace directories.
+    Discover:
+      1. All .terraform directories.
+      2. Numeric Jenkins build-directory candidates
+         older than the retention period.
 
-    Find all .terraform directories and numeric directories
-    older than the retention period.
+    Continue scanning numeric directories to discover
+    Terraform caches inside build workspaces.
 
-    Continue scanning inside numeric directories to locate
-    Terraform caches inside Jenkins build workspaces.
-
-    Stop inventory when the configured scan limit is reached.
+    Stop inventory when the scan time limit is reached.
     """
 
     cutoff = time.time() - (stale_days * 86400)
@@ -120,6 +127,7 @@ def scan_workspaces(root, stale_days, max_seconds):
         stats["directories_scanned"] += 1
 
         if stats["directories_scanned"] % PROGRESS_INTERVAL == 0:
+
             print(
                 f"Scanned: {stats['directories_scanned']} | "
                 f"Terraform: {stats['terraform_found']} | "
@@ -128,16 +136,20 @@ def scan_workspaces(root, stale_days, max_seconds):
             )
 
         try:
+
             with os.scandir(current) as entries:
+
                 for entry in entries:
 
                     try:
+
                         if not entry.is_dir(follow_symlinks=False):
                             continue
 
                         info = entry.stat(follow_symlinks=False)
 
                         if entry.name == ".terraform":
+
                             stats["terraform_found"] += 1
 
                             if info.st_mtime < cutoff:
@@ -148,13 +160,15 @@ def scan_workspaces(root, stale_days, max_seconds):
                                 "mtime": info.st_mtime
                             })
 
-                            # Do not descend into Terraform caches.
+                            # Do not scan inside Terraform caches.
                             continue
 
                         if entry.name.isdigit():
+
                             stats["build_dirs_found"] += 1
 
                             if info.st_mtime < cutoff:
+
                                 stats["stale_build_dirs"] += 1
 
                                 stale_build_dirs.append({
@@ -165,7 +179,9 @@ def scan_workspaces(root, stale_days, max_seconds):
                         stack.append(entry.path)
 
                     except OSError as error:
+
                         stats["errors"] += 1
+
                         print(
                             f"WARNING: Cannot inspect "
                             f"{entry.path}: {error}",
@@ -173,7 +189,9 @@ def scan_workspaces(root, stale_days, max_seconds):
                         )
 
         except OSError as error:
+
             stats["errors"] += 1
+
             print(
                 f"WARNING: Cannot scan {current}: {error}",
                 flush=True
@@ -186,7 +204,7 @@ def scan_workspaces(root, stale_days, max_seconds):
 
 def delete_terraform_dir(item):
     """
-    Delete a .terraform directory and estimate bytes reclaimed.
+    Delete a .terraform directory and calculate its size.
 
     All discovered .terraform directories are deleted,
     regardless of age, matching the original cleanup job.
@@ -195,11 +213,13 @@ def delete_terraform_dir(item):
     path = item["path"]
 
     try:
+
         size = get_dir_size_fast(path)
 
         shutil.rmtree(path)
 
         with print_lock:
+
             print(
                 f"Deleted: {path} | "
                 f"Estimated reclaimed: "
@@ -214,6 +234,7 @@ def delete_terraform_dir(item):
         }
 
     except Exception as error:
+
         with print_lock:
             print(
                 f"Failed to delete {path}: {error}",
@@ -229,8 +250,8 @@ def delete_terraform_dir(item):
 
 def write_csv(filename, terraform_results, stale_build_dirs):
     """
-    Write Terraform deletion results and stale build-directory
-    candidates into one CSV report.
+    Generate CSV report of Terraform cleanup and
+    stale Jenkins build-directory candidates.
     """
 
     now = time.time()
@@ -257,6 +278,7 @@ def write_csv(filename, terraform_results, stale_build_dirs):
             terraform_results,
             key=lambda x: x["path"]
         ):
+
             writer.writerow([
                 ".terraform",
                 item["path"],
@@ -273,6 +295,7 @@ def write_csv(filename, terraform_results, stale_build_dirs):
             stale_build_dirs,
             key=lambda x: x["path"]
         ):
+
             writer.writerow([
                 "Stale Build Directory",
                 item["path"],
@@ -296,8 +319,7 @@ def main():
 
     parser.add_argument(
         "--root",
-        default=ROOT_DIR,
-        help="Workspace storage path"
+        default=ROOT_DIR
     )
 
     parser.add_argument(
@@ -337,12 +359,32 @@ def main():
     print()
 
     if not os.path.isdir(root):
+
         print(
             f"ERROR: Workspace directory not accessible: {root}",
             file=sys.stderr
         )
+
         sys.exit(1)
 
+    # Calculate the entire workspace size once.
+    print(
+        "Calculating initial workspace size...",
+        flush=True
+    )
+
+    size_start = time.monotonic()
+    initial_size = get_dir_size_fast(root)
+    size_elapsed = time.monotonic() - size_start
+
+    print(
+        f"Initial workspace size: "
+        f"{initial_size / (1024 ** 3):.2f} GB "
+        f"({size_elapsed:.2f} seconds)",
+        flush=True
+    )
+
+    # Discover Terraform and stale build directories.
     terraform_dirs, stale_build_dirs, stats = scan_workspaces(
         root,
         args.stale_days,
@@ -352,16 +394,21 @@ def main():
     terraform_results = []
 
     # Delete all Terraform directories discovered during the scan.
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    with ThreadPoolExecutor(
+        max_workers=MAX_WORKERS
+    ) as executor:
+
         futures = [
             executor.submit(delete_terraform_dir, item)
             for item in terraform_dirs
         ]
 
         for future in as_completed(futures):
-            terraform_results.append(future.result())
+            terraform_results.append(
+                future.result()
+            )
 
-    # Always generate the CSV after processing discovered paths.
+    # Generate CSV for Jenkins artifact archiving.
     write_csv(
         csv_path,
         terraform_results,
@@ -383,6 +430,9 @@ def main():
         for item in terraform_results
     )
 
+    # Estimate final workspace size without another full scan.
+    final_size = max(0, initial_size - freed_bytes)
+
     print()
     print("======================================")
     print("JENKINS EFS CLEANUP SUMMARY")
@@ -395,9 +445,11 @@ def main():
     print(f"Numeric directories found    : {stats['build_dirs_found']}")
     print(f"Stale build directories      : {stats['stale_build_dirs']}")
     print(f"Scan errors                  : {stats['errors']}")
-    print(f"Scan time                    : {stats['elapsed']:.2f} seconds")
-    print(f"Estimated space reclaimed MB : {freed_bytes / (1024 ** 2):.2f} MB")
-    print(f"Estimated space reclaimed GB : {freed_bytes / (1024 ** 3):.2f} GB")
+    print(f"Initial workspace size       : {initial_size / (1024 ** 3):.2f} GB")
+    print(f"Estimated final size         : {final_size / (1024 ** 3):.2f} GB")
+    print(f"Estimated freed space        : {freed_bytes / (1024 ** 3):.2f} GB")
+    print(f"Workspace size scan time     : {size_elapsed:.2f} seconds")
+    print(f"Directory inventory time     : {stats['elapsed']:.2f} seconds")
     print(f"CSV report                   : {csv_path}")
     print(
         f"Scan status                  : "
@@ -408,7 +460,7 @@ def main():
 
     if stats["timed_out"]:
         print(
-            "WARNING: Scan reached its time limit. "
+            "WARNING: Inventory reached its time limit. "
             "The CSV contains only directories discovered so far.",
             flush=True
         )
