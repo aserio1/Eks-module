@@ -1,92 +1,420 @@
+
 #!/usr/bin/env python3
 
-# This script deletes recursively .terraform dirs
-# found in /home/jenkins/workspace.
-# Executed via a Jenkins job that runs daily during off hours.
+# Jenkins EFS Cleanup
+#
+# Deletes .terraform directories found in Jenkins workspace.
+# Identifies potential Jenkins build directories older than 90 days.
+# Generates a CSV report for Jenkins artifacts.
+# Displays estimated space reclaimed.
+#
+# Terraform directories: DELETE
+# Stale build directories: REPORT ONLY
+#
+# No hardcoded project names.
+# No full workspace size calculation.
 
 import os
+import sys
+import csv
+import time
 import shutil
+import argparse
+
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 
 ROOT_DIR = "/home/jenkins/workspace"
-MAX_WORKERS = 8  # Tune based on EFS throughput limits
+MAX_WORKERS = 8
+STALE_DAYS = 90
+
+MAX_SCAN_SECONDS = 300
+PROGRESS_INTERVAL = 5000
+
+CSV_FILE = "jenkins_stale_list.csv"
 
 print_lock = Lock()
-stats_lock = Lock()
-freed_space = 0
+
+
+def format_date(timestamp):
+    """Convert a timestamp to a readable UTC date."""
+    return datetime.fromtimestamp(
+        timestamp,
+        tz=timezone.utc
+    ).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def get_dir_size_fast(path):
-    """Use os.scandir recursively for faster size calculation."""
+    """
+    Calculate file sizes inside a .terraform directory.
+
+    Does not calculate the size of the entire workspace.
+    """
+
     total = 0
-    try:
-        with os.scandir(path) as it:
-            for entry in it:
-                try:
-                    if entry.is_file(follow_symlinks=False):
-                        total += entry.stat(follow_symlinks=False).st_size
-                    elif entry.is_dir(follow_symlinks=False):
-                        total += get_dir_size_fast(entry.path)
-                except (PermissionError, FileNotFoundError):
-                    pass
-    except (PermissionError, FileNotFoundError):
-        pass
+    stack = [path]
+
+    while stack:
+        current = stack.pop()
+
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_file(follow_symlinks=False):
+                            total += entry.stat(
+                                follow_symlinks=False
+                            ).st_size
+
+                        elif entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+
+                    except OSError:
+                        pass
+
+        except OSError:
+            pass
+
     return total
 
 
-def delete_terraform_dir(path):
-    """Delete a single .terraform dir and return bytes freed."""
-    size = get_dir_size_fast(path)
+def scan_workspaces(root, stale_days, max_seconds):
+    """
+    Scan Jenkins workspace directories.
+
+    Find all .terraform directories and numeric directories
+    older than the retention period.
+
+    Continue scanning inside numeric directories to locate
+    Terraform caches inside Jenkins build workspaces.
+
+    Stop inventory when the configured scan limit is reached.
+    """
+
+    cutoff = time.time() - (stale_days * 86400)
+    start_time = time.monotonic()
+
+    stack = [root]
+
+    terraform_dirs = []
+    stale_build_dirs = []
+
+    stats = {
+        "directories_scanned": 0,
+        "terraform_found": 0,
+        "stale_terraform": 0,
+        "build_dirs_found": 0,
+        "stale_build_dirs": 0,
+        "errors": 0,
+        "timed_out": False
+    }
+
+    while stack:
+
+        if time.monotonic() - start_time >= max_seconds:
+            stats["timed_out"] = True
+            break
+
+        current = stack.pop()
+        stats["directories_scanned"] += 1
+
+        if stats["directories_scanned"] % PROGRESS_INTERVAL == 0:
+            print(
+                f"Scanned: {stats['directories_scanned']} | "
+                f"Terraform: {stats['terraform_found']} | "
+                f"Stale builds: {stats['stale_build_dirs']}",
+                flush=True
+            )
+
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+
+                    try:
+                        if not entry.is_dir(follow_symlinks=False):
+                            continue
+
+                        info = entry.stat(follow_symlinks=False)
+
+                        if entry.name == ".terraform":
+                            stats["terraform_found"] += 1
+
+                            if info.st_mtime < cutoff:
+                                stats["stale_terraform"] += 1
+
+                            terraform_dirs.append({
+                                "path": entry.path,
+                                "mtime": info.st_mtime
+                            })
+
+                            # Do not descend into Terraform caches.
+                            continue
+
+                        if entry.name.isdigit():
+                            stats["build_dirs_found"] += 1
+
+                            if info.st_mtime < cutoff:
+                                stats["stale_build_dirs"] += 1
+
+                                stale_build_dirs.append({
+                                    "path": entry.path,
+                                    "mtime": info.st_mtime
+                                })
+
+                        stack.append(entry.path)
+
+                    except OSError as error:
+                        stats["errors"] += 1
+                        print(
+                            f"WARNING: Cannot inspect "
+                            f"{entry.path}: {error}",
+                            flush=True
+                        )
+
+        except OSError as error:
+            stats["errors"] += 1
+            print(
+                f"WARNING: Cannot scan {current}: {error}",
+                flush=True
+            )
+
+    stats["elapsed"] = time.monotonic() - start_time
+
+    return terraform_dirs, stale_build_dirs, stats
+
+
+def delete_terraform_dir(item):
+    """
+    Delete a .terraform directory and estimate bytes reclaimed.
+
+    All discovered .terraform directories are deleted,
+    regardless of age, matching the original cleanup job.
+    """
+
+    path = item["path"]
+
     try:
+        size = get_dir_size_fast(path)
+
         shutil.rmtree(path)
+
         with print_lock:
-            print(f"Deleted: {path}")
-        return size
-    except Exception as e:
+            print(
+                f"Deleted: {path} | "
+                f"Estimated reclaimed: "
+                f"{size / (1024 ** 2):.2f} MB",
+                flush=True
+            )
+
+        return {
+            **item,
+            "status": "Deleted",
+            "bytes_freed": size
+        }
+
+    except Exception as error:
         with print_lock:
-            print(f"Failed to delete {path}: {e}")
-        return 0
+            print(
+                f"Failed to delete {path}: {error}",
+                flush=True
+            )
+
+        return {
+            **item,
+            "status": f"Failed: {error}",
+            "bytes_freed": 0
+        }
 
 
-def find_terraform_dirs(root):
+def write_csv(filename, terraform_results, stale_build_dirs):
     """
-    Walk the tree with os.scandir and prune traversal into .terraform dirs
-    (no need to recurse into them — we're deleting the whole thing).
+    Write Terraform deletion results and stale build-directory
+    candidates into one CSV report.
     """
-    try:
-        with os.scandir(root) as it:
-            for entry in it:
-                if not entry.is_dir(follow_symlinks=False):
-                    continue
-                if entry.name == ".terraform":
-                    yield entry.path
-                else:
-                    yield from find_terraform_dirs(entry.path)
-    except (PermissionError, FileNotFoundError) as e:
-        print(f"Cannot access {root}: {e}")
+
+    now = time.time()
+
+    with open(
+        filename,
+        "w",
+        newline="",
+        encoding="utf-8"
+    ) as csvfile:
+
+        writer = csv.writer(csvfile)
+
+        writer.writerow([
+            "Type",
+            "Directory Path",
+            "Last Modified",
+            "Age (Days)",
+            "Cleanup Status",
+            "Space Reclaimed (MB)"
+        ])
+
+        for item in sorted(
+            terraform_results,
+            key=lambda x: x["path"]
+        ):
+            writer.writerow([
+                ".terraform",
+                item["path"],
+                format_date(item["mtime"]),
+                int((now - item["mtime"]) / 86400),
+                item["status"],
+                round(
+                    item.get("bytes_freed", 0) / (1024 ** 2),
+                    2
+                )
+            ])
+
+        for item in sorted(
+            stale_build_dirs,
+            key=lambda x: x["path"]
+        ):
+            writer.writerow([
+                "Stale Build Directory",
+                item["path"],
+                format_date(item["mtime"]),
+                int((now - item["mtime"]) / 86400),
+                "Dry Run - Not Deleted",
+                0
+            ])
+
+    print(
+        f"CSV report generated: {os.path.abspath(filename)}",
+        flush=True
+    )
 
 
 def main():
-    global freed_space
 
-    print(f"Scanning: {ROOT_DIR}\n")
-    initial_size = get_dir_size_fast(ROOT_DIR)
+    parser = argparse.ArgumentParser(
+        description="Jenkins EFS cleanup with CSV reporting"
+    )
 
-    terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
-    print(f"Found {len(terraform_dirs)} .terraform director{'y' if len(terraform_dirs) == 1 else 'ies'}\n")
+    parser.add_argument(
+        "--root",
+        default=ROOT_DIR,
+        help="Workspace storage path"
+    )
 
+    parser.add_argument(
+        "--stale-days",
+        type=int,
+        default=STALE_DAYS
+    )
+
+    parser.add_argument(
+        "--max-seconds",
+        type=int,
+        default=MAX_SCAN_SECONDS
+    )
+
+    parser.add_argument(
+        "--csv",
+        default=CSV_FILE
+    )
+
+    args = parser.parse_args()
+
+    if args.stale_days < 0 or args.max_seconds <= 0:
+        parser.error("Invalid retention or scan-time value")
+
+    root = os.path.abspath(args.root)
+    csv_path = os.path.abspath(args.csv)
+
+    print("======================================")
+    print("JENKINS EFS CLEANUP")
+    print("======================================")
+    print(f"Scanning          : {root}")
+    print(f"Retention period  : {args.stale_days} days")
+    print(f"Max scan time     : {args.max_seconds} seconds")
+    print(f"CSV report        : {csv_path}")
+    print("Terraform cleanup : ENABLED")
+    print("Stale builds      : REPORT ONLY")
+    print()
+
+    if not os.path.isdir(root):
+        print(
+            f"ERROR: Workspace directory not accessible: {root}",
+            file=sys.stderr
+        )
+        sys.exit(1)
+
+    terraform_dirs, stale_build_dirs, stats = scan_workspaces(
+        root,
+        args.stale_days,
+        args.max_seconds
+    )
+
+    terraform_results = []
+
+    # Delete all Terraform directories discovered during the scan.
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {executor.submit(delete_terraform_dir, d): d for d in terraform_dirs}
+        futures = [
+            executor.submit(delete_terraform_dir, item)
+            for item in terraform_dirs
+        ]
+
         for future in as_completed(futures):
-            with stats_lock:
-                freed_space += future.result()
+            terraform_results.append(future.result())
 
-    final_size = initial_size - freed_space
+    # Always generate the CSV after processing discovered paths.
+    write_csv(
+        csv_path,
+        terraform_results,
+        stale_build_dirs
+    )
 
-    print(f"\nInitial size : {initial_size / (1024 ** 3):.2f} GB")
-    print(f"Final size   : {final_size / (1024 ** 3):.2f} GB")
-    print(f"Freed space  : {freed_space / (1024 ** 3):.2f} GB")
+    deleted = sum(
+        item["status"] == "Deleted"
+        for item in terraform_results
+    )
+
+    failed = sum(
+        item["status"].startswith("Failed:")
+        for item in terraform_results
+    )
+
+    freed_bytes = sum(
+        item.get("bytes_freed", 0)
+        for item in terraform_results
+    )
+
+    print()
+    print("======================================")
+    print("JENKINS EFS CLEANUP SUMMARY")
+    print("======================================")
+    print(f"Directories scanned          : {stats['directories_scanned']}")
+    print(f"Terraform directories found  : {stats['terraform_found']}")
+    print(f"Stale Terraform directories  : {stats['stale_terraform']}")
+    print(f"Terraform directories deleted: {deleted}")
+    print(f"Terraform deletion failures  : {failed}")
+    print(f"Numeric directories found    : {stats['build_dirs_found']}")
+    print(f"Stale build directories      : {stats['stale_build_dirs']}")
+    print(f"Scan errors                  : {stats['errors']}")
+    print(f"Scan time                    : {stats['elapsed']:.2f} seconds")
+    print(f"Estimated space reclaimed MB : {freed_bytes / (1024 ** 2):.2f} MB")
+    print(f"Estimated space reclaimed GB : {freed_bytes / (1024 ** 3):.2f} GB")
+    print(f"CSV report                   : {csv_path}")
+    print(
+        f"Scan status                  : "
+        f"{'PARTIAL' if stats['timed_out'] or stats['errors'] else 'COMPLETE'}"
+    )
+    print("Stale build folders deleted  : 0")
+    print("======================================")
+
+    if stats["timed_out"]:
+        print(
+            "WARNING: Scan reached its time limit. "
+            "The CSV contains only directories discovered so far.",
+            flush=True
+        )
+
+    if failed or stats["errors"]:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
