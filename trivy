@@ -1,74 +1,76 @@
-
-customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
-
-pipeline {
-    agent { label jte.keywords.project }
-
-    triggers {
-        cron('0 2 * * 1-5') // Every Monday-Friday at 2:00 AM Jenkins server time.
-    }
-
-    stages {
-        stage('Disable Concurrent Builds') {
-            steps {
-                echo "Disabling Concurrent Builds"
-                script {
-                    disable_concurrent_builds()
-                }
-            }
-        }
-
-        stage('Checkout') {
-            steps {
-                script {
-                    git_checkout()
-                }
-            }
-        }
-
-        stage('Run EFS Cleanup') {
-            steps {
-                echo "Starting EFS Cleanup..."
-                script {
-                    setup()
-
-                    ws("${customPath}/admin/scripts") {
-                        sh """
-                            /home/jenkins/anaconda3/envs/python312/bin/python3 -u \
-                                cleanup_jenkins_efs.py \
-                                --csv jenkins_stale_list.csv \
-                                --stale-days 90 \
-                                --max-seconds 300
-                        """
-                    }
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            script {
-                ws("${customPath}/admin/scripts") {
-                    echo "======================================"
-                    echo "Archiving Jenkins stale CSV"
-                    echo "======================================"
-
-                    archiveArtifacts artifacts: 'jenkins_stale_list.csv',
-                                     allowEmptyArchive: true,
-                                     fingerprint: true,
-                                     onlyIfSuccessful: false
-                }
-            }
-        }
-
-        success {
-            echo 'EFS Cleanup completed successfully!'
-        }
-
-        failure {
-            echo 'EFS Cleanup failed. Check console output for details.'
-            // email_via_sns()
-        }
-    }
-}
+  + /home/jenkins/anaconda3/envs/python312/bin/python3 -u cleanup_jenkins_efs.py --csv jenkins_stale_list.csv --stale-days 90 --max-seconds 300
+09:39:17  ======================================
+09:39:17  JENKINS EFS CLEANUP
+09:39:17  ======================================
+09:39:17  Scanning          : /home/jenkins/workspace
+09:39:17  Retention period  : 90 days
+09:39:17  Max scan time     : 300 seconds
+09:39:17  CSV report        : /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/26/admin/scripts/jenkins_stale_list.csv
+09:39:17  Terraform cleanup : ENABLED
+09:39:17  Stale builds      : REPORT ONLY
+09:39:17  
+09:39:55  Scanned: 5000 | Terraform: 0 | Stale builds: 13
+09:40:28  Scanned: 10000 | Terraform: 0 | Stale builds: 22
+09:41:06  Scanned: 15000 | Terraform: 0 | Stale builds: 27
+09:41:38  Scanned: 20000 | Terraform: 0 | Stale builds: 36
+09:42:05  Scanned: 25000 | Terraform: 0 | Stale builds: 45
+09:42:37  Scanned: 30000 | Terraform: 0 | Stale builds: 57
+09:43:16  Scanned: 35000 | Terraform: 0 | Stale builds: 61
+09:43:48  Scanned: 40000 | Terraform: 0 | Stale builds: 69
+09:44:20  Scanned: 45000 | Terraform: 0 | Stale builds: 80
+09:44:20  WARNING: Scan incomplete. Terraform deletion skipped.
+09:44:20  
+09:44:20  ======================================
+09:44:20  JENKINS EFS CLEANUP SUMMARY
+09:44:20  ======================================
+09:44:20  Directories scanned          : 45294
+09:44:20  Terraform directories found  : 0
+09:44:20  Stale Terraform directories  : 0
+09:44:20  Terraform directories deleted: 0
+09:44:20  Terraform deletion failures  : 0
+09:44:20  Numeric directories found    : 131
+09:44:20  Stale build directories      : 80
+09:44:20  Irrelevant folders skipped   : 342
+09:44:20  Scan errors                  : 0
+09:44:20  Execution time               : 300.00 seconds
+09:44:20  Estimated space reclaimed MB : 0.00 MB
+09:44:20  Estimated space reclaimed GB : 0.00 GB
+09:44:20  CSV report                   : /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/26/admin/scripts/jenkins_stale_list.csv
+09:44:20  Stale build folders deleted  : 0
+09:44:20  ======================================
+09:44:20  [Pipeline] }
+09:44:20  [Pipeline] // ws
+09:44:20  [Pipeline] }
+09:44:21  [Pipeline] // script
+09:44:21  [Pipeline] }
+09:44:21  [Pipeline] // stage
+09:44:21  [Pipeline] stage
+09:44:21  [Pipeline] { (Declarative: Post Actions)
+09:44:21  [Pipeline] script
+09:44:22  [Pipeline] {
+09:44:22  [Pipeline] ws
+09:44:22  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/26/admin/scripts
+09:44:22  [Pipeline] {
+09:44:22  [Pipeline] echo
+09:44:22  ======================================
+09:44:22  [Pipeline] echo
+09:44:22  Archiving Jenkins stale CSV
+09:44:22  [Pipeline] echo
+09:44:22  ======================================
+09:44:22  [Pipeline] archiveArtifacts
+09:44:22  Archiving artifacts
+09:44:23  Recording fingerprints
+09:44:23  [Pipeline] }
+09:44:23  [Pipeline] // ws
+09:44:23  [Pipeline] }
+09:44:23  [Pipeline] // script
+09:44:23  [Pipeline] echo
+09:44:23  EFS Cleanup failed. Check console output for details.
+09:44:23  [Pipeline] }
+09:44:23  [Pipeline] // stage
+09:44:23  [Pipeline] }
+09:44:23  [Pipeline] // withEnv
+09:44:24  [Pipeline] }
+09:44:24  [Pipeline] // node
+09:44:24  [Pipeline] End of Pipeline
+09:44:26  ERROR: script returned exit code 1
