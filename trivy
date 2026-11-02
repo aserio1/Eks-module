@@ -1,74 +1,98 @@
-
-customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
-
-pipeline {
-    agent { label jte.keywords.project }
-
-    triggers {
-        cron('0 2 * * 1-5') // Every Monday-Friday at 2:00 AM Jenkins server time.
-    }
-
-    stages {
-        stage('Disable Concurrent Builds') {
-            steps {
-                echo "Disabling Concurrent Builds"
-                script {
-                    disable_concurrent_builds()
-                }
-            }
-        }
-
-        stage('Checkout') {
-            steps {
-                script {
-                    git_checkout()
-                }
-            }
-        }
-
-        stage('Run EFS Cleanup - Dry Run') {
-            steps {
-                echo "Starting EFS Cleanup DRY RUN..."
-                script {
-                    setup()
-
-                    ws("${customPath}/admin/scripts") {
-                        sh """
-                            /home/jenkins/anaconda3/envs/python312/bin/python3 -u \
-                                cleanup_jenkins_efs.py \
-                                --stale-days 90 \
-                                --max-seconds 300 \
-                                --csv jenkins_stale_list.csv
-                        """
-                    }
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            script {
-                ws("${customPath}/admin/scripts") {
-                    echo "======================================"
-                    echo "Archiving Jenkins dry-run CSV"
-                    echo "======================================"
-
-                    archiveArtifacts artifacts: 'jenkins_stale_list.csv',
-                                     allowEmptyArchive: true,
-                                     fingerprint: true,
-                                     onlyIfSuccessful: false
-                }
-            }
-        }
-
-        success {
-            echo 'EFS Cleanup dry run completed successfully. No files deleted.'
-        }
-
-        failure {
-            echo 'EFS Cleanup dry run failed. Check console output.'
-            // email_via_sns()
-        }
-    }
-}
+17:17:44  + for req_file in $REQUIREMENTS
+17:17:44  + IFS=
+17:17:44  + read -r requirements_file
+17:17:44  + find . -iname requirements-dev.txt
+17:17:44  [Pipeline] }
+17:17:45  [Pipeline] // withEnv
+17:17:45  [Pipeline] }
+17:17:45  [Pipeline] // ws
+17:17:45  [Pipeline] }
+17:17:45  [Pipeline] // node
+17:17:45  [Pipeline] }
+17:17:45  [Pipeline] // stage
+17:17:45  [Pipeline] ws
+17:17:45  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts
+17:17:45  [Pipeline] {
+17:17:46  [Pipeline] sh
+17:17:46  + /home/jenkins/anaconda3/envs/python312/bin/python3 -u cleanup_jenkins_efs.py --stale-days 90 --max-seconds 300 --csv jenkins_stale_list.csv
+17:17:46  ======================================
+17:17:46  JENKINS EFS CLEANUP
+17:17:46  ======================================
+17:17:46  Scanning          : /home/jenkins/workspace
+17:17:46  Retention period  : 90 days
+17:17:46  Max scan time     : 300 seconds
+17:17:46  CSV report        : /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts/jenkins_stale_list.csv
+17:17:46  Terraform cleanup : ENABLED
+17:17:46  Stale builds      : REPORT ONLY
+17:17:46  
+17:17:46  Initial filesystem used: 564.36 GB
+17:18:25  Scanned: 5000 | Terraform: 0 | Stale builds: 36
+17:18:57  Scanned: 10000 | Terraform: 0 | Stale builds: 44
+17:19:29  Scanned: 15000 | Terraform: 0 | Stale builds: 50
+17:20:08  Scanned: 20000 | Terraform: 0 | Stale builds: 58
+17:20:40  Scanned: 25000 | Terraform: 0 | Stale builds: 66
+17:21:12  Scanned: 30000 | Terraform: 0 | Stale builds: 77
+17:21:44  Scanned: 35000 | Terraform: 0 | Stale builds: 85
+17:22:16  Scanned: 40000 | Terraform: 0 | Stale builds: 89
+17:22:48  CSV report generated: /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts/jenkins_stale_list.csv
+17:22:48  
+17:22:48  ======================================
+17:22:48  JENKINS EFS CLEANUP SUMMARY
+17:22:48  ======================================
+17:22:48  Directories scanned          : 44798
+17:22:48  Terraform directories found  : 0
+17:22:48  Stale Terraform directories  : 0
+17:22:48  Terraform directories deleted: 0
+17:22:48  Terraform deletion failures  : 0
+17:22:48  Numeric directories found    : 153
+17:22:48  Stale build directories      : 103
+17:22:48  Scan errors                  : 0
+17:22:48  Directory inventory time     : 300.00 seconds
+17:22:48  Initial filesystem usage     : 564.36 GB
+17:22:48  Final filesystem usage       : 564.36 GB
+17:22:48  Filesystem usage reduction   : 0.00 GB
+17:22:48  Estimated Terraform reclaimed: 0.00 GB
+17:22:48  CSV report                   : /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts/jenkins_stale_list.csv
+17:22:48  Scan status                  : PARTIAL
+17:22:48  Stale build folders deleted  : 0
+17:22:48  ======================================
+17:22:48  WARNING: Inventory reached its time limit. The CSV contains only directories discovered so far.
+17:22:48  [Pipeline] }
+17:22:48  [Pipeline] // ws
+17:22:48  [Pipeline] }
+17:22:48  [Pipeline] // script
+17:22:48  [Pipeline] }
+17:22:49  [Pipeline] // stage
+17:22:49  [Pipeline] stage
+17:22:49  [Pipeline] { (Declarative: Post Actions)
+17:22:49  [Pipeline] script
+17:22:49  [Pipeline] {
+17:22:49  [Pipeline] ws
+17:22:49  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/29/admin/scripts
+17:22:49  [Pipeline] {
+17:22:49  [Pipeline] echo
+17:22:49  ======================================
+17:22:50  [Pipeline] echo
+17:22:50  Archiving Jenkins dry-run CSV
+17:22:50  [Pipeline] echo
+17:22:50  ======================================
+17:22:50  [Pipeline] archiveArtifacts
+17:22:50  Archiving artifacts
+17:22:50  Recording fingerprints
+17:22:50  [Pipeline] }
+17:22:50  [Pipeline] // ws
+17:22:50  [Pipeline] }
+17:22:51  [Pipeline] // script
+17:22:51  [Pipeline] echo
+17:22:51  EFS Cleanup dry run failed. Check console output.
+17:22:51  [Pipeline] }
+17:22:51  [Pipeline] // stage
+17:22:51  [Pipeline] }
+17:22:51  [Pipeline] // withEnv
+17:22:51  [Pipeline] }
+17:22:51  [Pipeline] // node
+17:22:52  [Pipeline] End of Pipeline
+17:22:53  
+17:22:53  GitHub has been notified of this commit’s build result
+17:22:53  
+17:22:54  Finished: FAILURE
