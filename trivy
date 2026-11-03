@@ -1,6 +1,5 @@
-07:36:43  [Pipeline] echo
-07:36:43  Starting EFS Cleanup...
-07:36:43  [Pipeline] script
+  Starting EFS Cleanup...
+07:36:43  [Pipeline] script (hide)
 07:36:43  [Pipeline] {
 07:36:43  [JTE][Step - python/setup.call()]
 07:36:43  [Pipeline] stage
@@ -112,14 +111,3 @@
 07:38:33  [Pipeline] { (Declarative: Post Actions)
 07:38:33  [Pipeline] echo
 07:38:33  EFS Cleanup failed. Check console output for details.
-07:38:34  [Pipeline] }
-07:38:34  [Pipeline] // stage
-07:38:34  [Pipeline] }
-07:38:34  [Pipeline] // withEnv
-07:38:34  [Pipeline] }
-07:38:34  [Pipeline] // node
-07:38:34  [Pipeline] End of Pipeline
-07:38:36  
-07:38:36  GitHub has been notified of this commit’s build result
-07:38:36  
-07:38:36  Finished: FAILURE
