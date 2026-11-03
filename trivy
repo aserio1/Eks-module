@@ -1,623 +1,167 @@
+
 #!/usr/bin/env python3
 
-# Jenkins Workspace / EFS Cleanup - DRY RUN
-# Jenkins EFS Cleanup
-#
-# Checks:
-# Fast DRY-RUN inventory of:
-#   1. Stale .terraform directories
-#   2. Old numeric build workspaces
-#   3. Orphaned Jenkins jobs and branches
-#   2. Potential stale Jenkins build workspaces
-#
-# No hardcoded project folders.
-# No directory size calculations.
-# No hardcoded Jenkins project names.
-# No recursive size calculations.
-# No deletion.
-#
-# Jenkins credentials are supplied by the existing pipeline.
-#
-# Example:
-#   python3 cleanup_jenkins_efs.py --root /jenkins_jobs
-#
-# Or:
-#   python3 cleanup_jenkins_efs.py --root /path/visible/to/jenkins
-# Run against the actual workspace storage path
-# visible to the Jenkins execution environment.
+# This script scans .terraform dirs recursively
+# found in /home/jenkins/workspace.
+# Executed via a Jenkins job that runs daily during off hours.
+# DRY RUN - No directories or files are deleted.
 
 import os
-import sys
+import csv
 import time
-import json
-import argparse
-import urllib.parse
-import urllib.request
-import urllib.error
-import base64
-import re
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
-from pathlib import Path
-
-STALE_DAYS = 90
 ROOT_DIR = "/home/jenkins/workspace"
-MAX_WORKERS = 8
-DRY_RUN = True
-CALCULATE_SIZES = False
-VALIDATE_JENKINS_JOBS = True
+MAX_WORKERS = 8  # Tune based on EFS throughput limits
 STALE_DAYS = 90
+CSV_FILE = "jenkins_stale_list.csv"
 
-MAX_SCAN_SECONDS = 300
-PROGRESS_INTERVAL = 5000
-
-# These are internal/cache folders, not Jenkins project names.
-SKIP_DIRS = {
-    ".git",
-    ".svn",
-@@ -56,212 +39,54 @@
-    ".tox",
-    ".gradle",
-    ".m2",
-    "target",
-    "dist",
-    "build",
-    "coverage",
-    ".next",
-    ".idea",
-    ".vscode"
-}
+print_lock = Lock()
+stats_lock = Lock()
+freed_space = 0
 
 
-def normalize_job_name(name):
-    """Normalize Jenkins job names for comparison."""
-    return urllib.parse.unquote(name).strip("/")
+def get_dir_size_fast(path):
+    """Use os.scandir recursively for faster size calculation."""
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        total += entry.stat(follow_symlinks=False).st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        total += get_dir_size_fast(entry.path)
+                except (PermissionError, FileNotFoundError):
+                    pass
+    except (PermissionError, FileNotFoundError):
+        pass
+    return total
 
 
-def get_workspace_root():
-    """
-    Derive the workspace root from the current Jenkins job
-    when --root is not supplied.
-    Expected ws() pattern:
-      workspace/${JOB_NAME.replace('%2F','/')}/${BUILD_NUMBER}
-    """
+def report_terraform_dir(path):
+    """Report a stale .terraform directory without deleting it."""
+    try:
+        modified = os.path.getmtime(path)
+        age_days = int((time.time() - modified) / 86400)
 
-    workspace = os.environ.get("WORKSPACE", "")
-    job_name = os.environ.get("JOB_NAME", "")
-    build_number = os.environ.get("BUILD_NUMBER", "")
+        if age_days < STALE_DAYS:
+            return None
 
-    if not (workspace and job_name and build_number):
+        size = get_dir_size_fast(path)
+
+        with print_lock:
+            print(f"DRY RUN - Stale directory: {path}")
+
+        return {
+            "path": path,
+            "modified": datetime.fromtimestamp(
+                modified
+            ).strftime("%Y-%m-%d %H:%M:%S"),
+            "age_days": age_days,
+            "size_bytes": size,
+            "status": "Dry Run - Not Deleted"
+        }
+
+    except OSError as e:
+        with print_lock:
+            print(f"Failed to inspect {path}: {e}")
         return None
 
-    normalized_job = job_name.replace("%2F", "/")
-    suffix = Path(normalized_job) / build_number
 
-    workspace_path = Path(workspace).absolute()
-    parts = workspace_path.parts
-    suffix_parts = suffix.parts
-
-    for i in range(len(parts) - len(suffix_parts) + 1):
-        if tuple(parts[i:i + len(suffix_parts)]) == suffix_parts:
-            return str(Path(*parts[:i]))
-
-    return None
-
-
-def get_jenkins_config():
-def scan_workspaces(root, stale_days, max_seconds):
+def find_terraform_dirs(root):
     """
-    Reuse Jenkins credentials already exported
-    by the existing Jenkins pipeline.
-    Discover stale Terraform caches and potential
-    Jenkins build workspaces.
-    Expected environment variables:
-      JENKINS_URL
-      JENKINS_USER
-      JENKINS_API_TOKEN
-    If credentials are not provided, Jenkins API
-    validation is unavailable.
-    No deletion is performed.
+    Walk the tree with os.scandir and prune traversal into .terraform dirs
+    (no need to recurse into them).
     """
-
-    url = os.environ.get("JENKINS_URL", "").rstrip("/")
-    user = os.environ.get("JENKINS_USER", "")
-    token = os.environ.get("JENKINS_API_TOKEN", "")
-    cutoff = time.time() - (stale_days * 86400)
-    start_time = time.monotonic()
-
-    if not url:
-        return None
-    stack = [(root, 0)]
-
-    return {
-        "url": url,
-        "user": user,
-        "token": token
-    results = {
-        "directories_scanned": 0,
-        "terraform_found": 0,
-        "stale_terraform": 0,
-        "build_dirs_found": 0,
-        "stale_build_dirs": 0,
-        "skipped": 0,
-        "errors": 0,
-        "timed_out": False
-    }
-
-
-def jenkins_get_json(config, path):
-    """Retrieve JSON from Jenkins API."""
-
-    url = config["url"] + path
-
-    request = urllib.request.Request(
-        url,
-        headers={"Accept": "application/json"}
-    )
-
-    if config["user"] and config["token"]:
-        credentials = (
-            config["user"] + ":" + config["token"]
-        ).encode("utf-8")
-
-        auth = base64.b64encode(credentials).decode("ascii")
-
-        request.add_header(
-            "Authorization",
-            "Basic " + auth
-        )
-
-    with urllib.request.urlopen(
-        request,
-        timeout=20
-    ) as response:
-        return json.load(response)
-
-
-def get_jenkins_jobs(config):
-    """
-    Fetch Jenkins jobs recursively through the tree API.
-    Returns job full names and build metadata.
-    """
-
-    tree = (
-        "jobs[fullName,_class,"
-        "jobs[fullName,_class,"
-        "jobs[fullName,_class]]]"
-    )
-
-    path = "/api/json?tree=" + urllib.parse.quote(
-        tree,
-        safe="[],"
-    )
-
-    data = jenkins_get_json(config, path)
-
-    jobs = set()
-    folders = set()
-
-    def walk(items):
-        for item in items:
-
-            name = item.get("fullName")
-
-            if not name:
-                continue
-
-            normalized = normalize_job_name(name)
-
-            if item.get("jobs") is not None:
-                folders.add(normalized)
-                walk(item.get("jobs", []))
-            else:
-                jobs.add(normalized)
-
-    walk(data.get("jobs", []))
-
-    return jobs, folders
-
-
-def get_active_builds(config):
-    """
-    Retrieve active executors from Jenkins.
-    This is a controller-level check and may not
-    cover every cloud/agent execution configuration.
-    """
-
-    path = (
-        "/computer/api/json?"
-        "tree=computer[executors[currentExecutable[url]],"
-        "oneOffExecutors[currentExecutable[url]]]"
-    )
-
-    data = jenkins_get_json(config, path)
-
-    active = set()
-
-    for computer in data.get("computer", []):
-        for key in ("executors", "oneOffExecutors"):
-            for executor in computer.get(key, []):
-                executable = executor.get("currentExecutable")
-
-                if executable:
-                    url = executable.get("url")
-
-                    if url:
-                        active.add(url.rstrip("/"))
-
-    return active
-
-
-def scan_directories(root, cutoff, max_seconds):
-    """
-    Scan directories without calculating sizes.
-    Discover .terraform directories and numeric folders.
-    Continue into numeric folders to discover Terraform
-    caches within build workspaces.
-    """
-
-    start = time.monotonic()
-    stack = [Path(root)]
-
-    terraform_dirs = []
-    numeric_dirs = []
-
-    scanned = 0
-    errors = 0
-    skipped = 0
-    timed_out = False
-
-    while stack:
-
-        if time.monotonic() - start >= max_seconds:
-            timed_out = True
-        if time.monotonic() - start_time >= max_seconds:
-            results["timed_out"] = True
-            break
-
-        current = stack.pop()
-        scanned += 1
-        current, depth = stack.pop()
-        results["directories_scanned"] += 1
-
-        if scanned % PROGRESS_INTERVAL == 0:
-        if results["directories_scanned"] % PROGRESS_INTERVAL == 0:
-            print(
-                f"Progress: scanned {scanned} directories",
-                f"Scanned: {results['directories_scanned']} | "
-                f"Stale Terraform: {results['stale_terraform']} | "
-                f"Stale build folders: {results['stale_build_dirs']}",
-                flush=True
-            )
-
-@@ -276,108 +101,60 @@ def scan_directories(root, cutoff, max_seconds):
-                            continue
-
-                        if entry.name in SKIP_DIRS:
-                            skipped += 1
-                            results["skipped"] += 1
-                            continue
-
-                        if entry.name == ".terraform":
-                            results["terraform_found"] += 1
-
-                            info = entry.stat(
-                                follow_symlinks=False
-                            )
-
-                            terraform_dirs.append({
-                                "path": entry.path,
-                                "mtime": info.st_mtime
-                            })
-                            if info.st_mtime < cutoff:
-                                results["stale_terraform"] += 1
-
-                            # Do not recurse into Terraform cache.
-                            continue
-
-                        # Numeric directories may represent
-                        # Jenkins BUILD_NUMBER directories.
-                        if entry.name.isdigit():
-                            results["build_dirs_found"] += 1
-
-                            info = entry.stat(
-                                follow_symlinks=False
-                            )
-
-                            numeric_dirs.append({
-                                "path": entry.path,
-                                "mtime": info.st_mtime
-                            })
-                            if info.st_mtime < cutoff:
-                                results["stale_build_dirs"] += 1
-
-                            # Do not recurse into build directories.
-                            continue
-
-                        stack.append(Path(entry.path))
-                        stack.append((entry.path, depth + 1))
-
-                    except OSError:
-                        errors += 1
-                        results["errors"] += 1
-
-        except OSError:
-            errors += 1
-
-    return {
-        "terraform": terraform_dirs,
-        "numeric": numeric_dirs,
-        "scanned": scanned,
-        "skipped": skipped,
-        "errors": errors,
-        "timed_out": timed_out,
-        "elapsed": time.monotonic() - start
-    }
-
-
-def relative_parts(root, path):
-    return Path(path).relative_to(root).parts
-
-
-def identify_orphans(root, numeric_dirs, jobs, folders):
-    """
-    Compare numeric build directories to Jenkins job names.
-    A numeric folder is interpreted as a possible build
-    directory, and its parent as a possible Jenkins job.
-            results["errors"] += 1
-
-    An unknown name is only an orphan candidate,
-    not a confirmed safe deletion.
-    """
-
-    orphan_candidates = set()
-    verified_jobs = set()
-    unverified = set()
-
-    for item in numeric_dirs:
-
-        path = Path(item["path"])
-
-        try:
-            parts = relative_parts(root, path)
-        except ValueError:
-            continue
-
-        if len(parts) < 2:
-            unverified.add(str(path))
-            continue
-
-        candidate_job = normalize_job_name(
-            "/".join(parts[:-1])
-        )
-
-        if candidate_job in jobs:
-            verified_jobs.add(candidate_job)
-
-        elif candidate_job in folders:
-            unverified.add(str(path))
-
-        else:
-            orphan_candidates.add(candidate_job)
-    results["elapsed"] = time.monotonic() - start_time
-
-    return orphan_candidates, verified_jobs, unverified
-    return results
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if entry.name == ".terraform":
+                    yield entry.path
+                else:
+                    yield from find_terraform_dirs(entry.path)
+    except (PermissionError, FileNotFoundError) as e:
+        print(f"Cannot access {root}: {e}")
+
+
+def write_csv(results):
+    """Write stale directories to a CSV report."""
+    with open(CSV_FILE, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+
+        writer.writerow([
+            "Directory Path",
+            "Last Modified",
+            "Age (Days)",
+            "Size (MB)",
+            "Cleanup Status"
+        ])
+
+        for item in sorted(results, key=lambda x: x["path"]):
+            writer.writerow([
+                item["path"],
+                item["modified"],
+                item["age_days"],
+                round(item["size_bytes"] / (1024 ** 2), 2),
+                item["status"]
+            ])
+
+    print(f"\nCSV report generated: {CSV_FILE}")
 
 
 def main():
+    global freed_space
 
-    parser = argparse.ArgumentParser(
-        description="Jenkins EFS cleanup dry-run"
-        description="Jenkins workspace cleanup dry-run"
-    )
-
-    parser.add_argument(
-        "--root",
-        default=None,
-        help="Root directory to scan"
-        default=ROOT_DIR,
-        help="Workspace storage path visible to this process"
-    )
-
-    parser.add_argument(
-@@ -394,7 +171,8 @@ def main():
-
-    parser.add_argument(
-        "--execute",
-        action="store_true"
-        action="store_true",
-        help="Deletion is disabled"
-    )
-
-    args = parser.parse_args()
-@@ -404,153 +182,56 @@ def main():
-        sys.exit(1)
-
-    if args.stale_days < 0 or args.max_seconds <= 0:
-        parser.error("Invalid retention or timeout")
-        parser.error("Invalid retention or scan-time value")
-
-    root = args.root or get_workspace_root()
-
-    if not root:
-    if not os.path.isdir(args.root):
-        print(
-            "ERROR: Could not determine workspace root. "
-            "Use --root to specify a visible directory."
-            f"ERROR: Workspace directory not accessible: "
-            f"{args.root}",
-            file=sys.stderr
-        )
-        sys.exit(1)
-
-    root = Path(root).resolve()
-
-    if not root.is_dir():
-        print(f"ERROR: Directory not found: {root}")
-        sys.exit(1)
-
-    cutoff = time.time() - args.stale_days * 86400
-
-    print("========================================")
-    print("JENKINS CLEANUP - DRY RUN")
-    print("========================================")
-    print(f"Root directory : {root}")
-    print(f"Retention      : {args.stale_days} days")
-    print(f"Max scan time  : {args.max_seconds} seconds")
-    print("Mode           : DRY RUN")
     print("======================================")
     print("JENKINS WORKSPACE CLEANUP - DRY RUN")
     print("======================================")
-    print(f"Scanning         : {args.root}")
-    print(f"Retention period : {args.stale_days} days")
-    print(f"Max scan time    : {args.max_seconds} seconds")
+    print(f"Scanning         : {ROOT_DIR}")
+    print(f"Retention period : {STALE_DAYS} days")
     print("Mode             : DRY-RUN")
     print()
 
-    config = get_jenkins_config()
+    terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
 
-    jobs = set()
-    folders = set()
-    active_builds = set()
-    validation_ok = False
-
-    if VALIDATE_JENKINS_JOBS and config:
-
-        try:
-            jobs, folders = get_jenkins_jobs(config)
-            active_builds = get_active_builds(config)
-
-            validation_ok = True
-
-            print(
-                f"Jenkins jobs loaded: {len(jobs)}"
-            )
-
-            print(
-                f"Active executables found: "
-                f"{len(active_builds)}"
-            )
-
-        except Exception as error:
-            print(
-                f"WARNING: Jenkins validation unavailable: "
-                f"{error}"
-            )
-
-    else:
-        print(
-            "WARNING: Jenkins API validation unavailable."
-        )
-
-    results = scan_directories(
-        root,
-        cutoff,
-    results = scan_workspaces(
-        args.root,
-        args.stale_days,
-        args.max_seconds
+    print(
+        f"Found {len(terraform_dirs)} .terraform "
+        f"director{'y' if len(terraform_dirs) == 1 else 'ies'}\n"
     )
 
-    stale_terraform = [
-        item
-        for item in results["terraform"]
-        if item["mtime"] < cutoff
-    ]
+    stale_dirs = []
 
-    stale_numeric = [
-        item
-        for item in results["numeric"]
-        if item["mtime"] < cutoff
-    ]
-
-    orphan_candidates = set()
-    unverified = set()
-
-    if validation_ok:
-        orphan_candidates, _, unverified = identify_orphans(
-            root,
-            stale_numeric,
-            jobs,
-            folders
-        )
-
-    else:
-        unverified = {
-            item["path"]
-            for item in stale_numeric
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(report_terraform_dir, d): d
+            for d in terraform_dirs
         }
 
-    print()
-    print("========================================")
-    print("JENKINS CLEANUP - DRY RUN SUMMARY")
-    print("========================================")
-    print(
-        f"Terraform directories found     : "
-        f"{len(results['terraform'])}"
+        for future in as_completed(futures):
+            result = future.result()
+
+            if result is not None:
+                stale_dirs.append(result)
+
+    write_csv(stale_dirs)
+
+    total_size = sum(
+        item["size_bytes"] for item in stale_dirs
     )
-    print(
-        f"Stale Terraform directories     : "
-        f"{len(stale_terraform)}"
-    )
-    print(
-        f"Old numeric workspaces          : "
-        f"{len(stale_numeric)}"
-    )
-    print(
-        f"Orphaned job candidates         : "
-        f"{len(orphan_candidates)}"
-    )
-    print(
-        f"Unverified candidates           : "
-        f"{len(unverified)}"
-    )
-    print(
-        f"Directories scanned             : "
-        f"{results['scanned']}"
-    )
-    print(
-        f"Directories skipped             : "
-        f"{results['skipped']}"
-    )
-    print(
-        f"Scan errors                     : "
-        f"{results['errors']}"
-    )
-    print(
-        f"Execution time                  : "
-        f"{results['elapsed']:.2f} seconds"
-    )
-    print(
-        f"Scan status                     : "
-        f"{'PARTIAL' if results['timed_out'] or results['errors'] else 'COMPLETE WITH EXCLUSIONS'}"
-    )
-    print("Directories deleted             : 0")
-    print("Files deleted                   : 0")
-    print("========================================")
-    print("======================================")
+
+    print("\n======================================")
     print("DRY-RUN SUMMARY")
     print("======================================")
-    print(f"Directories scanned         : {results['directories_scanned']}")
-    print(f"Terraform directories found : {results['terraform_found']}")
-    print(f"Stale Terraform directories : {results['stale_terraform']}")
-    print(f"Numeric directories found   : {results['build_dirs_found']}")
-    print(f"Stale numeric directories   : {results['stale_build_dirs']}")
-    print(f"Irrelevant folders skipped  : {results['skipped']}")
-    print(f"Scan errors                 : {results['errors']}")
-    print(f"Execution time              : {results['elapsed']:.2f} seconds")
-
-    scan_status = (
-        "PARTIAL"
-        if results["timed_out"] or results["errors"]
-        else "COMPLETE WITH EXCLUSIONS"
-    )
-
-    print(f"Scan status                 : {scan_status}")
+    print(f"Terraform directories found : {len(terraform_dirs)}")
+    print(f"Stale Terraform directories : {len(stale_dirs)}")
+    print(f"Potential space recoverable : {total_size / (1024 ** 3):.2f} GB")
     print("Directories deleted         : 0")
     print("Files deleted               : 0")
     print("======================================")
     print("DRY-RUN COMPLETE - NOTHING DELETED")
-    print("========================================")
     print("======================================")
 
 
