@@ -1,169 +1,59 @@
 
-#!/usr/bin/env python3
+customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
 
-# This script scans .terraform dirs recursively
-# found in /home/jenkins/workspace.
-# Executed via a Jenkins job that runs daily during off hours.
-# DRY RUN - No directories or files are deleted.
+pipeline {
+    agent { label jte.keywords.project }
 
-import os
-import csv
-import time
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from threading import Lock
+    triggers {
+        cron('0 2 * * 1-5') // Every Monday-Friday at 9:00 pm EST.
+    }
 
-ROOT_DIR = "/home/jenkins/workspace"
-MAX_WORKERS = 8  # Tune based on EFS throughput limits
-STALE_DAYS = 90
-CSV_FILE = "jenkins_stale_list.csv"
-
-print_lock = Lock()
-stats_lock = Lock()
-freed_space = 0
-
-
-def get_dir_size_fast(path):
-    """Use os.scandir recursively for faster size calculation."""
-    total = 0
-    try:
-        with os.scandir(path) as it:
-            for entry in it:
-                try:
-                    if entry.is_file(follow_symlinks=False):
-                        total += entry.stat(follow_symlinks=False).st_size
-                    elif entry.is_dir(follow_symlinks=False):
-                        total += get_dir_size_fast(entry.path)
-                except (PermissionError, FileNotFoundError):
-                    pass
-    except (PermissionError, FileNotFoundError):
-        pass
-    return total
-
-
-def report_terraform_dir(path):
-    """Report a stale .terraform directory without deleting it."""
-    try:
-        modified = os.path.getmtime(path)
-        age_days = int((time.time() - modified) / 86400)
-
-        if age_days < STALE_DAYS:
-            return None
-
-        size = get_dir_size_fast(path)
-
-        with print_lock:
-            print(f"DRY RUN - Stale directory: {path}")
-
-        return {
-            "path": path,
-            "modified": datetime.fromtimestamp(
-                modified
-            ).strftime("%Y-%m-%d %H:%M:%S"),
-            "age_days": age_days,
-            "size_bytes": size,
-            "status": "Dry Run - Not Deleted"
+    stages {
+        stage('Disable Concurrent Builds') {
+            steps {
+                echo "Disabling Concurrent Builds"
+                script {
+                    disable_concurrent_builds()
+                }
+            }
         }
 
-    except OSError as e:
-        with print_lock:
-            print(f"Failed to inspect {path}: {e}")
-        return None
-
-
-def find_terraform_dirs(root):
-    """
-    Walk the tree with os.scandir and prune traversal into .terraform dirs
-    (no need to recurse into them).
-    """
-    try:
-        with os.scandir(root) as it:
-            for entry in it:
-                if not entry.is_dir(follow_symlinks=False):
-                    continue
-                if entry.name == ".terraform":
-                    yield entry.path
-                else:
-                    yield from find_terraform_dirs(entry.path)
-    except (PermissionError, FileNotFoundError) as e:
-        print(f"Cannot access {root}: {e}")
-
-
-def write_csv(results):
-    """Write stale directories to a CSV report."""
-    with open(CSV_FILE, "w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-
-        writer.writerow([
-            "Directory Path",
-            "Last Modified",
-            "Age (Days)",
-            "Size (MB)",
-            "Cleanup Status"
-        ])
-
-        for item in sorted(results, key=lambda x: x["path"]):
-            writer.writerow([
-                item["path"],
-                item["modified"],
-                item["age_days"],
-                round(item["size_bytes"] / (1024 ** 2), 2),
-                item["status"]
-            ])
-
-    print(f"\nCSV report generated: {CSV_FILE}")
-
-
-def main():
-    global freed_space
-
-    print("======================================")
-    print("JENKINS WORKSPACE CLEANUP - DRY RUN")
-    print("======================================")
-    print(f"Scanning         : {ROOT_DIR}")
-    print(f"Retention period : {STALE_DAYS} days")
-    print("Mode             : DRY-RUN")
-    print()
-
-    terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
-
-    print(
-        f"Found {len(terraform_dirs)} .terraform "
-        f"director{'y' if len(terraform_dirs) == 1 else 'ies'}\n"
-    )
-
-    stale_dirs = []
-
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        futures = {
-            executor.submit(report_terraform_dir, d): d
-            for d in terraform_dirs
+        stage('Checkout') {
+            steps {
+                script {
+                    git_checkout()
+                }
+            }
         }
 
-        for future in as_completed(futures):
-            result = future.result()
+        stage('Run EFS Cleanup') {
+            steps {
+                echo "Starting EFS Cleanup..."
+                script {
+                    setup()
+                    ws("${customPath}/admin/scripts"){
+                        sh """
+                        /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
+                        """
 
-            if result is not None:
-                stale_dirs.append(result)
+                        archiveArtifacts artifacts: 'jenkins_stale_list.csv',
+                                         allowEmptyArchive: false,
+                                         fingerprint: true,
+                                         onlyIfSuccessful: false
+                    }
+                }
+            }
+        }
 
-    write_csv(stale_dirs)
+    }
 
-    total_size = sum(
-        item["size_bytes"] for item in stale_dirs
-    )
-
-    print("\n======================================")
-    print("DRY-RUN SUMMARY")
-    print("======================================")
-    print(f"Terraform directories found : {len(terraform_dirs)}")
-    print(f"Stale Terraform directories : {len(stale_dirs)}")
-    print(f"Potential space recoverable : {total_size / (1024 ** 3):.2f} GB")
-    print("Directories deleted         : 0")
-    print("Files deleted               : 0")
-    print("======================================")
-    print("DRY-RUN COMPLETE - NOTHING DELETED")
-    print("======================================")
-
-
-if __name__ == "__main__":
-    main()
+    post {
+        success {
+            echo 'EFS Cleanup completed successfully!'
+        }
+        failure {
+            echo 'EFS Cleanup failed. Check console output for details.'
+            // email_via_sns()
+        }
+    }
+}
