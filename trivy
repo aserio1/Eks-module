@@ -1,72 +1,275 @@
 
-customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
+#!/usr/bin/env python3
 
-pipeline {
-    agent { label jte.keywords.project }
+# Jenkins Workspace Cleanup - DRY RUN
+# Scans for stale .terraform and numeric directories.
+# Generates CSV report without deleting anything.
 
-    triggers {
-        cron('0 2 * * 1-5') // Every Monday-Friday at 9:00 pm EST.
-    }
+import os
+import csv
+import time
 
-    stages {
-        stage('Disable Concurrent Builds') {
-            steps {
-                echo "Disabling Concurrent Builds"
-                script {
-                    disable_concurrent_builds()
-                }
-            }
-        }
+from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 
-        stage('Checkout') {
-            steps {
-                script {
-                    git_checkout()
-                }
-            }
-        }
+ROOT_DIR = "/home/jenkins/workspace"
+MAX_WORKERS = 8
+STALE_DAYS = 90
+MAX_SCAN_SECONDS = 300
+CSV_FILE = "jenkins_stale_list.csv"
+DRY_RUN = True
 
-        stage('Run EFS Cleanup') {
-            steps {
-                echo "Starting EFS Cleanup..."
-                script {
-                    setup()
-                    ws("${customPath}/admin/scripts"){
-                        sh """
-                        /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
-                        """
+print_lock = Lock()
 
-                        echo "======================================"
-                        echo "Verifying EFS Cleanup CSV"
-                        echo "======================================"
-
-                        sh """
-                        test -s jenkins_stale_list.csv
-                        ls -lh jenkins_stale_list.csv
-                        """
-
-                        echo "======================================"
-                        echo "Archiving EFS Cleanup CSV"
-                        echo "======================================"
-
-                        archiveArtifacts artifacts: 'jenkins_stale_list.csv',
-                                         allowEmptyArchive: false,
-                                         fingerprint: true,
-                                         onlyIfSuccessful: false
-                    }
-                }
-            }
-        }
-
-    }
-
-    post {
-        success {
-            echo 'EFS Cleanup completed successfully!'
-        }
-        failure {
-            echo 'EFS Cleanup failed. Check console output for details.'
-            // email_via_sns()
-        }
-    }
+SKIP_DIRS = {
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    ".gradle",
+    ".m2",
+    "target",
+    "dist",
+    "build",
+    "coverage",
+    ".next",
+    ".idea",
+    ".vscode"
 }
+
+
+def scan_workspaces(root):
+    start_time = time.monotonic()
+    cutoff = time.time() - (STALE_DAYS * 86400)
+
+    stale_dirs = []
+
+    stats = {
+        "scanned": 0,
+        "terraform_found": 0,
+        "terraform_stale": 0,
+        "numeric_found": 0,
+        "numeric_stale": 0,
+        "skipped": 0,
+        "errors": 0
+    }
+
+    current_workspace = os.environ.get("WORKSPACE")
+    if current_workspace:
+        current_workspace = os.path.realpath(current_workspace)
+
+    stack = [os.path.realpath(root)]
+    timed_out = False
+
+    while stack:
+        if time.monotonic() - start_time >= MAX_SCAN_SECONDS:
+            timed_out = True
+            break
+
+        current_dir = stack.pop()
+
+        try:
+            with os.scandir(current_dir) as entries:
+                for entry in entries:
+
+                    if time.monotonic() - start_time >= MAX_SCAN_SECONDS:
+                        timed_out = True
+                        break
+
+                    try:
+                        if not entry.is_dir(follow_symlinks=False):
+                            continue
+
+                        stats["scanned"] += 1
+
+                        path = entry.path
+                        name = entry.name
+
+                        if current_workspace and (
+                            path == current_workspace
+                            or path.startswith(current_workspace + os.sep)
+                        ):
+                            stats["skipped"] += 1
+                            continue
+
+                        if name in SKIP_DIRS:
+                            stats["skipped"] += 1
+                            continue
+
+                        if name == ".terraform" or name.isdigit():
+
+                            modified = entry.stat(
+                                follow_symlinks=False
+                            ).st_mtime
+
+                            age_days = int(
+                                (time.time() - modified) / 86400
+                            )
+
+                            if name == ".terraform":
+                                stats["terraform_found"] += 1
+                                directory_type = "Terraform"
+                            else:
+                                stats["numeric_found"] += 1
+                                directory_type = "Numeric"
+
+                            if modified < cutoff:
+
+                                stale_dirs.append({
+                                    "type": directory_type,
+                                    "path": path,
+                                    "modified": datetime.fromtimestamp(
+                                        modified,
+                                        timezone.utc
+                                    ).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                                    "age": age_days
+                                })
+
+                                if directory_type == "Terraform":
+                                    stats["terraform_stale"] += 1
+                                else:
+                                    stats["numeric_stale"] += 1
+
+                        if name != ".terraform":
+                            stack.append(path)
+
+                        if stats["scanned"] % 5000 == 0:
+                            with print_lock:
+                                print(
+                                    f"Scanned: {stats['scanned']} | "
+                                    f"Stale Terraform: "
+                                    f"{stats['terraform_stale']} | "
+                                    f"Stale build folders: "
+                                    f"{stats['numeric_stale']}",
+                                    flush=True
+                                )
+
+                    except OSError as e:
+                        stats["errors"] += 1
+                        print(f"Error scanning {entry.path}: {e}")
+
+        except OSError as e:
+            stats["errors"] += 1
+            print(f"Cannot access {current_dir}: {e}")
+
+        if timed_out:
+            break
+
+    elapsed = time.monotonic() - start_time
+
+    return stale_dirs, stats, elapsed, timed_out
+
+
+def generate_csv(stale_dirs):
+    with open(
+        CSV_FILE,
+        "w",
+        newline="",
+        encoding="utf-8"
+    ) as csvfile:
+
+        writer = csv.writer(csvfile)
+
+        writer.writerow([
+            "Type",
+            "Directory Path",
+            "Last Modified",
+            "Age (Days)",
+            "Cleanup Status"
+        ])
+
+        for directory in sorted(
+            stale_dirs,
+            key=lambda item: item["path"]
+        ):
+            writer.writerow([
+                directory["type"],
+                directory["path"],
+                directory["modified"],
+                directory["age"],
+                "Dry Run - Not Deleted"
+            ])
+
+    print(f"CSV report generated: {CSV_FILE}")
+
+
+def main():
+    print("======================================")
+    print("JENKINS WORKSPACE CLEANUP - DRY RUN")
+    print("======================================")
+    print(f"Scanning         : {ROOT_DIR}")
+    print(f"Retention period : {STALE_DAYS} days")
+    print(f"Max scan time    : {MAX_SCAN_SECONDS} seconds")
+    print("Mode             : DRY-RUN")
+    print()
+
+    if not DRY_RUN:
+        raise RuntimeError(
+            "Deletion is not supported by this script."
+        )
+
+    if not os.path.isdir(ROOT_DIR):
+        raise RuntimeError(
+            f"Workspace directory not found: {ROOT_DIR}"
+        )
+
+    stale_dirs, stats, elapsed, timed_out = scan_workspaces(
+        ROOT_DIR
+    )
+
+    generate_csv(stale_dirs)
+
+    print()
+    print("======================================")
+    print("DRY-RUN SUMMARY")
+    print("======================================")
+    print(
+        f"Directories scanned         : {stats['scanned']}"
+    )
+    print(
+        f"Terraform directories found : "
+        f"{stats['terraform_found']}"
+    )
+    print(
+        f"Stale Terraform directories : "
+        f"{stats['terraform_stale']}"
+    )
+    print(
+        f"Numeric directories found   : "
+        f"{stats['numeric_found']}"
+    )
+    print(
+        f"Stale numeric directories   : "
+        f"{stats['numeric_stale']}"
+    )
+    print(
+        f"Irrelevant folders skipped  : "
+        f"{stats['skipped']}"
+    )
+    print(
+        f"Scan errors                 : {stats['errors']}"
+    )
+    print(
+        f"Execution time              : {elapsed:.2f} seconds"
+    )
+    print(
+        "Scan status                 : "
+        + ("TIME LIMIT REACHED" if timed_out else "COMPLETE")
+    )
+    print("Directories deleted         : 0")
+    print("Files deleted               : 0")
+    print("======================================")
+    print("DRY-RUN COMPLETE - NOTHING DELETED")
+    print("======================================")
+
+
+if __name__ == "__main__":
+    main()
