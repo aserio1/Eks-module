@@ -1,113 +1,72 @@
-  Starting EFS Cleanup...
-07:36:43  [Pipeline] script (hide)
-07:36:43  [Pipeline] {
-07:36:43  [JTE][Step - python/setup.call()]
-07:36:43  [Pipeline] stage
-07:36:43  [Pipeline] { (Py Setup)
-07:36:43  [Pipeline] node
-07:36:43  Running on utility in /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32@2
-07:36:43  [Pipeline] {
-07:36:44  [Pipeline] ws
-07:36:44  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/40
-07:36:44  [Pipeline] {
-07:36:44  [Pipeline] echo
-07:36:44  Installing Build Tool
-07:36:44  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named env_name (to a value of type String) which could lead to memory leaks or other issues.
-07:36:44  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named requirements (to a value of type String) which could lead to memory leaks or other issues.
-07:36:44  [Pipeline] withEnv
-07:36:44  [Pipeline] {
-07:36:44  [Pipeline] sh
-07:36:46  Activating Conda environment: python312
-07:36:46  + python --version
-07:36:46  Python 3.12.4
-07:36:46  + python -m pip --version
-07:36:47  pip 24.2 from /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages/pip (python 3.12)
-07:36:47  + PIP_INSTALL='python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir'
-07:36:47  + python -m pip check
-07:36:47  No broken requirements found.
-07:36:47  + for req_file in $REQUIREMENTS
-07:36:47  + IFS=
-07:36:47  + read -r requirements_file
-07:36:47  + find . -iname requirements.txt
-07:36:47  + eval 'python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r "./requirements.txt"'
-07:36:47  ++ python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r ./requirements.txt
-07:36:48  Looking in indexes: https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
-07:36:48  Requirement already satisfied: boto3 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from -r ./requirements.txt (line 1)) (1.43.123)
-07:36:48  Requirement already satisfied: PyGithub in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from -r ./requirements.txt (line 2)) (2.10.0)
-07:36:48  Requirement already satisfied: requests in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from -r ./requirements.txt (line 3)) (2.34.2)
-07:36:48  Requirement already satisfied: botocore<1.44.0,>=1.43.123 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from boto3->-r ./requirements.txt (line 1)) (1.43.123)
-07:36:48  Requirement already satisfied: jmespath<2.0.0,>=0.7.1 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from boto3->-r ./requirements.txt (line 1)) (1.1.0)
-07:36:48  Requirement already satisfied: s3transfer<0.20.0,>=0.19.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from boto3->-r ./requirements.txt (line 1)) (0.19.3)
-07:36:48  Requirement already satisfied: pynacl>=1.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (1.6.2)
-07:36:48  Requirement already satisfied: pyjwt>=2.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2)) (2.15.1)
-07:36:48  Requirement already satisfied: typing-extensions>=4.5.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (4.16.0)
-07:36:48  Requirement already satisfied: urllib3>=1.26.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (2.7.0)
-07:36:48  Requirement already satisfied: charset_normalizer<4,>=2 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from requests->-r ./requirements.txt (line 3)) (3.5.2)
-07:36:48  Requirement already satisfied: idna<4,>=2.5 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from requests->-r ./requirements.txt (line 3)) (3.20)
-07:36:48  Requirement already satisfied: certifi>=2023.5.7 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from requests->-r ./requirements.txt (line 3)) (2026.10.23)
-07:36:48  Requirement already satisfied: python-dateutil<3.0.0,>=2.1 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from botocore<1.44.0,>=1.43.123->boto3->-r ./requirements.txt (line 1)) (2.9.0.post0)
-07:36:48  Requirement already satisfied: cryptography>=3.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2)) (50.0.1)
-07:36:48  Requirement already satisfied: cffi>=2.0.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (2.1.1)
-07:36:48  Requirement already satisfied: pycparser in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from cffi>=2.0.0->pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (3.0)
-07:36:48  Requirement already satisfied: six>=1.5 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from python-dateutil<3.0.0,>=2.1->botocore<1.44.0,>=1.43.123->boto3->-r ./requirements.txt (line 1)) (1.17.0)
-07:36:48  + IFS=
-07:36:48  + read -r requirements_file
-07:36:48  + for req_file in $REQUIREMENTS
-07:36:48  + IFS=
-07:36:48  + read -r requirements_file
-07:36:48  + find . -iname requirements-dev.txt
-07:36:48  [Pipeline] }
-07:36:48  [Pipeline] // withEnv
-07:36:48  [Pipeline] }
-07:36:48  [Pipeline] // ws
-07:36:48  [Pipeline] }
-07:36:49  [Pipeline] // node
-07:36:49  [Pipeline] }
-07:36:49  [Pipeline] // stage
-07:36:49  [Pipeline] ws
-07:36:49  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/40/admin/scripts
-07:36:49  [Pipeline] {
-07:36:49  [Pipeline] sh
-07:36:49  + /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
-07:37:28  ======================================
-07:37:28  JENKINS WORKSPACE CLEANUP - DRY RUN
-07:37:28  ======================================
-07:37:28  Scanning         : /home/jenkins/workspace
-07:37:28  Retention period : 90 days
-07:37:28  Max scan time    : 300 seconds
-07:37:28  Mode             : DRY-RUN
-07:37:28  
-07:37:28  Scanned: 5000 | Stale Terraform: 0 | Stale build folders: 4223
-07:38:00  Scanned: 10000 | Stale Terraform: 0 | Stale build folders: 7902
-07:38:32  CSV report generated: jenkins_stale_list.csv
-07:38:32  
-07:38:32  ======================================
-07:38:32  DRY-RUN SUMMARY
-07:38:32  ======================================
-07:38:32  Directories scanned         : 14374
-07:38:32  Terraform directories found : 0
-07:38:32  Stale Terraform directories : 0
-07:38:32  Numeric directories found   : 18772
-07:38:32  Stale numeric directories   : 12174
-07:38:32  Irrelevant folders skipped  : 58
-07:38:32  Scan errors                 : 0
-07:38:32  Execution time              : 97.96 seconds
-07:38:32  Scan status                 : COMPLETE WITH EXCLUSIONS
-07:38:32  Directories deleted         : 0
-07:38:32  Files deleted               : 0
-07:38:32  ======================================
-07:38:32  DRY-RUN COMPLETE - NOTHING DELETED
-07:38:32  ======================================
-07:38:32  [Pipeline] archiveArtifacts
-07:38:33  Archiving artifacts
-07:38:33  Recording fingerprints
-07:38:33  [Pipeline] }
-07:38:33  [Pipeline] // ws
-07:38:33  [Pipeline] }
-07:38:33  [Pipeline] // script
-07:38:33  [Pipeline] }
-07:38:33  [Pipeline] // stage
-07:38:33  [Pipeline] stage
-07:38:33  [Pipeline] { (Declarative: Post Actions)
-07:38:33  [Pipeline] echo
-07:38:33  EFS Cleanup failed. Check console output for details.
+
+customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
+
+pipeline {
+    agent { label jte.keywords.project }
+
+    triggers {
+        cron('0 2 * * 1-5') // Every Monday-Friday at 9:00 pm EST.
+    }
+
+    stages {
+        stage('Disable Concurrent Builds') {
+            steps {
+                echo "Disabling Concurrent Builds"
+                script {
+                    disable_concurrent_builds()
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    git_checkout()
+                }
+            }
+        }
+
+        stage('Run EFS Cleanup') {
+            steps {
+                echo "Starting EFS Cleanup..."
+                script {
+                    setup()
+                    ws("${customPath}/admin/scripts"){
+                        sh """
+                        /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
+                        """
+
+                        echo "======================================"
+                        echo "Verifying EFS Cleanup CSV"
+                        echo "======================================"
+
+                        sh """
+                        pwd
+                        test -s jenkins_stale_list.csv
+                        ls -lh jenkins_stale_list.csv
+                        """
+
+                        echo "======================================"
+                        echo "Archiving EFS Cleanup CSV"
+                        echo "======================================"
+
+                        archiveArtifacts artifacts: 'jenkins_stale_list.csv',
+                                         allowEmptyArchive: false,
+                                         fingerprint: true,
+                                         onlyIfSuccessful: false
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'EFS Cleanup completed successfully!'
+        }
+        failure {
+            echo 'EFS Cleanup failed. Check console output for details.'
+            // email_via_sns()
+        }
+    }
+}
