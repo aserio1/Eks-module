@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 
 # Jenkins Workspace Cleanup - FAST DRY RUN
@@ -5,25 +6,22 @@
 #
 # Uses Jenkins workspace pattern:
 # workspace/${JOB_NAME.replace('%2F','/')}/${BUILD_NUMBER}
+#
 # Fast DRY-RUN inventory of:
 #   1. Stale .terraform directories
 #   2. Potential stale Jenkins build workspaces
 #
 # No hardcoded Jenkins project folders.
-# No EFS mount requirement.
-# No hardcoded Jenkins project names.
 # No recursive size calculations.
 # No files or directories deleted.
-# No deletion.
-#
-# Run against the actual workspace storage path
-# visible to the Jenkins execution environment.
 
 import os
 import sys
 import time
-from pathlib import Path
+import csv
 import argparse
+from pathlib import Path
+from datetime import datetime, timezone
 
 ROOT_DIR = "/home/jenkins/workspace"
 MAX_WORKERS = 8
@@ -31,9 +29,8 @@ STALE_DAYS = 90
 
 MAX_SCAN_SECONDS = 300
 PROGRESS_INTERVAL = 5000
+DRY_RUN = True
 
-
-def get_workspace_root():
 SKIP_DIRS = {
     ".git",
     ".svn",
@@ -58,15 +55,14 @@ SKIP_DIRS = {
 }
 
 
-def scan_workspaces(root, stale_days, max_seconds):
+def get_workspace_root():
     """
-    Derive workspace root from Jenkins environment.
-    Discover stale Terraform caches and potential
-    Jenkins build workspaces.
+    Derive the workspace root from the Jenkins environment.
+
     Expected pattern:
       <root>/<JOB_NAME>/<BUILD_NUMBER>
-    JOB_NAME may contain nested folders and branch names.
-    No deletion is performed.
+
+    Jenkins ws() may include additional subdirectories.
     """
 
     workspace = os.environ.get("WORKSPACE")
@@ -75,10 +71,10 @@ def scan_workspaces(root, stale_days, max_seconds):
 
     if not all((workspace, job_name, build_number)):
         print(
-            "ERROR: WORKSPACE, JOB_NAME and BUILD_NUMBER "
-            "must be available."
+            "WARNING: Jenkins workspace environment unavailable. "
+            "Using configured root."
         )
-        sys.exit(1)
+        return Path(ROOT_DIR).resolve()
 
     if not build_number.isdigit():
         print("ERROR: Invalid BUILD_NUMBER.")
@@ -90,16 +86,9 @@ def scan_workspaces(root, stale_days, max_seconds):
         if part
     ]
 
-    # Resolve the known Jenkins workspace suffix.
     suffix = Path(*job_parts, build_number)
-    cutoff = time.time() - (stale_days * 86400)
-    start_time = time.monotonic()
-
     workspace_path = Path(workspace).resolve()
-    stack = [(root, 0)]
 
-    # Jenkins ws() may be nested further for script execution.
-    # Find the expected job/build suffix in the workspace path.
     parts = workspace_path.parts
     suffix_parts = suffix.parts
 
@@ -108,34 +97,31 @@ def scan_workspaces(root, stale_days, max_seconds):
             return Path(*parts[:i])
 
     print(
-        "ERROR: Cannot derive workspace root from "
+        "WARNING: Cannot derive workspace root from "
         "WORKSPACE/JOB_NAME/BUILD_NUMBER."
     )
-    print(f"WORKSPACE    : {workspace}")
-    print(f"JOB_NAME     : {job_name}")
-    print(f"BUILD_NUMBER : {build_number}")
-    sys.exit(1)
+
+    return Path(ROOT_DIR).resolve()
 
 
-def scan_workspaces(root, current_workspace):
+def scan_workspaces(root, current_workspace, stale_days, max_seconds):
     """
-    Find stale numeric build directories.
-    Does not recurse into numeric build directories.
-    Does not inspect file contents.
-    Does not delete anything.
+    Find stale Terraform caches and numeric build directories.
+
+    No recursive size calculations.
+    No deletion operations.
     """
 
-    cutoff = time.time() - (STALE_DAYS * 86400)
+    cutoff = time.time() - (stale_days * 86400)
     start = time.monotonic()
 
     stack = [Path(root)]
-    current = Path(current_workspace).resolve()
+    current = (
+        Path(current_workspace).resolve()
+        if current_workspace
+        else None
+    )
 
-    scanned = 0
-    stale = 0
-    skipped = 0
-    errors = 0
-    timed_out = False
     results = {
         "directories_scanned": 0,
         "terraform_found": 0,
@@ -144,123 +130,150 @@ def scan_workspaces(root, current_workspace):
         "stale_build_dirs": 0,
         "skipped": 0,
         "errors": 0,
-        "timed_out": False
+        "timed_out": False,
+        "candidates": []
     }
 
     while stack:
 
-        if time.monotonic() - start >= MAX_SCAN_SECONDS:
-            timed_out = True
-        if time.monotonic() - start_time >= max_seconds:
+        if time.monotonic() - start >= max_seconds:
             results["timed_out"] = True
             break
 
         directory = stack.pop()
-        current, depth = stack.pop()
-        results["directories_scanned"] += 1
-
-        if results["directories_scanned"] % PROGRESS_INTERVAL == 0:
-            print(
-                f"Scanned: {results['directories_scanned']} | "
-                f"Stale Terraform: {results['stale_terraform']} | "
-                f"Stale build folders: {results['stale_build_dirs']}",
-                flush=True
-            )
 
         try:
             with os.scandir(directory) as entries:
-            with os.scandir(current) as entries:
                 for entry in entries:
 
+                    if time.monotonic() - start >= max_seconds:
+                        results["timed_out"] = True
+                        break
+
                     try:
-@@ -116,100 +100,137 @@ def scan_workspaces(root, current_workspace):
-                        ):
+                        if not entry.is_dir(follow_symlinks=False):
                             continue
 
-                        scanned += 1
-                        path = Path(entry.path)
+                        results["directories_scanned"] += 1
+
+                        if results["directories_scanned"] % PROGRESS_INTERVAL == 0:
+                            print(
+                                f"Scanned: {results['directories_scanned']} | "
+                                f"Stale Terraform: {results['stale_terraform']} | "
+                                f"Stale build folders: {results['stale_build_dirs']}",
+                                flush=True
+                            )
+
                         if entry.name in SKIP_DIRS:
                             results["skipped"] += 1
                             continue
 
-                        # Skip the current job workspace and
-                        # all of its parent directories.
-                        resolved = path.resolve()
+                        path = Path(entry.path)
+
+                        # Protect current Jenkins workspace.
+                        if current:
+                            resolved = path.resolve()
+
+                            if resolved == current:
+                                results["skipped"] += 1
+                                continue
+
+                            if current in resolved.parents:
+                                results["skipped"] += 1
+                                continue
+
                         if entry.name == ".terraform":
                             results["terraform_found"] += 1
 
-                        if (
-                            resolved == current
-                            or resolved in current.parents
-                        ):
-                            skipped += 1
-                            info = entry.stat(
-                                follow_symlinks=False
-                            )
+                            info = entry.stat(follow_symlinks=False)
 
-                            # Still need to traverse parent
-                            # folders to discover other jobs.
-                            if resolved != current:
-                                stack.append(path)
                             if info.st_mtime < cutoff:
                                 results["stale_terraform"] += 1
+                                results["candidates"].append({
+                                    "type": "Stale Terraform Directory",
+                                    "path": str(path),
+                                    "modified": info.st_mtime,
+                                    "age": int(
+                                        (time.time() - info.st_mtime) / 86400
+                                    )
+                                })
 
-                            # Do not recurse into Terraform cache.
                             continue
 
-                        # Numeric directories may represent
-                        # Jenkins BUILD_NUMBER directories.
                         if entry.name.isdigit():
                             results["build_dirs_found"] += 1
 
-                            info = entry.stat(
-                                follow_symlinks=False
-                            )
+                            info = entry.stat(follow_symlinks=False)
 
                             if info.st_mtime < cutoff:
-                                stale += 1
                                 results["stale_build_dirs"] += 1
+                                results["candidates"].append({
+                                    "type": "Stale Numeric Workspace",
+                                    "path": str(path),
+                                    "modified": info.st_mtime,
+                                    "age": int(
+                                        (time.time() - info.st_mtime) / 86400
+                                    )
+                                })
 
-                            # Do not scan inside build folders.
-                            # Do not recurse into build directories.
                             continue
 
                         stack.append(path)
 
-                        if scanned % PROGRESS_INTERVAL == 0:
-                            print(
-                                f"Scanned: {scanned} | "
-                                f"Stale build folders: {stale}",
-                                flush=True
-                            )
-                        stack.append((entry.path, depth + 1))
-
-                    except OSError:
-                        errors += 1
+                    except OSError as error:
                         results["errors"] += 1
+                        print(f"WARNING: {entry.path}: {error}")
 
-        except OSError:
-            errors += 1
+                if results["timed_out"]:
+                    break
 
-    return {
-        "scanned": scanned,
-        "stale": stale,
-        "skipped": skipped,
-        "errors": errors,
-        "timed_out": timed_out,
-        "elapsed": time.monotonic() - start
-    }
+        except OSError as error:
             results["errors"] += 1
+            print(f"WARNING: {directory}: {error}")
 
-    results["elapsed"] = time.monotonic() - start_time
+    results["elapsed"] = time.monotonic() - start
 
     return results
 
 
+def write_csv(results, csv_file):
+    """
+    Write stale workspace and Terraform candidates to CSV.
+    """
+
+    with open(csv_file, "w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+
+        writer.writerow([
+            "Type",
+            "Directory Path",
+            "Last Modified",
+            "Age (Days)",
+            "Cleanup Status"
+        ])
+
+        for candidate in sorted(
+            results["candidates"],
+            key=lambda item: item["path"]
+        ):
+            modified = datetime.fromtimestamp(
+                candidate["modified"],
+                timezone.utc
+            ).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+            writer.writerow([
+                candidate["type"],
+                candidate["path"],
+                modified,
+                candidate["age"],
+                "Dry Run - Not Deleted"
+            ])
+
+    print(f"CSV report generated: {Path(csv_file).resolve()}")
+
+
 def main():
 
-    root = get_workspace_root()
-    current_workspace = os.environ["WORKSPACE"]
     parser = argparse.ArgumentParser(
         description="Jenkins workspace cleanup dry-run"
     )
@@ -283,8 +296,12 @@ def main():
         default=MAX_SCAN_SECONDS
     )
 
-    if not root.is_dir():
-        print(f"ERROR: Workspace root not found: {root}")
+    parser.add_argument(
+        "--csv",
+        default="jenkins_stale_list.csv",
+        help="CSV output filename"
+    )
+
     parser.add_argument(
         "--execute",
         action="store_true",
@@ -300,72 +317,67 @@ def main():
     if args.stale_days < 0 or args.max_seconds <= 0:
         parser.error("Invalid retention or scan-time value")
 
-    if not os.path.isdir(args.root):
-        print(
-            f"ERROR: Workspace directory not accessible: "
-            f"{args.root}",
-            file=sys.stderr
-        )
+    root = Path(args.root).resolve()
+
+    if not root.is_dir():
+        print(f"ERROR: Workspace root not found: {root}")
         sys.exit(1)
 
+    current_workspace = os.environ.get("WORKSPACE")
+
     print("======================================")
-    print("JENKINS WORKSPACE CLEANUP - DRY RUN")
+    print("JENKINS EFS CLEANUP - DRY RUN")
     print("======================================")
-    print(f"Workspace root : {root}")
-    print(f"Current job    : {os.environ['JOB_NAME']}")
-    print(f"Build number   : {os.environ['BUILD_NUMBER']}")
-    print(f"Retention      : {STALE_DAYS} days")
-    print("Mode           : DRY-RUN")
-    print(f"Scanning         : {args.root}")
-    print(f"Retention period : {args.stale_days} days")
+    print(f"Workspace root   : {root}")
+    print(f"Retention        : {args.stale_days} days")
     print(f"Max scan time    : {args.max_seconds} seconds")
-    print("Mode             : DRY-RUN")
+    print(f"CSV report       : {Path(args.csv).resolve()}")
+    print("Terraform cleanup: DRY RUN")
+    print("Stale builds     : DRY RUN")
+    print("Deletion enabled : NO")
     print()
 
-    results = scan_workspaces(root, current_workspace)
     results = scan_workspaces(
-        args.root,
+        root,
+        current_workspace,
         args.stale_days,
         args.max_seconds
     )
 
+    write_csv(results, args.csv)
+
     print()
     print("======================================")
-    print("DRY-RUN SUMMARY")
+    print("JENKINS EFS CLEANUP - DRY RUN SUMMARY")
     print("======================================")
-    print(f"Directories scanned       : {results['scanned']}")
-    print(f"Stale build directories   : {results['stale']}")
-    print(f"Directories skipped       : {results['skipped']}")
-    print(f"Scan errors               : {results['errors']}")
-    print(f"Execution time            : {results['elapsed']:.2f} seconds")
-    print(
-        f"Scan status               : "
-        f"{'PARTIAL' if results['timed_out'] or results['errors'] else 'COMPLETE'}"
     print(f"Directories scanned         : {results['directories_scanned']}")
     print(f"Terraform directories found : {results['terraform_found']}")
     print(f"Stale Terraform directories : {results['stale_terraform']}")
     print(f"Numeric directories found   : {results['build_dirs_found']}")
     print(f"Stale numeric directories   : {results['stale_build_dirs']}")
-    print(f"Irrelevant folders skipped  : {results['skipped']}")
+    print(f"Directories skipped         : {results['skipped']}")
     print(f"Scan errors                 : {results['errors']}")
     print(f"Execution time              : {results['elapsed']:.2f} seconds")
 
     scan_status = (
         "PARTIAL"
         if results["timed_out"] or results["errors"]
-        else "COMPLETE WITH EXCLUSIONS"
+        else "COMPLETE"
     )
-    print("Directories deleted       : 0")
-    print("Files deleted             : 0")
 
     print(f"Scan status                 : {scan_status}")
     print("Directories deleted         : 0")
     print("Files deleted               : 0")
     print("======================================")
-    print("DRY-RUN COMPLETE - NO DELETION")
-    print("DRY-RUN COMPLETE - NOTHING DELETED")
+    print("DRY RUN COMPLETE - NOTHING DELETED")
     print("======================================")
+
+    if results["timed_out"]:
+        print(
+            "WARNING: Scan reached its time limit. "
+            "CSV contains only discovered candidates."
+        )
 
 
 if __name__ == "__main__":
-    main
+    main()
