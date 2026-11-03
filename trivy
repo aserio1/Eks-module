@@ -1,3 +1,568 @@
+ Did you forget the `def` keyword? WorkflowScript seems to be setting a field named customPath (to a value of type GStringImpl) which could lead to memory leaks or other issues.
+19:49:26  [Pipeline] node
+19:49:26  Running on utility in /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32
+19:49:26  [Pipeline] {
+19:49:27  [Pipeline] stage
+19:49:27  [Pipeline] { (Declarative: Checkout SCM)
+19:49:27  [Pipeline] checkout
+19:49:27  The recommended git tool is: NONE
+19:49:28  using credential github_svc_account
+19:49:29  Fetching changes from the remote Git repository
+19:49:29   > git rev-parse --resolve-git-dir /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32/.git # timeout=10
+19:49:29   > git config remote.origin.url https://git.aws.hhsoig.gov/CDO/imac-scripts.git # timeout=10
+19:49:29  Fetching without tags
+19:49:29  Fetching upstream changes from https://git.aws.hhsoig.gov/CDO/imac-scripts.git
+19:49:29   > git --version # timeout=10
+19:49:29   > git --version # 'git version 2.52.0'
+19:49:29  using GIT_ASKPASS to set credentials GitHub service account for Jenkins with token
+19:49:30   > git fetch --no-tags --force --progress -- https://git.aws.hhsoig.gov/CDO/imac-scripts.git +refs/pull/32/head:refs/remotes/origin/PR-32 # timeout=10
+19:49:31  Checking out Revision 587d3408110fd8efe72d401db64d519cc0fa509b (PR-32)
+19:49:31   > git config core.sparsecheckout # timeout=10
+19:49:31   > git checkout -f 587d3408110fd8efe72d401db64d519cc0fa509b # timeout=10
+19:49:34  Commit message: "updating jenkins file to support csv"
+19:49:34   > git rev-list --no-walk 06f657cb53e83f1b698e4d6ce7db18f35f1b8424 # timeout=10
+19:49:35  [Pipeline] }
+19:49:35  [Pipeline] // stage
+19:49:35  [Pipeline] withEnv
+19:49:35  [Pipeline] {
+19:49:35  [Pipeline] stage
+19:49:35  [Pipeline] { (Disable Concurrent Builds)
+19:49:35  [Pipeline] echo
+19:49:35  Disabling Concurrent Builds
+19:49:35  [Pipeline] script
+19:49:35  [Pipeline] {
+19:49:35  [JTE][Step - pipeline/disable_concurrent_builds.call()]
+19:49:36  [Pipeline] node
+19:49:36  Running on utility in /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32@2
+19:49:36  [Pipeline] {
+19:49:36  [Pipeline] ws
+19:49:36  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/31
+19:49:36  [Pipeline] {
+19:49:36  [Pipeline] stage
+19:49:36  [Pipeline] { (Disable Concurrent Builds)
+19:49:36  [Pipeline] echo
+19:49:36  PR build detected (#32)
+19:49:36  [Pipeline] properties
+19:49:36  [Pipeline] }
+19:49:36  [Pipeline] // stage
+19:49:36  [Pipeline] }
+19:49:37  [Pipeline] // ws
+19:49:37  [Pipeline] }
+19:49:37  [Pipeline] // node
+19:49:37  [Pipeline] }
+19:49:37  [Pipeline] // script
+19:49:37  [Pipeline] }
+19:49:37  [Pipeline] // stage
+19:49:37  [Pipeline] stage
+19:49:37  [Pipeline] { (Checkout)
+19:49:38  [Pipeline] script
+19:49:38  [Pipeline] {
+19:49:38  [JTE][Step - version_control/git_checkout.call()]
+19:49:38  [Pipeline] node
+19:49:38  Running on utility in /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32@2
+19:49:38  [Pipeline] {
+19:49:38  [Pipeline] ws
+19:49:38  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/31
+19:49:38  [Pipeline] {
+19:49:38  [Pipeline] stage
+19:49:38  [Pipeline] { (Git Checkout)
+19:49:38  [Pipeline] checkout
+19:49:38  The recommended git tool is: NONE
+19:49:38  using credential github_svc_account
+19:49:38  Cloning the remote Git repository
+19:49:38  Cloning with configured refspecs honoured and without tags
+19:49:38  Cloning repository https://git.aws.hhsoig.gov/CDO/imac-scripts.git
+19:49:39   > git init /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/31 # timeout=10
+19:49:39  Fetching upstream changes from https://git.aws.hhsoig.gov/CDO/imac-scripts.git
+19:49:39   > git --version # timeout=10
+19:49:39   > git --version # 'git version 2.52.0'
+19:49:39  using GIT_ASKPASS to set credentials GitHub service account for Jenkins with token
+19:49:39   > git fetch --no-tags --force --progress -- https://git.aws.hhsoig.gov/CDO/imac-scripts.git +refs/pull/32/head:refs/remotes/origin/PR-32 # timeout=10
+19:49:40  Fetching without tags
+19:49:40  Checking out Revision 587d3408110fd8efe72d401db64d519cc0fa509b (PR-32)
+19:49:40   > git config remote.origin.url https://git.aws.hhsoig.gov/CDO/imac-scripts.git # timeout=10
+19:49:40   > git config --add remote.origin.fetch +refs/pull/32/head:refs/remotes/origin/PR-32 # timeout=10
+19:49:40   > git config remote.origin.url https://git.aws.hhsoig.gov/CDO/imac-scripts.git # timeout=10
+19:49:40  Fetching upstream changes from https://git.aws.hhsoig.gov/CDO/imac-scripts.git
+19:49:40  using GIT_ASKPASS to set credentials GitHub service account for Jenkins with token
+19:49:40   > git fetch --no-tags --force --progress -- https://git.aws.hhsoig.gov/CDO/imac-scripts.git +refs/pull/32/head:refs/remotes/origin/PR-32 # timeout=10
+19:49:40   > git config core.sparsecheckout # timeout=10
+19:49:40   > git checkout -f 587d3408110fd8efe72d401db64d519cc0fa509b # timeout=10
+19:49:41  Commit message: "updating jenkins file to support csv"
+19:49:42  [Pipeline] echo
+19:49:42  Checking out source code @ 587d3408110fd8efe72d401db64d519cc0fa509b
+19:49:42  [Pipeline] }
+19:49:42  [Pipeline] // stage
+19:49:42  [Pipeline] }
+19:49:42  [Pipeline] // ws
+19:49:42  [Pipeline] }
+19:49:42  [Pipeline] // node
+19:49:42  [JTE][@AfterStep - governance/pipeline_policy_check.call]
+19:49:42  [Pipeline] node
+19:49:42  Running on utility in /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32@2
+19:49:42  [Pipeline] {
+19:49:43  [Pipeline] ws
+19:49:43  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/31
+19:49:43  [Pipeline] {
+19:49:43  [Pipeline] stage
+19:49:43  [Pipeline] { (Governance: Pipeline Policy Check)
+19:49:43  [Pipeline] echo
+19:49:43  [GOVERNANCE] Running pipeline OPA policy checks...
+19:49:43  [Pipeline] echo
+19:49:43  
+19:49:43  [Pipeline] withEnv
+19:49:43  [Pipeline] {
+19:49:43  [Pipeline] sh
+19:49:44  [GOVERNANCE] Needed paths: policies/cdo/pipelines
+19:49:44  [GOVERNANCE] Project: utility
+19:49:44  [GOVERNANCE] Initial sparse clone of policies...
+19:49:44  Cloning into 'governance/repos/imac-policies'...
+19:49:46  Already on 'main'
+19:49:46  Your branch is up to date with 'origin/main'.
+19:49:46  [GOVERNANCE] Copying policy files into bundle...
+19:49:46  [GOVERNANCE] Pipeline policies detected — fetching data for project 'utility'...
+19:49:46  Cloning into 'governance/repos/imac-jenkins-jobs'...
+19:49:49  Already on 'main'
+19:49:49  Your branch is up to date with 'origin/main'.
+19:49:49  [GOVERNANCE] Copying governance/repos/imac-jenkins-jobs/jobs/utility.json → opa_policies/defined_pipelines/data.json
+19:49:49  [GOVERNANCE] Bundle contents:
+19:49:49  opa_policies/policies/cdo/pipelines/github_settings/github_settings.rego
+19:49:49  opa_policies/policies/cdo/pipelines/github_settings/github_settings_test.rego
+19:49:49  opa_policies/policies/cdo/pipelines/seed_validation/seed_validation.rego
+19:49:49  opa_policies/policies/cdo/pipelines/seed_validation/seed_validation_test.rego
+19:49:49  opa_policies/policies/cdo/pipelines/restricted_steps/restricted_steps.rego
+19:49:49  opa_policies/policies/cdo/pipelines/restricted_steps/restricted_steps_test.rego
+19:49:49  opa_policies/policies/cdo/pipelines/required_steps/required_security_steps_test.rego
+19:49:49  opa_policies/policies/cdo/pipelines/required_steps/security_exceptions.rego
+19:49:49  opa_policies/policies/cdo/pipelines/required_steps/required_steps.rego
+19:49:49  opa_policies/policies/cdo/pipelines/required_steps/required_security_steps.rego
+19:49:49  opa_policies/policies/cdo/pipelines/required_steps/required_steps_test.rego
+19:49:49  opa_policies/policies/cdo/pipelines/deprecated_steps/deprecated_steps.rego
+19:49:49  opa_policies/policies/cdo/pipelines/deprecated_steps/deprecated_steps_test.rego
+19:49:49  opa_policies/defined_pipelines/data.json
+19:49:50  [GOVERNANCE] Fetch policies completed.
+19:49:50  [Pipeline] }
+19:49:50  [Pipeline] // withEnv
+19:49:50  [Pipeline] echo
+19:49:50  [GOVERNANCE] Seed validation check: generate pre-requisites...
+19:49:50  [Pipeline] writeFile
+19:49:51  [Pipeline] echo
+19:49:51  [GOVERNANCE] OPA input written to: /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/31/governance/seed_input.json
+19:49:51  [Pipeline] echo
+19:49:51  [GOVERNANCE] Seed validation check: Running OPA policy...
+19:49:51  [Pipeline] catchError
+19:49:51  [Pipeline] {
+19:49:51  [Pipeline] withEnv
+19:49:51  [Pipeline] {
+19:49:51  [Pipeline] sh
+19:49:51  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+19:49:51  [GOVERNANCE] Using decision: cdo/pipelines/seed_validation/violations
+19:49:51  [GOVERNANCE] Using input JSON: governance/seed_input.json
+19:49:51  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/seed_validation/violations
+19:49:52  {
+19:49:52    "result": [
+19:49:52      {
+19:49:52        "decision_id": "22c8bee0-06c9-4e71-9920-3b51065a8213",
+19:49:52        "path": "governance/seed_input.json",
+19:49:52        "result": []
+19:49:52      }
+19:49:52    ]
+19:49:52  }
+19:49:52  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/seed_validation/violations
+19:49:52  [GOVERNANCE] OPA pipeline policy evaluation complete.
+19:49:52  [Pipeline] }
+19:49:52  [Pipeline] // withEnv
+19:49:52  [Pipeline] }
+19:49:52  [Pipeline] // catchError
+19:49:52  [Pipeline] echo
+19:49:52  [GOVERNANCE] Seed validation check complete.
+19:49:52  [Pipeline] readJSON
+19:49:52  [Pipeline] echo
+19:49:52  [GOVERNANCE] GitHub repository settings check: generate pre-requisites...
+19:49:53  [Pipeline] catchError
+19:49:53  [Pipeline] {
+19:49:53  [Pipeline] withCredentials
+19:49:53  Masking supported pattern matches of $GH_TOKEN
+19:49:53  [Pipeline] {
+19:49:53  [Pipeline] withEnv
+19:49:53  [Pipeline] {
+19:49:53  [Pipeline] sh
+19:49:54  [GOVERNANCE] Fetching GitHub settings for target repository...
+19:49:54  [GOVERNANCE] Successfully fetched and consolidated GitHub settings.
+19:49:54  [Pipeline] echo
+19:49:54  [GOVERNANCE] GitHub settings check: Running OPA policy...
+19:49:54  [Pipeline] sh
+19:49:54  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+19:49:54  [GOVERNANCE] Using decision: cdo/pipelines/github_settings/deny
+19:49:54  [GOVERNANCE] Using input JSON: governance/github_settings_input.json
+19:49:54  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/github_settings/deny
+19:49:54  {
+19:49:54    "result": [
+19:49:54      {
+19:49:54        "decision_id": "7fcfd3d7-9ab3-4fa7-b21e-bdfff7212ede",
+19:49:54        "path": "governance/github_settings_input.json",
+19:49:54        "result": []
+19:49:54      }
+19:49:54    ]
+19:49:54  }
+19:49:54  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/github_settings/deny
+19:49:54  [GOVERNANCE] OPA pipeline policy evaluation complete.
+19:49:54  [Pipeline] }
+19:49:55  [Pipeline] // withEnv
+19:49:55  [Pipeline] }
+19:49:55  [Pipeline] // withCredentials
+19:49:55  [Pipeline] }
+19:49:55  [Pipeline] // catchError
+19:49:55  [Pipeline] echo
+19:49:55  [GOVERNANCE] GitHub repository settings check complete.
+19:49:55  [Pipeline] echo
+19:49:55  [GOVERNANCE] NOTICE: Jenkinsfile path mismatch between seed data ('admin/pipelines/Jenkinsfile.cleanup_efs') and live lookup ('Jenkinsfile'). Using seed-derived value. If this appears frequently, investigate resolveJenkinsfilePath() / job model staleness.
+19:49:55  [Pipeline] echo
+19:49:55  [GOVERNANCE] Current Jenkinsfile path: admin/pipelines/Jenkinsfile.cleanup_efs
+19:49:55  [Pipeline] withEnv
+19:49:55  [Pipeline] {
+19:49:55  [Pipeline] echo
+19:49:55  [GOVERNANCE] Required steps check: generate pre-requisites...
+19:49:56  [Pipeline] sh
+19:49:56  [Pipeline] sh
+19:49:56  [GOVERNANCE] detect_pipeline_steps scanning:
+19:49:56  admin/pipelines/Jenkinsfile.cleanup_efs
+19:49:56  [GOVERNANCE] detect_pipeline_steps produced:
+19:49:56  {"gov_steps":[]}
+19:49:56  [Pipeline] echo
+19:49:56  [GOVERNANCE] Required steps check: Running OPA policy...
+19:49:56  [Pipeline] catchError
+19:49:57  [Pipeline] {
+19:49:57  [Pipeline] withEnv
+19:49:57  [Pipeline] {
+19:49:57  [Pipeline] sh
+19:49:57  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+19:49:57  [GOVERNANCE] Using decision: cdo/pipelines/required_steps/deny
+19:49:57  [GOVERNANCE] Using input JSON: policy_input.json
+19:49:57  [GOVERNANCE] Merging tech stack + Jenkins pipeline steps into policy_input.json
+19:49:57  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_steps/deny
+19:49:57  {
+19:49:57    "result": [
+19:49:57      {
+19:49:57        "decision_id": "f855274c-5dbb-439c-ba69-ed9efc9c6b8e",
+19:49:57        "path": "policy_input.json",
+19:49:57        "result": [
+19:49:57          "Missing required step: The Jenkins job uses 'python' JTE library but does not call the 'scan_dependencies' step.",
+19:49:57          "Missing required step: The Jenkins job uses 'python' JTE library but does not call the 'unit_test' step."
+19:49:57        ]
+19:49:57      }
+19:49:57    ]
+19:49:57  }
+19:49:57  {"err":"exec error: there were 1 failures and 0 errors counted in the results list, and --fail-non-empty is set","level":"error","msg":"Unexpected error.","time":"2026-11-03T01:49:57Z"}
+19:49:57  [GOVERNANCE] OPA pipeline policy check FAILED: cdo/pipelines/required_steps/deny
+19:49:58  [Pipeline] }
+19:49:58  [Pipeline] // withEnv
+19:49:58  [Pipeline] }
+19:49:58  ERROR: script returned exit code 1
+19:49:58  [Pipeline] // catchError
+19:49:58  [Pipeline] echo
+19:49:58  [GOVERNANCE] Required steps check complete.
+19:49:58  [Pipeline] echo
+19:49:58  [GOVERNANCE] Deprecated steps check: generate pre-requisites...
+19:49:58  [Pipeline] sh
+19:49:59  [GOVERNANCE] detect_deprecated_steps scanning:
+19:49:59  admin/pipelines/Jenkinsfile.cleanup_efs
+19:49:59  [GOVERNANCE] Generated deprecated input: deprecated_input.json
+19:49:59  [Pipeline] echo
+19:49:59  [GOVERNANCE] Deprecated steps check: Running OPA policy...
+19:49:59  [Pipeline] sh
+19:49:59  + date +%s
+19:49:59  [Pipeline] sh
+19:50:00  + date -d 2026-07-01 +%s
+19:50:00  [Pipeline] echo
+19:50:00  [GOVERNANCE] Enforcement date 2026-07-01 has been reached. Violations will fail the build.
+19:50:00  [Pipeline] catchError
+19:50:00  [Pipeline] {
+19:50:00  [Pipeline] withEnv
+19:50:00  [Pipeline] {
+19:50:00  [Pipeline] sh
+19:50:00  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+19:50:00  [GOVERNANCE] Using decision: cdo/pipelines/deprecated_steps/deny
+19:50:00  [GOVERNANCE] Using input JSON: deprecated_input.json
+19:50:00  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/deprecated_steps/deny
+19:50:00  {
+19:50:00    "result": [
+19:50:00      {
+19:50:00        "decision_id": "7617f19c-2216-49a4-b0b8-5b12eb2c7316",
+19:50:00        "path": "deprecated_input.json",
+19:50:00        "result": []
+19:50:00      }
+19:50:00    ]
+19:50:00  }
+19:50:00  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/deprecated_steps/deny
+19:50:01  [GOVERNANCE] OPA pipeline policy evaluation complete.
+19:50:01  [Pipeline] }
+19:50:01  [Pipeline] // withEnv
+19:50:01  [Pipeline] }
+19:50:01  [Pipeline] // catchError
+19:50:01  [Pipeline] echo
+19:50:01  [GOVERNANCE] Deprecated steps check complete.
+19:50:01  [Pipeline] echo
+19:50:01  [GOVERNANCE] Restricted steps check: generate pre-requisites...
+19:50:01  [Pipeline] sh
+19:50:02  [GOVERNANCE] detect_restricted_steps scanning: admin/pipelines/Jenkinsfile.cleanup_efs
+19:50:02  [GOVERNANCE] detect_restricted_steps found calls: []
+19:50:02  [GOVERNANCE] Restricted steps input written to: restricted_input.json
+19:50:02  {
+19:50:02    "pipeline": {
+19:50:02      "folder": "IMAC",
+19:50:02      "subfolder": "",
+19:50:02      "name": "IMAC Jenkins Cleanup EFS",
+19:50:02      "repo": "https://git.aws.hhsoig.gov/CDO/imac-scripts.git",
+19:50:02      "jenkinsfile": "admin/pipelines/Jenkinsfile.cleanup_efs",
+19:50:02      "pipeline_config": "admin/pipelines/pipeline_config.groovy"
+19:50:02    },
+19:50:02    "jenkins": {
+19:50:02      "calls": []
+19:50:02    }
+19:50:02  }
+19:50:02  [Pipeline] echo
+19:50:02  [GOVERNANCE] Restricted steps check: Running OPA policy...
+19:50:02  [Pipeline] catchError
+19:50:02  [Pipeline] {
+19:50:02  [Pipeline] withEnv
+19:50:02  [Pipeline] {
+19:50:03  [Pipeline] sh
+19:50:03  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+19:50:03  [GOVERNANCE] Using decision: cdo/pipelines/restricted_steps/deny
+19:50:03  [GOVERNANCE] Using input JSON: restricted_input.json
+19:50:03  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/restricted_steps/deny
+19:50:03  {
+19:50:03    "result": [
+19:50:03      {
+19:50:03        "decision_id": "6712cf43-23ac-4fdf-a109-c5456a55c6e8",
+19:50:03        "path": "restricted_input.json",
+19:50:03        "result": []
+19:50:03      }
+19:50:03    ]
+19:50:03  }
+19:50:03  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/restricted_steps/deny
+19:50:03  [GOVERNANCE] OPA pipeline policy evaluation complete.
+19:50:03  [Pipeline] }
+19:50:03  [Pipeline] // withEnv
+19:50:03  [Pipeline] }
+19:50:04  [Pipeline] // catchError
+19:50:04  [Pipeline] echo
+19:50:04  [GOVERNANCE] Restricted steps check complete.
+19:50:04  [Pipeline] echo
+19:50:04  [GOVERNANCE] Security steps check (SAST/DAST): generate pre-requisites...
+19:50:04  [Pipeline] catchError
+19:50:04  [Pipeline] {
+19:50:04  [Pipeline] withEnv
+19:50:04  [Pipeline] {
+19:50:04  [Pipeline] sh
+19:50:05  [GOVERNANCE] detect_sast_dast scanning repo at: /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/31
+19:50:05  [GOVERNANCE] JENKINSFILE_PATH received: admin/pipelines/Jenkinsfile.cleanup_efs (resolved: admin/pipelines/Jenkinsfile.cleanup_efs)
+19:50:05  [GOVERNANCE] signals: is_frontend=false has_api_gateway=false has_http_listener=false target_url_output=<none>
+19:50:05  [GOVERNANCE] security steps INVOKED in admin/pipelines/Jenkinsfile.cleanup_efs: []
+19:50:05  [GOVERNANCE] dast target URL from Jenkinsfile: <none>
+19:50:05  [GOVERNANCE] dast blocking mode: true
+19:50:05  [GOVERNANCE] security libraries LOADED in admin/pipelines/pipeline_config.groovy: []
+19:50:05  [GOVERNANCE] SAST/DAST input written to: dast_input.json
+19:50:05  [Pipeline] }
+19:50:05  [Pipeline] // withEnv
+19:50:05  [Pipeline] }
+19:50:05  [Pipeline] // catchError
+19:50:05  [Pipeline] fileExists
+19:50:05  [Pipeline] sh
+19:50:06  + date +%s
+19:50:06  [Pipeline] sh
+19:50:06  + date -d 2026-11-01 +%s
+19:50:06  [Pipeline] echo
+19:50:06  [GOVERNANCE] Security steps enforcement date 2026-11-01 has been reached. SAST/DAST violations will fail the build.
+19:50:06  [Pipeline] echo
+19:50:06  [GOVERNANCE] Security steps check (SAST/DAST): Running OPA policies...
+19:50:06  [Pipeline] catchError
+19:50:06  [Pipeline] {
+19:50:07  [Pipeline] withEnv
+19:50:07  [Pipeline] {
+19:50:07  [Pipeline] sh
+19:50:07  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+19:50:07  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/warn
+19:50:07  [GOVERNANCE] Using input JSON: dast_input.json
+19:50:07  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/warn
+19:50:07  {
+19:50:07    "result": [
+19:50:07      {
+19:50:07        "decision_id": "631f57b3-9c4a-48cf-8c4a-7705603b1788",
+19:50:07        "path": "dast_input.json",
+19:50:07        "result": []
+19:50:07      }
+19:50:07    ]
+19:50:07  }
+19:50:07  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/required_security_steps/warn
+19:50:07  [GOVERNANCE] OPA pipeline policy evaluation complete.
+19:50:07  [Pipeline] }
+19:50:08  [Pipeline] // withEnv
+19:50:08  [Pipeline] }
+19:50:08  [Pipeline] // catchError
+19:50:08  [Pipeline] catchError
+19:50:08  [Pipeline] {
+19:50:08  [Pipeline] withEnv
+19:50:08  [Pipeline] {
+19:50:08  [Pipeline] sh
+19:50:09  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+19:50:09  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/sast_deny
+19:50:09  [GOVERNANCE] Using input JSON: dast_input.json
+19:50:09  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/sast_deny
+19:50:09  {
+19:50:09    "result": [
+19:50:09      {
+19:50:09        "decision_id": "459daf6e-b8a4-4217-b0c2-f9bc81364c3d",
+19:50:09        "path": "dast_input.json",
+19:50:09        "result": [
+19:50:09          "Missing required step: 'sast' is required for all pipelines but was not found. If this specific pipeline should not run SAST, add a per-pipeline entry to imac-policies/policies/cdo/pipelines/required_steps/security_exceptions.rego."
+19:50:09        ]
+19:50:09      }
+19:50:09    ]
+19:50:09  }
+19:50:09  {"err":"exec error: there were 1 failures and 0 errors counted in the results list, and --fail-non-empty is set","level":"error","msg":"Unexpected error.","time":"2026-11-03T01:50:09Z"}
+19:50:09  [GOVERNANCE] OPA pipeline policy check FAILED: cdo/pipelines/required_security_steps/sast_deny
+19:50:09  [Pipeline] }
+19:50:09  [Pipeline] // withEnv
+19:50:09  [Pipeline] }
+19:50:09  ERROR: script returned exit code 1
+19:50:09  Setting overall build result to FAILURE
+19:50:09  [Pipeline] // catchError
+19:50:09  [Pipeline] readJSON
+19:50:10  [Pipeline] echo
+19:50:10  [GOVERNANCE] DAST is blocking. Violations will FAIL the build.
+19:50:10  [Pipeline] catchError
+19:50:10  [Pipeline] {
+19:50:10  [Pipeline] withEnv
+19:50:10  [Pipeline] {
+19:50:10  [Pipeline] sh
+19:50:10  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+19:50:10  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/dast_deny
+19:50:10  [GOVERNANCE] Using input JSON: dast_input.json
+19:50:10  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/dast_deny
+19:50:10  {
+19:50:10    "result": [
+19:50:10      {
+19:50:10        "decision_id": "a7def76a-2671-41d2-b850-7ab2a18f4399",
+19:50:10        "path": "dast_input.json",
+19:50:10        "result": []
+19:50:10      }
+19:50:10    ]
+19:50:10  }
+19:50:10  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/required_security_steps/dast_deny
+19:50:10  [GOVERNANCE] OPA pipeline policy evaluation complete.
+19:50:11  [Pipeline] }
+19:50:11  [Pipeline] // withEnv
+19:50:11  [Pipeline] }
+19:50:11  [Pipeline] // catchError
+19:50:11  [Pipeline] echo
+19:50:11  [GOVERNANCE] Security steps check (SAST/DAST) complete.
+19:50:11  [Pipeline] }
+19:50:11  [Pipeline] // withEnv
+19:50:11  [Pipeline] }
+19:50:12  [Pipeline] // stage
+19:50:12  [Pipeline] }
+19:50:12  [Pipeline] // ws
+19:50:12  [Pipeline] }
+19:50:12  [Pipeline] // node
+19:50:12  [Pipeline] }
+19:50:12  [Pipeline] // script
+19:50:12  [Pipeline] }
+19:50:12  [Pipeline] // stage
+19:50:13  [Pipeline] stage
+19:50:13  [Pipeline] { (Run EFS Cleanup - Dry Run)
+19:50:13  [Pipeline] echo
+19:50:13  Starting EFS Cleanup DRY RUN...
+19:50:13  [Pipeline] script
+19:50:13  [Pipeline] {
+19:50:13  [JTE][Step - python/setup.call()]
+19:50:13  [Pipeline] stage
+19:50:13  [Pipeline] { (Py Setup)
+19:50:13  [Pipeline] node
+19:50:13  Running on utility in /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32@2
+19:50:13  [Pipeline] {
+19:50:13  [Pipeline] ws
+19:50:14  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/31
+19:50:14  [Pipeline] {
+19:50:14  [Pipeline] echo
+19:50:14  Installing Build Tool
+19:50:14  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named env_name (to a value of type String) which could lead to memory leaks or other issues.
+19:50:14  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named requirements (to a value of type String) which could lead to memory leaks or other issues.
+19:50:14  [Pipeline] withEnv
+19:50:14  [Pipeline] {
+19:50:14  [Pipeline] sh
+19:50:15  Activating Conda environment: python312
+19:50:16  + python --version
+19:50:16  Python 3.12.4
+19:50:16  + python -m pip --version
+19:50:16  pip 24.2 from /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages/pip (python 3.12)
+19:50:16  + PIP_INSTALL='python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir'
+19:50:16  + python -m pip check
+19:50:16  No broken requirements found.
+19:50:16  + for req_file in $REQUIREMENTS
+19:50:16  + IFS=
+19:50:16  + read -r requirements_file
+19:50:16  + find . -iname requirements.txt
+19:50:16  + eval 'python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r "./requirements.txt"'
+19:50:16  ++ python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r ./requirements.txt
+19:50:17  Looking in indexes: https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
+19:50:18  Collecting boto3 (from -r ./requirements.txt (line 1))
+19:50:18    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/boto3/1.43.123/boto3-1.43.123-py3-none-any.whl (140 kB)
+19:50:18  Collecting PyGithub (from -r ./requirements.txt (line 2))
+19:50:18    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/pygithub/2.10.0/pygithub-2.10.0-py3-none-any.whl (455 kB)
+19:50:18  Collecting requests (from -r ./requirements.txt (line 3))
+19:50:18    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/requests/2.34.2/requests-2.34.2-py3-none-any.whl (73 kB)
+19:50:20  Collecting botocore<1.44.0,>=1.43.123 (from boto3->-r ./requirements.txt (line 1))
+19:50:20    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/botocore/1.43.123/botocore-1.43.123-py3-none-any.whl (16.2 MB)
+19:50:20       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.2/16.2 MB 68.7 MB/s eta 0:00:00
+19:50:20  Collecting jmespath<2.0.0,>=0.7.1 (from boto3->-r ./requirements.txt (line 1))
+19:50:20    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/jmespath/1.1.0/jmespath-1.1.0-py3-none-any.whl (20 kB)
+19:50:20  Collecting s3transfer<0.20.0,>=0.19.0 (from boto3->-r ./requirements.txt (line 1))
+19:50:20    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/s3transfer/0.19.3/s3transfer-0.19.3-py3-none-any.whl (90 kB)
+19:50:20  Collecting pynacl>=1.4.0 (from PyGithub->-r ./requirements.txt (line 2))
+19:50:21    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/pynacl/1.6.2/pynacl-1.6.2-cp38-abi3-manylinux_2_34_x86_64.whl (1.4 MB)
+19:50:21       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.4/1.4 MB 115.8 MB/s eta 0:00:00
+19:50:21  Collecting pyjwt>=2.4.0 (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2))
+19:50:21    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/pyjwt/2.15.1/pyjwt-2.15.1-py3-none-any.whl (33 kB)
+19:50:21  Collecting typing-extensions>=4.5.0 (from PyGithub->-r ./requirements.txt (line 2))
+19:50:21    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/typing-extensions/4.16.0/typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+19:50:21  Requirement already satisfied: urllib3>=1.26.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (2.7.0)
+19:50:22  Collecting charset_normalizer<4,>=2 (from requests->-r ./requirements.txt (line 3))
+19:50:22    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/charset-normalizer/3.5.2/charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (257 kB)
+19:50:22  Collecting idna<4,>=2.5 (from requests->-r ./requirements.txt (line 3))
+19:50:22    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/idna/3.20/idna-3.20-py3-none-any.whl (69 kB)
+19:50:22  Collecting certifi>=2023.5.7 (from requests->-r ./requirements.txt (line 3))
+19:50:22    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/certifi/2026.10.23/certifi-2026.10.23-py3-none-any.whl (135 kB)
+19:50:22  Collecting python-dateutil<3.0.0,>=2.1 (from botocore<1.44.0,>=1.43.123->boto3->-r ./requirements.txt (line 1))
+19:50:22    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/python-dateutil/2.9.0.post0/python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+19:50:22  Requirement already satisfied: cryptography>=3.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2)) (50.0.1)
+19:50:22  Requirement already satisfied: cffi>=2.0.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (2.1.1)
+19:50:22  Requirement already satisfied: pycparser in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from cffi>=2.0.0->pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (3.0)
+19:50:22  Collecting six>=1.5 (from python-dateutil<3.0.0,>=2.1->botocore<1.44.0,>=1.43.123->boto3->-r ./requirements.txt (line 1))
+19:50:23    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/six/1.17.0/six-1.17.0-py2.py3-none-any.whl (11 kB)
+19:50:23  Installing collected packages: typing-extensions, six, pyjwt, jmespath, idna, charset_normalizer, certifi, requests, python-dateutil, pynacl, botocore, s3transfer, PyGithub, boto3
+19:50:24  Successfully installed PyGithub-2.10.0 boto3-1.43.123 botocore-1.43.123 certifi-2026.10.23 charset_normalizer-3.5.2 idna-3.20 jmespath-1.1.0 pyjwt-2.15.1 pynacl-1.6.2 python-dateutil-2.9.0.post0 requests-2.34.2 s3transfer-0.19.3 six-1.17.0 typing-extensions-4.16.0
+19:50:25  + IFS=
+19:50:25  + read -r requirements_file
+19:50:25  + for req_file in $REQUIREMENTS
+19:50:25  + IFS=
+19:50:25  + read -r requirements_file
+19:50:25  + find . -iname requirements-dev.txt
+19:50:25  [Pipeline] }
+19:50:25  [Pipeline] // withEnv
+19:50:25  [Pipeline] }
+19:50:25  [Pipeline] // ws
+19:50:25  [Pipeline] }
+19:50:25  [Pipeline] // node
+19:50:25  [Pipeline] }
+19:50:25  [Pipeline] // stage
+19:50:25  [Pipeline] ws
+19:50:25  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/31/admin/scripts
+19:50:25  [Pipeline] {
+19:50:26  [Pipeline] sh
+19:50:26  + set +e
+19:50:26  + echo ======================================
 19:50:26  ======================================
 19:50:26  + echo 'Verifying Dry Run Script'
 19:50:26  Verifying Dry Run Script
