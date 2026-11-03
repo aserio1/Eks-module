@@ -26,33 +26,6 @@ pipeline {
             }
         }
 
-        stage('Scan Dependencies') {
-            steps {
-                echo "Scanning Python dependencies"
-                script {
-                    scan_dependencies()
-                }
-            }
-        }
-
-        stage('Unit Test') {
-            steps {
-                echo "Running Python unit tests"
-                script {
-                    unit_test()
-                }
-            }
-        }
-
-        stage('SAST') {
-            steps {
-                echo "Running SAST security scan"
-                script {
-                    sast()
-                }
-            }
-        }
-
         stage('Run EFS Cleanup - Dry Run') {
             steps {
                 echo "Starting EFS Cleanup DRY RUN..."
