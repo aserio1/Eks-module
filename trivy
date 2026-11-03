@@ -1,248 +1,352 @@
+0:01:03  {
+20:01:03    "result": [
+20:01:03      {
+20:01:03        "decision_id": "d60c28e2-81d3-4d9b-ab97-18846fe5bc51",
+20:01:03        "path": "dast_input.json",
+20:01:03        "result": [
+20:01:03          "Missing required step: 'sast' is required for all pipelines but was not found. If this specific pipeline should not run SAST, add a per-pipeline entry to imac-policies/policies/cdo/pipelines/required_steps/security_exceptions.rego."
+20:01:03        ]
+20:01:03      }
+20:01:03    ]
+20:01:03  }
+20:01:03  {"err":"exec error: there were 1 failures and 0 errors counted in the results list, and --fail-non-empty is set","level":"error","msg":"Unexpected error.","time":"2026-10-30T02:01:03Z"}
+20:01:03  [GOVERNANCE] OPA pipeline policy check FAILED: cdo/pipelines/required_security_steps/sast_deny
+20:01:03  [Pipeline] }
+20:01:04  [Pipeline] // withEnv
+20:01:04  [Pipeline] }
+20:01:04  ERROR: script returned exit code 1
+20:01:04  [Pipeline] // catchError
+20:01:04  [Pipeline] readJSON
+20:01:04  [Pipeline] echo
+20:01:04  [GOVERNANCE] DAST in grace period. Violations are warnings only.
+20:01:04  [Pipeline] catchError
+20:01:04  [Pipeline] {
+20:01:04  [Pipeline] withEnv
+20:01:04  [Pipeline] {
+20:01:05  [Pipeline] sh
+20:01:05  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+20:01:05  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/dast_deny
+20:01:05  [GOVERNANCE] Using input JSON: dast_input.json
+20:01:05  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/dast_deny
+20:01:05  {
+20:01:05    "result": [
+20:01:05      {
+20:01:05        "decision_id": "befcfe5f-7f76-420c-9853-edd58ff583c6",
+20:01:05        "path": "dast_input.json",
+20:01:05        "result": []
+20:01:05      }
+20:01:05    ]
+20:01:05  }
+20:01:05  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/required_security_steps/dast_deny
+20:01:05  [GOVERNANCE] OPA pipeline policy evaluation complete.
+20:01:05  [Pipeline] }
+20:01:05  [Pipeline] // withEnv
+20:01:05  [Pipeline] }
+20:01:05  [Pipeline] // catchError
+20:01:05  [Pipeline] echo
+20:01:05  [GOVERNANCE] Security steps check (SAST/DAST) complete.
+20:01:05  [Pipeline] }
+20:01:06  [Pipeline] // withEnv
+20:01:06  [Pipeline] }
+20:01:06  [Pipeline] // stage
+20:01:06  [Pipeline] }
+20:01:06  [Pipeline] // ws
+20:01:06  [Pipeline] }
+20:01:06  [Pipeline] // node
+20:01:06  [Pipeline] }
+20:01:06  [Pipeline] // script
+20:01:06  [Pipeline] }
+20:01:07  [Pipeline] // stage
+20:01:07  [Pipeline] stage
+20:01:07  [Pipeline] { (Run EFS Cleanup)
+20:01:07  [Pipeline] echo
+20:01:07  Starting EFS Cleanup...
+20:01:07  [Pipeline] script
+20:01:07  [Pipeline] {
+20:01:07  [JTE][Step - python/setup.call()]
+20:01:07  [Pipeline] stage
+20:01:07  [Pipeline] { (Py Setup)
+20:01:07  [Pipeline] node
+20:01:07  Running on utility in /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32@2
+20:01:07  [Pipeline] {
+20:01:08  [Pipeline] ws
+20:01:08  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/24
+20:01:08  [Pipeline] {
+20:01:08  [Pipeline] echo
+20:01:08  Installing Build Tool
+20:01:08  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named env_name (to a value of type String) which could lead to memory leaks or other issues.
+20:01:08  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named requirements (to a value of type String) which could lead to memory leaks or other issues.
+20:01:08  [Pipeline] withEnv
+20:01:08  [Pipeline] {
+20:01:08  [Pipeline] sh
+20:01:09  Activating Conda environment: python312
+20:01:09  + python --version
+20:01:09  Python 3.12.4
+20:01:09  + python -m pip --version
+20:01:09  pip 24.2 from /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages/pip (python 3.12)
+20:01:09  + PIP_INSTALL='python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir'
+20:01:09  + python -m pip check
+20:01:10  No broken requirements found.
+20:01:10  + for req_file in $REQUIREMENTS
+20:01:10  + IFS=
+20:01:10  + read -r requirements_file
+20:01:10  + find . -iname requirements.txt
+20:01:10  + eval 'python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r "./requirements.txt"'
+20:01:10  ++ python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r ./requirements.txt
+20:01:11  Looking in indexes: https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
+20:01:12  Collecting boto3 (from -r ./requirements.txt (line 1))
+20:01:12    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/boto3/1.43.121/boto3-1.43.121-py3-none-any.whl (140 kB)
+20:01:12  Collecting PyGithub (from -r ./requirements.txt (line 2))
+20:01:14    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/pygithub/2.10.0/pygithub-2.10.0-py3-none-any.whl (455 kB)
+20:01:14  Collecting requests (from -r ./requirements.txt (line 3))
+20:01:14    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/requests/2.34.2/requests-2.34.2-py3-none-any.whl (73 kB)
+20:01:15  Collecting botocore<1.44.0,>=1.43.121 (from boto3->-r ./requirements.txt (line 1))
+20:01:15    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/botocore/1.43.121/botocore-1.43.121-py3-none-any.whl (16.2 MB)
+20:01:16       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.2/16.2 MB 62.4 MB/s eta 0:00:00
+20:01:16  Collecting jmespath<2.0.0,>=0.7.1 (from boto3->-r ./requirements.txt (line 1))
+20:01:16    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/jmespath/1.1.0/jmespath-1.1.0-py3-none-any.whl (20 kB)
+20:01:16  Collecting s3transfer<0.20.0,>=0.19.0 (from boto3->-r ./requirements.txt (line 1))
+20:01:16    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/s3transfer/0.19.3/s3transfer-0.19.3-py3-none-any.whl (90 kB)
+20:01:16  Collecting pynacl>=1.4.0 (from PyGithub->-r ./requirements.txt (line 2))
+20:01:16    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/pynacl/1.6.2/pynacl-1.6.2-cp38-abi3-manylinux_2_34_x86_64.whl (1.4 MB)
+20:01:16       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.4/1.4 MB 118.1 MB/s eta 0:00:00
+20:01:16  Collecting pyjwt>=2.4.0 (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2))
+20:01:16    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/pyjwt/2.15.1/pyjwt-2.15.1-py3-none-any.whl (33 kB)
+20:01:16  Collecting typing-extensions>=4.5.0 (from PyGithub->-r ./requirements.txt (line 2))
+20:01:16    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/typing-extensions/4.16.0/typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+20:01:16  Requirement already satisfied: urllib3>=1.26.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (2.7.0)
+20:01:17  Collecting charset_normalizer<4,>=2 (from requests->-r ./requirements.txt (line 3))
+20:01:17    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/charset-normalizer/3.5.2/charset_normalizer-3.5.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (257 kB)
+20:01:17  Collecting idna<4,>=2.5 (from requests->-r ./requirements.txt (line 3))
+20:01:17    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/idna/3.20/idna-3.20-py3-none-any.whl (69 kB)
+20:01:17  Collecting certifi>=2023.5.7 (from requests->-r ./requirements.txt (line 3))
+20:01:17    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/certifi/2026.10.23/certifi-2026.10.23-py3-none-any.whl (135 kB)
+20:01:17  Collecting python-dateutil<3.0.0,>=2.1 (from botocore<1.44.0,>=1.43.121->boto3->-r ./requirements.txt (line 1))
+20:01:18    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/python-dateutil/2.9.0.post0/python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+20:01:18  Requirement already satisfied: cryptography>=3.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2)) (50.0.1)
+20:01:18  Requirement already satisfied: cffi>=2.0.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (2.1.1)
+20:01:18  Requirement already satisfied: pycparser in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from cffi>=2.0.0->pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (3.0)
+20:01:18  Collecting six>=1.5 (from python-dateutil<3.0.0,>=2.1->botocore<1.44.0,>=1.43.121->boto3->-r ./requirements.txt (line 1))
+20:01:18    Downloading https://repo.platform.aws.hhsoig.gov/repository/pypi-all/packages/six/1.17.0/six-1.17.0-py2.py3-none-any.whl (11 kB)
+20:01:18  Installing collected packages: typing-extensions, six, pyjwt, jmespath, idna, charset_normalizer, certifi, requests, python-dateutil, pynacl, botocore, s3transfer, PyGithub, boto3
+20:01:19  Successfully installed PyGithub-2.10.0 boto3-1.43.121 botocore-1.43.121 certifi-2026.10.23 charset_normalizer-3.5.2 idna-3.20 jmespath-1.1.0 pyjwt-2.15.1 pynacl-1.6.2 python-dateutil-2.9.0.post0 requests-2.34.2 s3transfer-0.19.3 six-1.17.0 typing-extensions-4.16.0
+20:01:20  + IFS=
+20:01:20  + read -r requirements_file
+20:01:20  + for req_file in $REQUIREMENTS
+20:01:20  + IFS=
+20:01:20  + read -r requirements_file
+20:01:20  + find . -iname requirements-dev.txt
+20:01:20  [Pipeline] }
+20:01:20  [Pipeline] // withEnv
+20:01:20  [Pipeline] }
+20:01:20  [Pipeline] // ws
+20:01:20  [Pipeline] }
+20:01:20  [Pipeline] // node
+20:01:20  [Pipeline] }
+20:01:20  [Pipeline] // stage
+20:01:21  [Pipeline] ws
+20:01:21  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/24/admin/scripts
+20:01:21  [Pipeline] {
+20:01:21  [Pipeline] sh
+20:01:21  + /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
+20:02:00  ======================================
+20:02:00  JENKINS WORKSPACE CLEANUP - DRY RUN
+20:02:00  ======================================
+20:02:00  Scanning         : /home/jenkins/workspace
+20:02:00  Retention period : 90 days
+20:02:00  Max scan time    : 300 seconds
+20:02:00  Mode             : DRY-RUN
+20:02:00  
+20:02:00  Scanned: 5000 | Stale Terraform: 0 | Stale build folders: 4220
+20:02:22  Scanned: 10000 | Stale Terraform: 0 | Stale build folders: 7809
+20:02:48  
+20:02:48  ======================================
+20:02:48  DRY-RUN SUMMARY
+20:02:48  ======================================
+20:02:48  Directories scanned         : 14244
+20:02:48  Terraform directories found : 0
+20:02:48  Stale Terraform directories : 0
+20:02:48  Numeric directories found   : 18565
+20:02:48  Stale numeric directories   : 11992
+20:02:48  Irrelevant folders skipped  : 58
+20:02:48  Scan errors                 : 0
+20:02:48  Execution time              : 86.21 seconds
+20:02:48  Scan status                 : COMPLETE WITH EXCLUSIONS
+20:02:48  Directories deleted         : 0
+20:02:48  Files deleted               : 0
+20:02:48  ======================================
+20:02:48  DRY-RUN COMPLETE - NOTHING DELETED
+20:02:48  ======================================
+20:02:48  [Pipeline] }
+20:02:48  [Pipeline] // ws
+20:02:48  [Pipeline] }
+20:02:48  [Pipeline] // script
+20:02:49  [Pipeline] }
+20:02:49  [Pipeline] // stage
+20:02:49  [Pipeline] stage
+20:02:49  [Pipeline] { (Declarative: Post Actions)
+20:02:49  [Pipeline] echo
+20:02:49  EFS Cleanup completed successfully!
+20:02:49  [Pipeline] }
+20:02:49  [Pipeline] // stage
+20:02:49  [Pipeline] }
+20:02:49  [Pipeline] // withEnv
+20:02:49  [Pipeline] }
+20:02:49  [Pipeline] // node
+20:02:50  [Pipeline] End of Pipeline
+20:02:51  
+20:02:51  GitHub has been notified of this commit’s build result
+20:02:51  
+20:02:52  Finished: SUCCESS
 
-#!/usr/bin/env python3
-# Jenkins Workspace Cleanup - FAST DRY RUN
-# Jenkins EFS Cleanup
 
-import os
-import sys
-import time
-import csv
-import argparse
+##################
+customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
 
-from pathlib import Path
-from datetime import datetime, timezone
+pipeline {
+    agent { label jte.keywords.project }
 
-ROOT_DIR = "/home/jenkins/workspace"
-MAX_WORKERS = 8
-STALE_DAYS = 90
-MAX_SCAN_SECONDS = 300
-PROGRESS_INTERVAL = 5000
-DRY_RUN = True
+    triggers {
+        cron('0 2 * * 1-5') // Every Monday-Friday at 9:00 pm EST.
+    }
 
-SKIP_DIRS = {
-    ".git", ".svn", ".hg", "node_modules",
-    "__pycache__", ".venv", "venv", ".cache",
-    ".mypy_cache", ".pytest_cache", ".tox",
-    ".gradle", ".m2", "target", "dist",
-    "build", "coverage", ".next", ".idea",
-    ".vscode"
+    stages {
+        stage('Disable Concurrent Builds') {
+            steps {
+                echo "Disabling Concurrent Builds"
+                script {
+                    disable_concurrent_builds()
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    git_checkout()
+                }
+            }
+        }
+
+        stage('Run EFS Cleanup') {
+            steps {
+                echo "Starting EFS Cleanup..."
+                script {
+                    setup()
+                    ws("${customPath}/admin/scripts"){
+                        sh """
+                        /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
+                        """
+                    }
+                }
+            }
+        }
+
+    }
+
+    post {
+        success {
+            echo 'EFS Cleanup completed successfully!'
+        }
+        failure {
+            echo 'EFS Cleanup failed. Check console output for details.'
+            // email_via_sns()
+        }
+    }
 }
 
 
-def scan_workspaces(root, current_workspace, stale_days, max_seconds):
-    start_time = time.monotonic()
-    cutoff = time.time() - (stale_days * 86400)
+#############
+#!/usr/bin/env python3
 
-    results = []
-    counters = {
-        "scanned": 0,
-        "terraform_found": 0,
-        "terraform_stale": 0,
-        "numeric_found": 0,
-        "numeric_stale": 0,
-        "skipped": 0,
-        "errors": 0
-    }
+# This script deletes recursively .terraform dirs
+# found in /home/jenkins/workspace.
+# Executed via a Jenkins job that runs daily during off hours.
 
-    root = os.path.realpath(root)
-    current_workspace = (
-        os.path.realpath(current_workspace)
-        if current_workspace else None
-    )
+import os
+import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
-    stack = [root]
-    timed_out = False
+ROOT_DIR = "/home/jenkins/workspace"
+MAX_WORKERS = 8  # Tune based on EFS throughput limits
 
-    while stack:
-        if time.monotonic() - start_time >= max_seconds:
-            timed_out = True
-            break
-
-        directory = stack.pop()
-
-        try:
-            with os.scandir(directory) as entries:
-                for entry in entries:
-                    if time.monotonic() - start_time >= max_seconds:
-                        timed_out = True
-                        break
-
-                    try:
-                        if not entry.is_dir(follow_symlinks=False):
-                            continue
-
-                        counters["scanned"] += 1
-
-                        path = os.path.realpath(entry.path)
-                        name = entry.name
-
-                        if current_workspace and (
-                            path == current_workspace
-                            or current_workspace.startswith(path + os.sep)
-                        ):
-                            counters["skipped"] += 1
-                            continue
-
-                        if name in SKIP_DIRS:
-                            counters["skipped"] += 1
-                            continue
-
-                        if name == ".terraform" or name.isdigit():
-                            stat = entry.stat(follow_symlinks=False)
-                            modified = stat.st_mtime
-
-                            if name == ".terraform":
-                                counters["terraform_found"] += 1
-                                category = "Terraform"
-                            else:
-                                counters["numeric_found"] += 1
-                                category = "Numeric"
-
-                            if modified < cutoff:
-                                age_days = int(
-                                    (time.time() - modified) / 86400
-                                )
-
-                                results.append({
-                                    "type": category,
-                                    "path": path,
-                                    "modified": datetime.fromtimestamp(
-                                        modified, timezone.utc
-                                    ).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                                    "age": age_days
-                                })
-
-                                if category == "Terraform":
-                                    counters["terraform_stale"] += 1
-                                else:
-                                    counters["numeric_stale"] += 1
-
-                        if name != ".terraform":
-                            stack.append(path)
-
-                        if counters["scanned"] % PROGRESS_INTERVAL == 0:
-                            print(
-                                f"Directories scanned: "
-                                f"{counters['scanned']}",
-                                flush=True
-                            )
-
-                    except OSError as error:
-                        counters["errors"] += 1
-                        print(
-                            f"WARNING: {entry.path}: {error}",
-                            file=sys.stderr
-                        )
-
-        except OSError as error:
-            counters["errors"] += 1
-            print(
-                f"WARNING: {directory}: {error}",
-                file=sys.stderr
-            )
-
-        if timed_out:
-            break
-
-    return results, counters, timed_out, time.monotonic() - start_time
+print_lock = Lock()
+stats_lock = Lock()
+freed_space = 0
 
 
-def write_csv(filename, results):
-    with open(filename, "w", newline="", encoding="utf-8") as output:
-        writer = csv.writer(output)
+def get_dir_size_fast(path):
+    """Use os.scandir recursively for faster size calculation."""
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        total += entry.stat(follow_symlinks=False).st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        total += get_dir_size_fast(entry.path)
+                except (PermissionError, FileNotFoundError):
+                    pass
+    except (PermissionError, FileNotFoundError):
+        pass
+    return total
 
-        writer.writerow([
-            "Type",
-            "Directory Path",
-            "Last Modified",
-            "Age (Days)",
-            "Cleanup Status"
-        ])
 
-        for item in results:
-            writer.writerow([
-                item["type"],
-                item["path"],
-                item["modified"],
-                item["age"],
-                "Dry Run - Not Deleted"
-            ])
+def delete_terraform_dir(path):
+    """Delete a single .terraform dir and return bytes freed."""
+    size = get_dir_size_fast(path)
+    try:
+        shutil.rmtree(path)
+        with print_lock:
+            print(f"Deleted: {path}")
+        return size
+    except Exception as e:
+        with print_lock:
+            print(f"Failed to delete {path}: {e}")
+        return 0
+
+
+def find_terraform_dirs(root):
+    """
+    Walk the tree with os.scandir and prune traversal into .terraform dirs
+    (no need to recurse into them — we're deleting the whole thing).
+    """
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                if entry.name == ".terraform":
+                    yield entry.path
+                else:
+                    yield from find_terraform_dirs(entry.path)
+    except (PermissionError, FileNotFoundError) as e:
+        print(f"Cannot access {root}: {e}")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Jenkins EFS Cleanup - Dry Run"
-    )
+    global freed_space
 
-    parser.add_argument("--root", default=ROOT_DIR)
-    parser.add_argument("--stale-days", type=int, default=STALE_DAYS)
-    parser.add_argument(
-        "--max-seconds",
-        type=int,
-        default=MAX_SCAN_SECONDS
-    )
-    parser.add_argument(
-        "--csv",
-        default="jenkins_stale_list.csv"
-    )
-    parser.add_argument(
-        "--execute",
-        action="store_true"
-    )
+    print(f"Scanning: {ROOT_DIR}\n")
+    initial_size = get_dir_size_fast(ROOT_DIR)
 
-    args = parser.parse_args()
+    terraform_dirs = list(find_terraform_dirs(ROOT_DIR))
+    print(f"Found {len(terraform_dirs)} .terraform director{'y' if len(terraform_dirs) == 1 else 'ies'}\n")
 
-    if args.execute:
-        print("ERROR: Deletion is disabled. Dry run only.")
-        return 1
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {executor.submit(delete_terraform_dir, d): d for d in terraform_dirs}
+        for future in as_completed(futures):
+            with stats_lock:
+                freed_space += future.result()
 
-    if not os.path.isdir(args.root):
-        print(f"ERROR: Root directory does not exist: {args.root}")
-        return 1
+    final_size = initial_size - freed_space
 
-    print("======================================")
-    print("Jenkins EFS Cleanup - DRY RUN")
-    print("======================================")
-    print(f"Root directory    : {args.root}")
-    print(f"Stale days        : {args.stale_days}")
-    print(f"Max scan seconds  : {args.max_seconds}")
-    print("Deletion enabled  : NO")
-    print("======================================")
-
-    results, counters, timed_out, elapsed = scan_workspaces(
-        args.root,
-        os.environ.get("WORKSPACE"),
-        args.stale_days,
-        args.max_seconds
-    )
-
-    results.sort(key=lambda item: item["path"])
-
-    write_csv(args.csv, results)
-
-    print("======================================")
-    print("Jenkins EFS Cleanup Summary")
-    print("======================================")
-    print(f"Directories scanned         : {counters['scanned']}")
-    print(f"Terraform directories found : {counters['terraform_found']}")
-    print(f"Stale Terraform directories : {counters['terraform_stale']}")
-    print(f"Numeric directories found   : {counters['numeric_found']}")
-    print(f"Stale numeric directories   : {counters['numeric_stale']}")
-    print(f"Directories skipped         : {counters['skipped']}")
-    print(f"Scan errors                 : {counters['errors']}")
-    print(f"Execution time              : {elapsed:.2f} seconds")
-    print(
-        f"Scan status                 : "
-        f"{'TIME LIMIT REACHED' if timed_out else 'COMPLETE'}"
-    )
-    print("Directories deleted         : 0")
-    print("Files deleted               : 0")
-    print(f"CSV report generated        : {args.csv}")
-    print("======================================")
-    print("DRY RUN COMPLETE - NOTHING DELETED")
-
-    return 0
+    print(f"\nInitial size : {initial_size / (1024 ** 3):.2f} GB")
+    print(f"Final size   : {final_size / (1024 ** 3):.2f} GB")
+    print(f"Freed space  : {freed_space / (1024 ** 3):.2f} GB")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
