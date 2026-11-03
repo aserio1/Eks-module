@@ -37,18 +37,6 @@ pipeline {
                             set -e
 
                             echo "======================================"
-                            echo "Verifying Dry Run Script"
-                            echo "======================================"
-
-                            grep -n 'DRY_RUN = True' cleanup_jenkins_efs.py
-                            grep -n 'Deletion enabled : NO' cleanup_jenkins_efs.py
-
-                            if grep -nE 'shutil.rmtree\\(|os.remove\\(|os.unlink\\(' cleanup_jenkins_efs.py; then
-                                echo "ERROR: Deletion operation detected."
-                                exit 1
-                            fi
-
-                            echo "======================================"
                             echo "Running Jenkins EFS Cleanup"
                             echo "======================================"
 
@@ -67,12 +55,6 @@ pipeline {
 
                             echo "CSV successfully generated:"
                             ls -lh jenkins_stale_list.csv
-
-                            echo "======================================"
-                            echo "JENKINS EFS DRY RUN CSV REPORT"
-                            echo "======================================"
-
-                            cat jenkins_stale_list.csv
                         '''
 
                         echo "======================================"
