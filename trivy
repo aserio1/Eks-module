@@ -1,27 +1,148 @@
-======================================
-JENKINS WORKSPACE CLEANUP - DRY RUN
-======================================
-Scanning         : /home/jenkins/workspace
-Retention period : 90 days
-Mode             : DRY-RUN
 
-STALE (125 days) | Last Modified: 2026-07-01 10:22:15 | /home/jenkins/workspace/project-a/.terraform
-STALE (112 days) | Last Modified: 2026-07-14 08:15:30 | /home/jenkins/workspace/project-b/123
-STALE (104 days) | Last Modified: 2026-07-22 14:30:00 | /home/jenkins/workspace/project-c/.terraform
+#!/usr/bin/env python3
 
-Found 3 stale directories
+# This script scans recursively for stale .terraform dirs
+# and Jenkins build directories found in /home/jenkins/workspace.
+# Executed via a Jenkins job that runs daily during off hours.
+# DRY RUN - No files or directories are deleted.
 
-DRY RUN - Would delete: /home/jenkins/workspace/project-a/.terraform (245.30 MB)
-DRY RUN - Would delete: /home/jenkins/workspace/project-b/123 (125.60 MB)
-DRY RUN - Would delete: /home/jenkins/workspace/project-c/.terraform (80.40 MB)
+import os
+import time
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
-======================================
-DRY-RUN SUMMARY
-======================================
-Stale directories found     : 3
-Potential space recoverable : 0.44 GB
-Directories deleted         : 0
-Files deleted               : 0
-======================================
-DRY-RUN COMPLETE - NOTHING DELETED
-======================================
+ROOT_DIR = "/home/jenkins/workspace"
+MAX_WORKERS = 8  # Tune based on EFS throughput limits
+STALE_DAYS = 90
+
+print_lock = Lock()
+stats_lock = Lock()
+freed_space = 0
+
+
+def get_dir_size_fast(path):
+    """Use os.scandir recursively for faster size calculation."""
+    total = 0
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                try:
+                    if entry.is_file(follow_symlinks=False):
+                        total += entry.stat(follow_symlinks=False).st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        total += get_dir_size_fast(entry.path)
+                except (PermissionError, FileNotFoundError):
+                    pass
+    except (PermissionError, FileNotFoundError):
+        pass
+    return total
+
+
+def delete_stale_dir(path):
+    """DRY RUN - Report stale directory and potential bytes freed."""
+    size = get_dir_size_fast(path)
+
+    with print_lock:
+        print(
+            f"DRY RUN - Would delete: {path} "
+            f"({size / (1024 ** 2):.2f} MB)",
+            flush=True
+        )
+
+    return size
+
+
+def find_stale_dirs(root, cutoff):
+    """
+    Walk the tree with os.scandir and find:
+    1. .terraform directories older than 90 days
+    2. Numeric Jenkins build directories older than 90 days
+
+    Do not recurse into selected directories.
+    """
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                try:
+                    if not entry.is_dir(follow_symlinks=False):
+                        continue
+
+                    if entry.name == ".terraform" or entry.name.isdigit():
+                        modified = entry.stat(
+                            follow_symlinks=False
+                        ).st_mtime
+
+                        if modified < cutoff:
+                            age_days = int(
+                                (time.time() - modified) / 86400
+                            )
+
+                            with print_lock:
+                                print(
+                                    f"STALE ({age_days} days) | "
+                                    f"Last Modified: "
+                                    f"{datetime.fromtimestamp(modified).strftime('%Y-%m-%d %H:%M:%S')} | "
+                                    f"{entry.path}",
+                                    flush=True
+                                )
+
+                            yield entry.path
+
+                        # Preserve original pruning behavior
+                        if entry.name == ".terraform":
+                            continue
+
+                    yield from find_stale_dirs(entry.path, cutoff)
+
+                except (PermissionError, FileNotFoundError) as e:
+                    with print_lock:
+                        print(f"Cannot access {entry.path}: {e}")
+
+    except (PermissionError, FileNotFoundError) as e:
+        with print_lock:
+            print(f"Cannot access {root}: {e}")
+
+
+def main():
+    global freed_space
+
+    cutoff = time.time() - (STALE_DAYS * 86400)
+
+    print("======================================")
+    print("JENKINS WORKSPACE CLEANUP - DRY RUN")
+    print("======================================")
+    print(f"Scanning         : {ROOT_DIR}")
+    print(f"Retention period : {STALE_DAYS} days")
+    print("Mode             : DRY-RUN")
+    print()
+
+    stale_dirs = list(find_stale_dirs(ROOT_DIR, cutoff))
+
+    print()
+    print(f"Found {len(stale_dirs)} stale directories\n")
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(delete_stale_dir, d): d
+            for d in stale_dirs
+        }
+
+        for future in as_completed(futures):
+            with stats_lock:
+                freed_space += future.result()
+
+    print("\n======================================")
+    print("DRY-RUN SUMMARY")
+    print("======================================")
+    print(f"Stale directories found     : {len(stale_dirs)}")
+    print(f"Potential space recoverable : {freed_space / (1024 ** 3):.2f} GB")
+    print("Directories deleted         : 0")
+    print("Files deleted               : 0")
+    print("======================================")
+    print("DRY-RUN COMPLETE - NOTHING DELETED")
+    print("======================================")
+
+
+if __name__ == "__main__":
+    main()
