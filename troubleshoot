@@ -1,3 +1,9 @@
-**Risk Assessment:**
-
-Low (provisional). The `msgpack` vulnerability could cause a denial of service through excessive memory consumption when processing malicious data. We have updated the package to the fixed version (`1.2.3`), but the scan still detects the older version (`1.1.2`). This ignore is temporary while we investigate the remaining finding and will be removed once remediation is confirmed. Actual exposure remains under investigation.
+it seems we don't have luck w building Jenkins controller - I did some more googling and u might want to try these:
+generate a fully resolved, flattened plugins.txt: 
+Plain Text
+java -jar jpm.jar --jenkins-version <YOUR_VERSION> -d ref/plugins -f plugins.txt --no-download --available-updates -o txt > resolved_plugins.txt
+ 
+Execute the download using the new list: 
+Plain Text
+java -jar jpm.jar --jenkins-version <YOUR_VERSION> -d /var/lib/jenkins/plugins -f resolved_plugins.txt
+ 
