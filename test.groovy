@@ -1,10 +1,11 @@
-customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
+
+def customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
 
 pipeline {
     agent { label jte.keywords.project }
 
     triggers {
-        cron('0 2 * * 1-5') // Every Monday-Friday at 9:00 pm EST.
+        cron('0 2 * * 1-5')
     }
 
     stages {
@@ -39,6 +40,9 @@ pipeline {
             steps {
                 echo "Running Python Unit Tests..."
                 script {
+                    sh """
+                        /home/jenkins/anaconda3/envs/python312/bin/python3 -m pip show pytest-cov
+                    """
                     unit_test()
                 }
             }
@@ -57,15 +61,14 @@ pipeline {
             steps {
                 echo "Starting EFS Cleanup..."
                 script {
-                    ws("${customPath}/admin/scripts"){
+                    ws("${customPath}/admin/scripts") {
                         sh """
-                        /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
+                            /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
                         """
                     }
                 }
             }
         }
-
     }
 
     post {
