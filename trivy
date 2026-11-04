@@ -1,7 +1,8 @@
+
 #!/usr/bin/env python3
 
-# This script scans recursively for stale .terraform dirs
-# and Jenkins build directories found in /home/jenkins/workspace.
+# This script scans recursively for .terraform dirs
+# and stale Jenkins build directories found in /home/jenkins/workspace.
 # Executed via a Jenkins job that runs daily during off hours.
 # DRY RUN - No files or directories are deleted.
 
@@ -84,7 +85,7 @@ def get_dir_size_fast(path, deadline):
 
 
 def delete_stale_dir(item, deadline):
-    """DRY RUN - Report stale directory and potential space savings."""
+    """DRY RUN - Report directory and potential space savings."""
     path = item["path"]
     size, complete = get_dir_size_fast(path, deadline)
 
@@ -111,14 +112,14 @@ def find_stale_dirs(root, cutoff):
     Fast directory discovery using os.scandir.
 
     Find:
-      1. .terraform directories older than 90 days
-      2. Numeric Jenkins build directories older than 90 days
+      1. All .terraform directories, regardless of age
+      2. Numeric Jenkins build directories older than 90 days,
+         excluding main branches
 
     Skip internal cache directories.
-    Prune stale numeric directories and all .terraform
-    directories to avoid duplicate candidates and work.
+    Prune selected directories to avoid duplicate candidates.
     """
-    stack = [root]
+    stack = [(root, False)]
     stale_dirs = []
 
     scanned = 0
@@ -135,13 +136,13 @@ def find_stale_dirs(root, cutoff):
             timed_out = True
             break
 
-        current = stack.pop()
+        current, under_main = stack.pop()
         scanned += 1
 
         if scanned % PROGRESS_INTERVAL == 0:
             print(
                 f"Scanned: {scanned} | "
-                f"Stale directories: {len(stale_dirs)}",
+                f"Cleanup candidates: {len(stale_dirs)}",
                 flush=True
             )
 
@@ -162,14 +163,17 @@ def find_stale_dirs(root, cutoff):
                             continue
 
                         is_terraform = entry.name == ".terraform"
+                        is_main_branch = under_main or entry.name == "main"
                         is_numeric = entry.name.isdigit()
 
-                        if is_terraform or is_numeric:
+                        if is_terraform or (is_numeric and not is_main_branch):
                             modified = entry.stat(
                                 follow_symlinks=False
                             ).st_mtime
 
-                            if modified < cutoff:
+                            # Terraform directories are always eligible.
+                            # Numeric builds must be older than 90 days.
+                            if is_terraform or modified < cutoff:
                                 age_days = int(
                                     (now - modified) / 86400
                                 )
@@ -188,7 +192,7 @@ def find_stale_dirs(root, cutoff):
                                 stale_dirs.append(item)
 
                                 print(
-                                    f"STALE ({age_days} days) | "
+                                    f"CANDIDATE ({age_days} days) | "
                                     f"Type: {item['type']} | "
                                     f"Last Modified: "
                                     f"{datetime.fromtimestamp(modified).strftime('%Y-%m-%d %H:%M:%S')} | "
@@ -196,13 +200,12 @@ def find_stale_dirs(root, cutoff):
                                     flush=True
                                 )
 
-                                # Avoid scanning inside selected folders.
+                                # Avoid duplicate counting.
                                 continue
 
-                            if is_terraform:
-                                continue
-
-                        stack.append(entry.path)
+                        # Continue scanning main directories to find
+                        # .terraform caches, but protect numeric builds.
+                        stack.append((entry.path, is_main_branch))
 
                     except OSError as error:
                         errors += 1
@@ -231,7 +234,9 @@ def main():
     print("JENKINS WORKSPACE CLEANUP - DRY RUN")
     print("======================================")
     print(f"Scanning         : {ROOT_DIR}")
-    print(f"Retention period : {STALE_DAYS} days")
+    print(f"Build retention  : {STALE_DAYS} days")
+    print("Terraform cleanup: All ages, all branches")
+    print("Main builds      : Excluded")
     print(f"Max scan time    : {MAX_SCAN_SECONDS} seconds")
     print(f"Max size time    : {MAX_SIZE_SECONDS} seconds")
     print("Mode             : DRY-RUN")
@@ -244,7 +249,7 @@ def main():
     stale_dirs, stats = find_stale_dirs(ROOT_DIR, cutoff)
 
     print()
-    print(f"Found {len(stale_dirs)} stale directories")
+    print(f"Found {len(stale_dirs)} cleanup candidates")
     print("Calculating potential space savings...\n")
 
     size_deadline = time.monotonic() + MAX_SIZE_SECONDS
@@ -285,22 +290,19 @@ def main():
     print("======================================")
     print(f"Directories scanned         : {stats['scanned']}")
     print(f"Directories skipped         : {stats['skipped']}")
-    print(f"Stale Terraform directories : {terraform_count}")
+    print(f"Terraform directories       : {terraform_count}")
     print(f"Stale numeric directories   : {numeric_count}")
-    print(f"Total stale directories     : {len(stale_dirs)}")
+    print(f"Total cleanup candidates    : {len(stale_dirs)}")
     print(f"Sizes fully calculated      : {complete_sizes}")
     print(f"Sizes incomplete            : {incomplete_sizes}")
-
     print(
         f"Potential space recoverable : "
         f"{freed_space / (1024 ** 3):.2f} GB"
     )
-
-    if incomplete_sizes:
-        print("Space estimate              : PARTIAL")
-    else:
-        print("Space estimate              : COMPLETE")
-
+    print(
+        f"Space estimate              : "
+        f"{'PARTIAL' if incomplete_sizes else 'COMPLETE'}"
+    )
     print(f"Scan errors                 : {stats['errors']}")
     print(
         f"Execution time              : "
