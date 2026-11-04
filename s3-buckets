@@ -1,63 +1,268 @@
-#!/usr/bin/env bash
-
-set -e
-
-if ! command -v ~/anaconda3/bin/conda &> /dev/null
-then
-    wget https://repo.anaconda.com/archive/Anaconda3-2024.06-1-Linux-x86_64.sh
-    bash Anaconda3-2024.06-1-Linux-x86_64.sh -b -u
-fi
-
-if ! ~/anaconda3/bin/conda info --envs |
-    awk '{print $1}' |
-    grep -Fxq "$ENV_NAME"
-then
-    ~/anaconda3/bin/conda create \
-        -y \
-        --name "$ENV_NAME" \
-        python="$PYTHON_VERSION"
-fi
-
-echo "Activating Conda environment: $ENV_NAME"
-
-set +x
-source ~/anaconda3/bin/activate "$ENV_NAME"
-set -x
-
-python --version
-python -m pip --version
-
-PIP_INSTALL="python -m pip install \
--i https://repo.platform.aws.hhsoig.gov/repository/$REPO_NAME/simple \
---trusted-host repo.platform.aws.hhsoig.gov \
---no-color \
---no-cache-dir"
-
-if ! python -m pip check
-then
-    echo "pip check failed - shared environment is inconsistent, forcing reinstall"
-
-    for req_file in $REQUIREMENTS
-    do
-        find . -iname "$req_file" | while IFS= read -r requirements_file
-        do
-            eval "$PIP_INSTALL --force-reinstall -r \"$requirements_file\""
-        done
-    done
-
-    if ! python -m pip check
-    then
-        echo "ERROR: environment is still broken after reinstall"
-        exit 1
-    fi
-
-    echo "Environment repaired"
-fi
-
-for req_file in $REQUIREMENTS
-do
-    find . -iname "$req_file" | while IFS= read -r requirements_file
-    do
-        eval "$PIP_INSTALL -r \"$requirements_file\""
-    done
-done
+07:25:13    "result": [
+07:25:13      {
+07:25:13        "decision_id": "3832ca42-0a4f-4b87-8321-2c8ac277a6f9",
+07:25:13        "path": "restricted_input.json",
+07:25:13        "result": []
+07:25:13      }
+07:25:13    ]
+07:25:13  }
+07:25:13  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/restricted_steps/deny
+07:25:13  [GOVERNANCE] OPA pipeline policy evaluation complete.
+07:25:13  [Pipeline] }
+07:25:13  [Pipeline] // withEnv
+07:25:13  [Pipeline] }
+07:25:13  [Pipeline] // catchError
+07:25:13  [Pipeline] echo
+07:25:13  [GOVERNANCE] Restricted steps check complete.
+07:25:13  [Pipeline] echo
+07:25:13  [GOVERNANCE] Security steps check (SAST/DAST): generate pre-requisites...
+07:25:14  [Pipeline] catchError
+07:25:14  [Pipeline] {
+07:25:14  [Pipeline] withEnv
+07:25:14  [Pipeline] {
+07:25:14  [Pipeline] sh
+07:25:14  [GOVERNANCE] detect_sast_dast scanning repo at: /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/46
+07:25:14  [GOVERNANCE] JENKINSFILE_PATH received: admin/pipelines/Jenkinsfile.cleanup_efs (resolved: admin/pipelines/Jenkinsfile.cleanup_efs)
+07:25:14  [GOVERNANCE] signals: is_frontend=false has_api_gateway=false has_http_listener=false target_url_output=<none>
+07:25:14  [GOVERNANCE] security steps INVOKED in admin/pipelines/Jenkinsfile.cleanup_efs: []
+07:25:14  [GOVERNANCE] dast target URL from Jenkinsfile: <none>
+07:25:14  [GOVERNANCE] dast blocking mode: true
+07:25:15  [GOVERNANCE] security libraries LOADED in admin/pipelines/pipeline_config.groovy: []
+07:25:15  [GOVERNANCE] SAST/DAST input written to: dast_input.json
+07:25:15  [Pipeline] }
+07:25:15  [Pipeline] // withEnv
+07:25:15  [Pipeline] }
+07:25:15  [Pipeline] // catchError
+07:25:15  [Pipeline] fileExists
+07:25:15  [Pipeline] sh
+07:25:16  + date +%s
+07:25:16  [Pipeline] sh
+07:25:16  + date -d 2026-11-01 +%s
+07:25:16  [Pipeline] echo
+07:25:16  [GOVERNANCE] Security steps enforcement date 2026-11-01 has been reached. SAST/DAST violations will fail the build.
+07:25:16  [Pipeline] echo
+07:25:16  [GOVERNANCE] Security steps check (SAST/DAST): Running OPA policies...
+07:25:16  [Pipeline] catchError
+07:25:16  [Pipeline] {
+07:25:16  [Pipeline] withEnv
+07:25:16  [Pipeline] {
+07:25:17  [Pipeline] sh
+07:25:17  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+07:25:17  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/warn
+07:25:17  [GOVERNANCE] Using input JSON: dast_input.json
+07:25:17  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/warn
+07:25:17  {
+07:25:17    "result": [
+07:25:17      {
+07:25:17        "decision_id": "fb37df10-cd75-4eeb-af27-2bfc48ee8f53",
+07:25:17        "path": "dast_input.json",
+07:25:17        "result": []
+07:25:17      }
+07:25:17    ]
+07:25:17  }
+07:25:17  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/required_security_steps/warn
+07:25:17  [GOVERNANCE] OPA pipeline policy evaluation complete.
+07:25:17  [Pipeline] }
+07:25:17  [Pipeline] // withEnv
+07:25:17  [Pipeline] }
+07:25:18  [Pipeline] // catchError
+07:25:18  [Pipeline] catchError
+07:25:18  [Pipeline] {
+07:25:18  [Pipeline] withEnv
+07:25:18  [Pipeline] {
+07:25:18  [Pipeline] sh
+07:25:18  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+07:25:18  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/sast_deny
+07:25:18  [GOVERNANCE] Using input JSON: dast_input.json
+07:25:18  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/sast_deny
+07:25:18  {
+07:25:18    "result": [
+07:25:18      {
+07:25:18        "decision_id": "7f895afa-9b25-490d-9d06-b6a71ca2f537",
+07:25:18        "path": "dast_input.json",
+07:25:18        "result": [
+07:25:18          "Missing required step: 'sast' is required for all pipelines but was not found. If this specific pipeline should not run SAST, add a per-pipeline entry to imac-policies/policies/cdo/pipelines/required_steps/security_exceptions.rego."
+07:25:18        ]
+07:25:18      }
+07:25:18    ]
+07:25:18  }
+07:25:18  {"err":"exec error: there were 1 failures and 0 errors counted in the results list, and --fail-non-empty is set","level":"error","msg":"Unexpected error.","time":"2026-11-04T13:25:18Z"}
+07:25:18  [GOVERNANCE] OPA pipeline policy check FAILED: cdo/pipelines/required_security_steps/sast_deny
+07:25:18  [Pipeline] }
+07:25:19  [Pipeline] // withEnv
+07:25:19  [Pipeline] }
+07:25:19  ERROR: script returned exit code 1
+07:25:19  Setting overall build result to FAILURE
+07:25:19  [Pipeline] // catchError
+07:25:19  [Pipeline] readJSON
+07:25:19  [Pipeline] echo
+07:25:19  [GOVERNANCE] DAST is blocking. Violations will FAIL the build.
+07:25:19  [Pipeline] catchError
+07:25:19  [Pipeline] {
+07:25:20  [Pipeline] withEnv
+07:25:20  [Pipeline] {
+07:25:20  [Pipeline] sh
+07:25:20  [GOVERNANCE] Starting OPA pipeline policy evaluation...
+07:25:20  [GOVERNANCE] Using decision: cdo/pipelines/required_security_steps/dast_deny
+07:25:20  [GOVERNANCE] Using input JSON: dast_input.json
+07:25:20  [GOVERNANCE] Running OPA exec with decision: cdo/pipelines/required_security_steps/dast_deny
+07:25:20  {
+07:25:20    "result": [
+07:25:20      {
+07:25:20        "decision_id": "5842e7a0-0ea1-4ff1-8565-024870ca105f",
+07:25:20        "path": "dast_input.json",
+07:25:20        "result": []
+07:25:20      }
+07:25:20    ]
+07:25:20  }
+07:25:20  [GOVERNANCE] OPA pipeline policy check PASSED: cdo/pipelines/required_security_steps/dast_deny
+07:25:20  [GOVERNANCE] OPA pipeline policy evaluation complete.
+07:25:20  [Pipeline] }
+07:25:20  [Pipeline] // withEnv
+07:25:20  [Pipeline] }
+07:25:21  [Pipeline] // catchError
+07:25:21  [Pipeline] echo
+07:25:21  [GOVERNANCE] Security steps check (SAST/DAST) complete.
+07:25:21  [Pipeline] }
+07:25:21  [Pipeline] // withEnv
+07:25:21  [Pipeline] }
+07:25:21  [Pipeline] // stage
+07:25:21  [Pipeline] }
+07:25:21  [Pipeline] // ws
+07:25:21  [Pipeline] }
+07:25:22  [Pipeline] // node
+07:25:22  [Pipeline] }
+07:25:22  [Pipeline] // script
+07:25:22  [Pipeline] }
+07:25:22  [Pipeline] // stage
+07:25:22  [Pipeline] stage
+07:25:22  [Pipeline] { (Run EFS Cleanup)
+07:25:22  [Pipeline] echo
+07:25:22  Starting EFS Cleanup...
+07:25:22  [Pipeline] script
+07:25:22  [Pipeline] {
+07:25:22  [JTE][Step - python/setup.call()]
+07:25:22  [Pipeline] stage
+07:25:22  [Pipeline] { (Py Setup)
+07:25:23  [Pipeline] node
+07:25:23  Running on utility in /home/jenkins/workspace/C_IMAC_Jenkins_Cleanup_EFS_PR-32@2
+07:25:23  [Pipeline] {
+07:25:23  [Pipeline] ws
+07:25:23  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/46
+07:25:23  [Pipeline] {
+07:25:23  [Pipeline] echo
+07:25:23  Installing Build Tool
+07:25:23  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named env_name (to a value of type String) which could lead to memory leaks or other issues.
+07:25:23  Did you forget the `def` keyword? JTE_python_setup seems to be setting a field named requirements (to a value of type String) which could lead to memory leaks or other issues.
+07:25:23  [Pipeline] withEnv
+07:25:23  [Pipeline] {
+07:25:23  [Pipeline] sh
+07:25:25  Activating Conda environment: python312
+07:25:25  + python --version
+07:25:25  Python 3.12.4
+07:25:25  + python -m pip --version
+07:25:26  pip 24.2 from /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages/pip (python 3.12)
+07:25:26  + PIP_INSTALL='python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir'
+07:25:26  + python -m pip check
+07:25:26  No broken requirements found.
+07:25:26  + for req_file in $REQUIREMENTS
+07:25:26  + IFS=
+07:25:26  + read -r requirements_file
+07:25:26  + find . -iname requirements.txt
+07:25:26  + eval 'python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r "./requirements.txt"'
+07:25:26  ++ python -m pip install -i https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple --trusted-host repo.platform.aws.hhsoig.gov --no-color --no-cache-dir -r ./requirements.txt
+07:25:27  Looking in indexes: https://repo.platform.aws.hhsoig.gov/repository/pypi-all/simple
+07:25:27  Requirement already satisfied: boto3 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from -r ./requirements.txt (line 1)) (1.43.123)
+07:25:27  Requirement already satisfied: PyGithub in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from -r ./requirements.txt (line 2)) (2.10.0)
+07:25:27  Requirement already satisfied: requests in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from -r ./requirements.txt (line 3)) (2.34.2)
+07:25:27  Requirement already satisfied: botocore<1.44.0,>=1.43.123 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from boto3->-r ./requirements.txt (line 1)) (1.43.123)
+07:25:27  Requirement already satisfied: jmespath<2.0.0,>=0.7.1 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from boto3->-r ./requirements.txt (line 1)) (1.1.0)
+07:25:27  Requirement already satisfied: s3transfer<0.20.0,>=0.19.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from boto3->-r ./requirements.txt (line 1)) (0.19.3)
+07:25:27  Requirement already satisfied: pynacl>=1.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (1.6.2)
+07:25:27  Requirement already satisfied: pyjwt>=2.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2)) (2.15.1)
+07:25:27  Requirement already satisfied: typing-extensions>=4.5.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (4.16.0)
+07:25:27  Requirement already satisfied: urllib3>=1.26.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from PyGithub->-r ./requirements.txt (line 2)) (2.7.0)
+07:25:27  Requirement already satisfied: charset_normalizer<4,>=2 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from requests->-r ./requirements.txt (line 3)) (3.5.2)
+07:25:27  Requirement already satisfied: idna<4,>=2.5 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from requests->-r ./requirements.txt (line 3)) (3.20)
+07:25:27  Requirement already satisfied: certifi>=2023.5.7 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from requests->-r ./requirements.txt (line 3)) (2026.10.23)
+07:25:27  Requirement already satisfied: python-dateutil<3.0.0,>=2.1 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from botocore<1.44.0,>=1.43.123->boto3->-r ./requirements.txt (line 1)) (2.9.0.post0)
+07:25:27  Requirement already satisfied: cryptography>=3.4.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pyjwt[crypto]>=2.4.0->PyGithub->-r ./requirements.txt (line 2)) (50.0.1)
+07:25:27  Requirement already satisfied: cffi>=2.0.0 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (2.1.1)
+07:25:27  Requirement already satisfied: pycparser in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from cffi>=2.0.0->pynacl>=1.4.0->PyGithub->-r ./requirements.txt (line 2)) (3.0)
+07:25:27  Requirement already satisfied: six>=1.5 in /home/jenkins/anaconda3/envs/python312/lib/python3.12/site-packages (from python-dateutil<3.0.0,>=2.1->botocore<1.44.0,>=1.43.123->boto3->-r ./requirements.txt (line 1)) (1.17.0)
+07:25:27  + IFS=
+07:25:27  + read -r requirements_file
+07:25:27  + for req_file in $REQUIREMENTS
+07:25:27  + IFS=
+07:25:27  + read -r requirements_file
+07:25:27  + find . -iname requirements-dev.txt
+07:25:27  [Pipeline] }
+07:25:27  [Pipeline] // withEnv
+07:25:27  [Pipeline] }
+07:25:28  [Pipeline] // ws
+07:25:28  [Pipeline] }
+07:25:28  [Pipeline] // node
+07:25:28  [Pipeline] }
+07:25:28  [Pipeline] // stage
+07:25:28  [Pipeline] ws
+07:25:28  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/46/admin/scripts
+07:25:28  [Pipeline] {
+07:25:28  [Pipeline] sh
+07:25:29  + /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
+07:26:01  ========================================
+07:26:01  JENKINS CLEANUP - DRY RUN
+07:26:01  ========================================
+07:26:01  Root directory : /home/jenkins/workspace
+07:26:01  Retention      : 90 days
+07:26:01  Max scan time  : 300 seconds
+07:26:01  Mode           : DRY RUN
+07:26:01  
+07:26:01  WARNING: Jenkins validation unavailable: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: self-signed certificate in certificate chain (_ssl.c:1000)>
+07:26:01  Progress: scanned 5000 directories
+07:26:27  Progress: scanned 10000 directories
+07:27:06  Progress: scanned 15000 directories
+07:27:45  Progress: scanned 20000 directories
+07:28:17  Progress: scanned 25000 directories
+07:28:55  Progress: scanned 30000 directories
+07:29:34  Progress: scanned 35000 directories
+07:30:13  Progress: scanned 40000 directories
+07:30:31  
+07:30:31  ========================================
+07:30:31  JENKINS CLEANUP - DRY RUN SUMMARY
+07:30:31  ========================================
+07:30:31  Terraform directories found     : 0
+07:30:31  Stale Terraform directories     : 0
+07:30:31  Old numeric workspaces          : 78
+07:30:31  Orphaned job candidates         : 0
+07:30:31  Unverified candidates           : 78
+07:30:31  Directories scanned             : 42885
+07:30:31  Directories skipped             : 295
+07:30:31  Scan errors                     : 0
+07:30:31  Execution time                  : 300.00 seconds
+07:30:31  Scan status                     : PARTIAL
+07:30:31  Directories deleted             : 0
+07:30:31  Files deleted                   : 0
+07:30:31  ========================================
+07:30:31  DRY-RUN COMPLETE - NOTHING DELETED
+07:30:31  ========================================
+07:30:31  [Pipeline] }
+07:30:31  [Pipeline] // ws
+07:30:31  [Pipeline] }
+07:30:31  [Pipeline] // script
+07:30:31  [Pipeline] }
+07:30:31  [Pipeline] // stage
+07:30:31  [Pipeline] stage
+07:30:32  [Pipeline] { (Declarative: Post Actions)
+07:30:32  [Pipeline] echo
+07:30:32  EFS Cleanup failed. Check console output for details.
+07:30:32  [Pipeline] }
+07:30:32  [Pipeline] // stage
+07:30:32  [Pipeline] }
+07:30:32  [Pipeline] // withEnv
+07:30:32  [Pipeline] }
+07:30:32  [Pipeline] // node
+07:30:32  [Pipeline] End of Pipeline
+07:30:35  
+07:30:35  GitHub has been notified of this commit’s build result
+07:30:35  
+07:30:35  Finished: FAILURE
