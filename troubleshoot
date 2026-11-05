@@ -1,111 +1,30 @@
+ If you're an OSS maintainer and Trivy has detected vulnerabilities in your project that you believe are not actually exploitable, consider issuing a VEX (Vulnerability Exploitability eXchange) statement.
+11:19:57  VEX allows you to communicate the actual status of vulnerabilities in your project, improving security transparency and reducing false positives for your users.
+11:19:57  Learn more and start using VEX: https://trivy.dev/docs/v0.74/guide/supply-chain/vex/repo#publishing-vex-documents
+11:19:57  
+11:19:57  To disable this notice, set the TRIVY_DISABLE_VEX_NOTICE environment variable.
+11:19:57  
+11:19:57  
+11:19:57  Java (jar)
+11:19:57  ==========
+11:19:57  Total: 1 (HIGH: 1, CRITICAL: 0)
+11:19:57  
+11:19:57  ┌──────────────────────────────────────┬─────────────────┬──────────┬────────┬───────────────────┬───────────────┬─────────────────────────────────────────────────────────────┐
+11:19:57  │               Library                │  Vulnerability  │ Severity │ Status │ Installed Version │ Fixed Version │                            Title                            │
+11:19:57  ├──────────────────────────────────────┼─────────────────┼──────────┼────────┼───────────────────┼───────────────┼─────────────────────────────────────────────────────────────┤
+11:19:57  │ com.google.guava:guava (jenkins.war) │ CVE-2026-102554 │ HIGH     │ fixed  │ 33.7.1-jre        │ 33.7.2        │ com.google.guava/guava: Google Guava: Denial of Service via │
+11:19:57  │                                      │                 │          │        │                   │               │ unthrottled memory allocation during deserialization...     │
+11:19:57  │                                      │                 │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-102554                 │
+11:19:57  └──────────────────────────────────────┴─────────────────┴──────────┴────────┴───────────────────┴───────────────┴─────────────────────────────────────────────────────────────┘
 
-################################################################################
-# IMAC Jenkins Controller Docker Image
-#
-################################################################################
+#########################
+Vulnerability/Misconfiguration Link: https://avd.aquasec.com/nvd/cve-2026-114613 (CVE-2026-114613 / GHSA — msgpack: Denial of Service via memory leak during map deserialization)
+Severity: HIGH (CVSS per Trivy/AVD; DoS via memory exhaustion, no RCE/data exposure)
+Summary: Trivy flags msgpack 1.1.2 as vulnerable in the built image. This is not the application's msgpack dependency (which is pinned to >=1.2.3 via our own pip install and confirmed patched). The flagged copy is pip's internally vendored fallback, located at pip/_vendor/msgpack/, used solely by pip's own HTTP response cache deserialization during package installs. As of pip 26.2.2 (current latest), pip/_vendor/vendor.txt still pins msgpack==1.1.2; no upstream pip release has bumped this yet. This is a known, currently-unresolved upstream issue — confirmed independently by multiple other open-source projects (e.g. netboxlabs/orb-agent, felddy/weewx-docker, OpenHands/software-agent-sdk) hitting the identical finding this week with the same root cause.
+image
 
-FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
-
-LABEL   oig.imac.base.image.purpose="Jenkins Controller Docker image" \
-        oig.imac.image.owner="Kate Rose" \
-        oig.imac.image.engineer="Kent Rockwell" \
-        oig.imac.base.image.parent="IMAC Jenkins base image" \
-        oig.imac.base.image.parent.registry="213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/base/jenkins:BASE_IMAGE_VERSION" \
-        oig.imac.base.image.ontogeny.registry="registry1.dso.mil/ironbank" \
-        oig.imac.base.image.ontogeny.image="registry1.dso.mil/ironbank/opensource/python:v3.14.5@sha256:be4255a2642bcf619c9594ebb4cbd8ac046ce9ce8c6e69b338048f53164e4b9a"
-
-ARG user=jenkins
-ARG group=jenkins
-ARG uid=2000
-ARG gid=2000
-ARG JENKINS_HOME=/home/jenkins
-ARG JENKINS_JAR_FILES="jenkins-jar-files-2026-10-22"
-
-USER root
-
-# Create User
-# disables max password age and clears any account expiration date
-# remove password entirely since we use key-only auth
-RUN mkdir -p $JENKINS_HOME \
-  && groupadd -g ${gid} ${group} \
-  && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user} \
-  && chage -M -1 -E -1 ${user} \
-  && passwd -d ${user} \
-  && chown -R ${uid}:${gid} $JENKINS_HOME
-
-# Install OS Packages
-RUN yum -y update && \
-    yum -y install java-21-openjdk && \
-    yum clean all && \
-    rm -rf /var/cache/yum/*
-
-USER jenkins
-
-# Install Jenkins apps
-WORKDIR $JENKINS_HOME
-
-RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
-    unzip jenkins-zip-files.zip && \
-    mv ${JENKINS_JAR_FILES}/* . && \
-    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
-
-COPY dependencies/casc.yaml $JENKINS_HOME/casc.yaml
-COPY dependencies/jenkins.sh $JENKINS_HOME/jenkins.sh
-COPY dependencies/plugins.txt $JENKINS_HOME/plugins.txt
-
-RUN mkdir $JENKINS_HOME/init.groovy.d && \
-    chmod 755 $JENKINS_HOME/init.groovy.d
-
-COPY dependencies/user-token-gen.groovy $JENKINS_HOME/init.groovy.d/user-token-gen.groovy
-
-USER root
-
-RUN chmod 755 $JENKINS_HOME/init.groovy.d/user-token-gen.groovy && \
-    chmod 755 $JENKINS_HOME/jenkins.sh && \
-    chown -R ${uid}:${gid} $JENKINS_HOME
-
-USER jenkins
-
-ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
-ENV JENKINS_HOME $JENKINS_HOME
-
-# This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
-ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
-
-# Generate resolved Jenkins plugin list without downloading
-RUN set -e; \
-    echo "Generating Jenkins plugin list..."; \
-    java -jar jpm.jar \
-      --war $JENKINS_HOME/jenkins.war \
-      -f $JENKINS_HOME/plugins.txt \
-      -d $JENKINS_HOME/plugins \
-      --no-download \
-      --available-updates \
-      -o txt > $JENKINS_HOME/resolved_plugins.txt; \
-    if [ ! -s "$JENKINS_HOME/resolved_plugins.txt" ]; then \
-      echo "No plugin updates generated, using original plugins.txt"; \
-      cp $JENKINS_HOME/plugins.txt $JENKINS_HOME/resolved_plugins.txt; \
-    fi; \
-    echo "Generated plugin list:"; \
-    cat $JENKINS_HOME/resolved_plugins.txt
-
-# Install Jenkins plugins
-RUN set -e; \
-    echo "Starting Jenkins plugin installation..."; \
-    rc=0; \
-    timeout 3600 java -jar jpm.jar --verbose \
-      --war $JENKINS_HOME/jenkins.war \
-      -f $JENKINS_HOME/resolved_plugins.txt \
-      -d $JENKINS_HOME/plugins || rc=$?; \
-    if [ "$rc" -ne 0 ]; then \
-      echo "Jenkins plugin installation failed with exit code $rc"; \
-      if [ "$rc" -eq 124 ]; then \
-        echo "Jenkins plugin installation timed out after 3600 seconds"; \
-      fi; \
-      exit "$rc"; \
-    fi; \
-    echo "Jenkins plugins installed successfully"; \
-    rm -rf $JENKINS_HOME/jpm.jar
-
-CMD [ "./jenkins.sh"]
-ENTRYPOINT []
+Ignore Reason:
+The vulnerable code is not reachable by application code. pip._vendor.msgpack is never imported or invoked by our application — it is only exercised internally by pip during its own package-install/cache operations, which do not run in the deployed container (pip is a build-time tool, not a runtime dependency of the service). Additionally, the memory-leak vulnerability lives in msgpack's C extension; pip vendors only the pure-Python fallback implementation, meaning the vulnerable code path is likely not even present in the vendored copy. No upstream fix exists yet (no pip release vendors msgpack >=1.2.3), so there is no actionable remediation available at this time.
+Risk Assessment: Low. Exploitation requires the vulnerable code to be reachable and fed attacker-controlled msgpack-encoded input. Since pip._vendor.msgpack is never invoked by runtime application logic and pip itself is not exposed to untrusted network input in this image's runtime context, there is no practical attack surface. Application-facing msgpack usage is on the patched >=1.2.3 release. This is an accepted, time-boxed residual risk consistent with how other projects in the ecosystem have classified the same finding (pip-vendored, non-reachable, upstream-blocked).
+JIRA ticket: IMAC-1413
+Owner: IMAC
