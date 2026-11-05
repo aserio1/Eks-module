@@ -1,30 +1,15 @@
- If you're an OSS maintainer and Trivy has detected vulnerabilities in your project that you believe are not actually exploitable, consider issuing a VEX (Vulnerability Exploitability eXchange) statement.
-11:19:57  VEX allows you to communicate the actual status of vulnerabilities in your project, improving security transparency and reducing false positives for your users.
-11:19:57  Learn more and start using VEX: https://trivy.dev/docs/v0.74/guide/supply-chain/vex/repo#publishing-vex-documents
-11:19:57  
-11:19:57  To disable this notice, set the TRIVY_DISABLE_VEX_NOTICE environment variable.
-11:19:57  
-11:19:57  
-11:19:57  Java (jar)
-11:19:57  ==========
-11:19:57  Total: 1 (HIGH: 1, CRITICAL: 0)
-11:19:57  
-11:19:57  ┌──────────────────────────────────────┬─────────────────┬──────────┬────────┬───────────────────┬───────────────┬─────────────────────────────────────────────────────────────┐
-11:19:57  │               Library                │  Vulnerability  │ Severity │ Status │ Installed Version │ Fixed Version │                            Title                            │
-11:19:57  ├──────────────────────────────────────┼─────────────────┼──────────┼────────┼───────────────────┼───────────────┼─────────────────────────────────────────────────────────────┤
-11:19:57  │ com.google.guava:guava (jenkins.war) │ CVE-2026-102554 │ HIGH     │ fixed  │ 33.7.1-jre        │ 33.7.2        │ com.google.guava/guava: Google Guava: Denial of Service via │
-11:19:57  │                                      │                 │          │        │                   │               │ unthrottled memory allocation during deserialization...     │
-11:19:57  │                                      │                 │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-102554                 │
-11:19:57  └──────────────────────────────────────┴─────────────────┴──────────┴────────┴───────────────────┴───────────────┴─────────────────────────────────────────────────────────────┘
+**Vulnerability/Misconfiguration Link:** https://avd.aquasec.com/nvd/cve-2026-102554 (CVE-2026-102554 — Google Guava: Denial of Service via unthrottled memory allocation during deserialization)
 
-#########################
-Vulnerability/Misconfiguration Link: https://avd.aquasec.com/nvd/cve-2026-114613 (CVE-2026-114613 / GHSA — msgpack: Denial of Service via memory leak during map deserialization)
-Severity: HIGH (CVSS per Trivy/AVD; DoS via memory exhaustion, no RCE/data exposure)
-Summary: Trivy flags msgpack 1.1.2 as vulnerable in the built image. This is not the application's msgpack dependency (which is pinned to >=1.2.3 via our own pip install and confirmed patched). The flagged copy is pip's internally vendored fallback, located at pip/_vendor/msgpack/, used solely by pip's own HTTP response cache deserialization during package installs. As of pip 26.2.2 (current latest), pip/_vendor/vendor.txt still pins msgpack==1.1.2; no upstream pip release has bumped this yet. This is a known, currently-unresolved upstream issue — confirmed independently by multiple other open-source projects (e.g. netboxlabs/orb-agent, felddy/weewx-docker, OpenHands/software-agent-sdk) hitting the identical finding this week with the same root cause.
-image
+**Severity:** HIGH (DoS via excessive memory allocation; no reported RCE or data exposure)
 
-Ignore Reason:
-The vulnerable code is not reachable by application code. pip._vendor.msgpack is never imported or invoked by our application — it is only exercised internally by pip during its own package-install/cache operations, which do not run in the deployed container (pip is a build-time tool, not a runtime dependency of the service). Additionally, the memory-leak vulnerability lives in msgpack's C extension; pip vendors only the pure-Python fallback implementation, meaning the vulnerable code path is likely not even present in the vendored copy. No upstream fix exists yet (no pip release vendors msgpack >=1.2.3), so there is no actionable remediation available at this time.
-Risk Assessment: Low. Exploitation requires the vulnerable code to be reachable and fed attacker-controlled msgpack-encoded input. Since pip._vendor.msgpack is never invoked by runtime application logic and pip itself is not exposed to untrusted network input in this image's runtime context, there is no practical attack surface. Application-facing msgpack usage is on the patched >=1.2.3 release. This is an accepted, time-boxed residual risk consistent with how other projects in the ecosystem have classified the same finding (pip-vendored, non-reachable, upstream-blocked).
-JIRA ticket: IMAC-1413
-Owner: IMAC
+**Summary:** Trivy flags Google Guava `33.7.1-jre` as vulnerable within the Jenkins Controller `jenkins.war` file. We have already upgraded to the latest available Jenkins WAR, but the vulnerability remains because the Jenkins distribution still bundles the affected Guava version. The vulnerability is fixed in Guava `33.7.2`, which has not been incorporated into the Jenkins WAR currently in use. This is an upstream dependency issue that cannot be resolved through a standard Jenkins WAR upgrade at this time.
+
+**Ignore Reason:**
+
+The vulnerable Google Guava library is bundled directly within the Jenkins WAR and is not independently managed by our Dockerfile or Jenkins plugin installation process. Despite upgrading Jenkins to the latest available release, Trivy continues to identify Guava `33.7.1-jre`. Manually replacing the embedded dependency could introduce compatibility issues or affect Jenkins functionality. We are temporarily ignoring this finding while monitoring Jenkins upstream for a release containing Guava `33.7.2` or newer. The exception will be removed once the patched dependency is available and verified.
+
+**Risk Assessment:** Low (provisional). The vulnerability could result in denial of service through excessive memory consumption if affected deserialization functionality processes malicious input. Exploitation requires access to the vulnerable code path, and no such exposure has been confirmed in our Jenkins Controller environment. The vulnerability does not indicate remote code execution or direct data disclosure. Residual risk is being accepted temporarily while awaiting an upstream fix, with reassessment required if exploitability or exposure changes.
+
+**JIRA ticket:** IMAC-1413
+
+**Owner:** IMAC
