@@ -1,192 +1,734 @@
-#opengrep-core scan -f --exclude-rule --exclude --experimental --taint-intrafile --inline-metavariables --output-enclosing-context --allow-rule-timeout-control --timeout 300 --no-git-ignore --json --output opengrep-out.json # TODO: Duplicate rules are currently being skipped due to duplicate IDs across rule files. # Rules need to have unique IDs for each type. opengrep-core scan \ --allow-rule-timeout-control \ --error -f ~/.opengrep/opengrep-rules \ --exclude-rule detected-aws-account-id \ --experimental \ --inline-metavariables \ --no-git-ignore \ --severity ERROR \ --taint-intrafile \ --timeout 300 \ .
-5s
-09:01:47  + opengrep-core scan --allow-rule-timeout-control --error -f /home/jenkins/.opengrep/opengrep-rules --exclude-rule detected-aws-account-id --experimental --inline-metavariables --no-git-ignore --severity ERROR --taint-intrafile --timeout 300 .
-09:01:48  
-09:01:48  ┌──────────────┐
-09:01:48  │ Opengrep CLI │
-09:01:48  └──────────────┘
-09:01:48  
-09:01:48  ✔ Opengrep OSS
-09:01:48    ✔ Basic security coverage for first-party code vulnerabilities.
-09:01:48  
-09:01:48    Loading rules from local config...
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/go/detect-gemini.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-openai' (/home/jenkins/.opengrep/opengrep-rules/ai/go/detect-openai.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/kotlin/detect-gemini.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/python/detect-gemini.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-openai' (/home/jenkins/.opengrep/opengrep-rules/ai/python/detect-openai.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/swift/detect-gemini.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-anthropic' (/home/jenkins/.opengrep/opengrep-rules/ai/typescript/detect-anthropic.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/typescript/detect-gemini.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-mistral' (/home/jenkins/.opengrep/opengrep-rules/ai/typescript/detect-mistral.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-openai' (/home/jenkins/.opengrep/opengrep-rules/ai/typescript/detect-openai.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'ssrf' (/home/jenkins/.opengrep/opengrep-rules/csharp/lang/security/ssrf/rest-client.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'ssrf' (/home/jenkins/.opengrep/opengrep-rules/csharp/lang/security/ssrf/web-client.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'ssrf' (/home/jenkins/.opengrep/opengrep-rules/csharp/lang/security/ssrf/web-request.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-md5' (/home/jenkins/.opengrep/opengrep-rules/go/lang/security/audit/crypto/use_of_weak_crypto.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-sha1' (/home/jenkins/.opengrep/opengrep-rules/go/lang/security/audit/crypto/use_of_weak_crypto.yaml:35:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'open-redirect' (/home/jenkins/.opengrep/opengrep-rules/go/lang/security/injection/open-redirect.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/go/lang/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/java/aws-lambda/security/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'cookie-missing-httponly' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/cookie-missing-httponly.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-md5' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/crypto/use-of-md5.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-rc4' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/crypto/use-of-rc4.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-sha1' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/crypto/use-of-sha1.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-weak-rsa-key' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/crypto/weak-rsa.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'ldap-injection' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/ldap-injection.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/md5-used-as-password.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/java/spring/security/injection/tainted-sql-string.yaml:2:8) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/java/spring/security/injection/tainted-url-host.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'pg-sqli' (/home/jenkins/.opengrep/opengrep-rules/javascript/aws-lambda/security/pg-sqli.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-html-string' (/home/jenkins/.opengrep/opengrep-rules/javascript/aws-lambda/security/tainted-html-string.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/javascript/aws-lambda/security/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'eval-detected' (/home/jenkins/.opengrep/opengrep-rules/javascript/browser/security/eval-detected.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'insecure-document-method' (/home/jenkins/.opengrep/opengrep-rules/javascript/browser/security/insecure-document-method.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-href' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/ejs/var-in-href.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-script-src' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/ejs/var-in-script-src.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-script-tag' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/ejs/var-in-script-tag.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'template-explicit-unescape' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/mustache/explicit-unescape.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-script-tag' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/mustache/var-in-script-tag.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'template-explicit-unescape' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/pug/explicit-unescape.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-href' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/pug/var-in-href.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-script-tag' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/pug/var-in-script-tag.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'raw-html-format' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/injection/raw-html-format.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'hardcoded-jwt-secret' (/home/jenkins/.opengrep/opengrep-rules/javascript/jsonwebtoken/security/jwt-hardcode.yaml:2:6) will be ignored.
-09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'jwt-none-alg' (/home/jenkins/.opengrep/opengrep-rules/javascript/jsonwebtoken/security/jwt-none-alg.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'eqeq-is-bad' (/home/jenkins/.opengrep/opengrep-rules/javascript/lang/correctness/useless-eqeq.yaml:2:8) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/javascript/lang/security/audit/md5-used-as-password.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'detect-child-process' (/home/jenkins/.opengrep/opengrep-rules/javascript/lang/security/detect-child-process.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'build-gradle-password-hardcoded' (/home/jenkins/.opengrep/opengrep-rules/kotlin/gradle/security/build-gradle-password-hardcoded.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'anonymous-ldap-bind' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/anonymous-ldap-bind.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'bad-hexa-conversion' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/bad-hexa-conversion.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'command-injection-formatted-runtime-call' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/command-injection-formatted-runtime-call.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'cookie-missing-httponly' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/cookie-missing-httponly.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'cookie-missing-secure-flag' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/cookie-missing-secure-flag.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'defaulthttpclient-is-deprecated' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/defaulthttpclient-is-deprecated.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'ecb-cipher' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/ecb-cipher.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'gcm-detection' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/gcm-detection.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'no-null-cipher' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/no-null-cipher.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'unencrypted-socket' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/unencrypted-socket.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'use-of-md5' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/use-of-md5.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'use-of-sha1' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/use-of-sha1.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'use-of-weak-rsa-key' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/weak-rsa.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/php/lang/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/php/lang/security/injection/tainted-url-host.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/php/lang/security/md5-used-as-password.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-exec' (/home/jenkins/.opengrep/opengrep-rules/php/lang/security/tainted-exec.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'bypass-tls-verification' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/java-spring/bypass-tls-verification.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'bypass-tls-verification' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/java-stdlib/bypass-tls-verification.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'ftp-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/java-stdlib/ftp-request.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'telnet-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/java-stdlib/telnet-request.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'bypass-tls-verification' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/bypass-tls-verification.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'disallow-old-tls-versions1' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/disallow-old-tls-versions1.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'disallow-old-tls-versions2' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/disallow-old-tls-versions2.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'ftp-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/ftp-request.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'http-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/http-request.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'telnet-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/telnet-request.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'mysql-sqli' (/home/jenkins/.opengrep/opengrep-rules/python/aws-lambda/security/mysql-sqli.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-html-response' (/home/jenkins/.opengrep/opengrep-rules/python/aws-lambda/security/tainted-html-response.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-html-string' (/home/jenkins/.opengrep/opengrep-rules/python/aws-lambda/security/tainted-html-string.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/python/aws-lambda/security/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'mass-assignment' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/mass-assignment.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'open-redirect' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/open-redirect.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'raw-html-format' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/raw-html-format.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/tainted-url-host.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'csv-writer-injection' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/csv-writer-injection.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'nan-injection' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/nan-injection.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'path-traversal-open' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/path-traversal-open.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'raw-html-format' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/raw-html-concat.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'subprocess-injection' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/subprocess-injection.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/tainted-url-host.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'open-redirect' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/open-redirect.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'template-autoescape-off' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/xss/audit/template-autoescape-off.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'useless-if-conditional' (/home/jenkins/.opengrep/opengrep-rules/python/lang/maintainability/useless-ifelse.yaml:2:8) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'useless-if-body' (/home/jenkins/.opengrep/opengrep-rules/python/lang/maintainability/useless-ifelse.yaml:17:8) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'eval-detected' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/audit/eval-detected.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/audit/md5-used-as-password.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'avoid-bind-to-all-interfaces' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/audit/network/bind.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'psycopg-sqli' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/audit/sqli/psycopg-sqli.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'dangerous-spawn-process' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/dangerous-spawn-process.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'dangerous-subprocess-use' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/dangerous-subprocess-use.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'dangerous-system-call' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/dangerous-system-call.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-hash-algorithm-md5' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/insecure-hash-algorithms-md5.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-hash-algorithm-sha1' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/insecure-hash-algorithms.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-cipher-algorithm-blowfish' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insecure-cipher-algorithm-blowfish.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-hash-algorithm-md5' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insecure-hash-algorithm-md5.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-hash-algorithm-sha1' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insecure-hash-algorithm.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insufficient-dsa-key-size' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insufficient-dsa-key-size.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insufficient-rsa-key-size' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insufficient-rsa-key-size.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'crypto-mode-without-authentication' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/mode-without-authentication.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'disabled-cert-validation' (/home/jenkins/.opengrep/opengrep-rules/python/requests/security/disabled-cert-validation.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'pg-sqli' (/home/jenkins/.opengrep/opengrep-rules/ruby/aws-lambda/security/pg-sqli.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/ruby/aws-lambda/security/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insufficient-rsa-key-size' (/home/jenkins/.opengrep/opengrep-rules/ruby/lang/security/insufficient-rsa-key-size.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/ruby/lang/security/md5-used-as-password.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'avoid-content-tag' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/avoid-content-tag.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'avoid-html-safe' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/avoid-html-safe.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'avoid-raw' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/avoid-raw.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'var-in-href' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/var-in-href.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'var-in-script-tag' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/var-in-script-tag.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'raw-html-format' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/injection/raw-html-format.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/injection/tainted-url-host.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/scala/lang/security/audit/tainted-sql-string.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-html-response' (/home/jenkins/.opengrep/opengrep-rules/scala/play/security/tainted-html-response.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-from-http-request' (/home/jenkins/.opengrep/opengrep-rules/scala/play/security/tainted-sql-from-http-request.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-random' (/home/jenkins/.opengrep/opengrep-rules/swift/lang/crypto/insecure-random.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'eqeq-is-bad' (/home/jenkins/.opengrep/opengrep-rules/template.yaml:2:8) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'aws-fsx-lustre-filesystem-encrypted-with-cmk' (/home/jenkins/.opengrep/opengrep-rules/terraform/aws/security/aws-fsx-lustre-filesystem-encrypted-with-cmk.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'wildcard-assume-role' (/home/jenkins/.opengrep/opengrep-rules/terraform/aws/security/wildcard-assume-role.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'azure-monitor-log-profile-retention-days' (/home/jenkins/.opengrep/opengrep-rules/terraform/azure/security/azure-monitor-log-profile-retention-days.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'curl-eval' (/home/jenkins/.opengrep/opengrep-rules/yaml/github-actions/security/curl-eval.yaml:2:6) will be ignored.
-09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'seccomp-confinement-disabled' (/home/jenkins/.opengrep/opengrep-rules/yaml/kubernetes/security/seccomp-confinement-disabled.yaml:2:6) will be ignored.
-09:01:50  
-09:01:50  
-09:01:50  ┌─────────────┐
-09:01:50  │ Scan Status │
-09:01:50  └─────────────┘
-09:01:50    Scanning 61 files with 393 Code rules:
-09:01:50  
-09:01:50    Language      Rules   Files          Origin   Rules
-09:01:50   ─────────────────────────────        ────────────────
-09:01:50    <multilang>      61      61          Custom     188
-09:01:50    json              3       9
-09:01:50    python          114       7
-09:01:50    yaml             10       1
-09:01:50  
-09:01:52  
-09:01:52  
-09:01:52  ┌─────────────────┐
-09:01:52  │ 4 Code Findings │
-09:01:52  └─────────────────┘
-09:01:52  
-09:01:52      admin/scripts/create_git_repo.py
-09:01:52     ❯❯❱ arbitrary-sleep
-09:01:52            time.sleep() call; did you mean to leave this in?
-09:01:52  
-09:01:52            337┆ sleep(10)
-09:01:52  
-09:01:52      audits/scripts/python310_audit.py
-09:01:52     ❯❯❱ arbitrary-sleep
-09:01:52            time.sleep() call; did you mean to leave this in?
-09:01:52  
-09:01:52            116┆ time.sleep(1)  # stay inside secondary rate limits
-09:01:52              ⋮┆----------------------------------------
-09:01:52            144┆ time.sleep(0.5)
-09:01:52              ⋮┆----------------------------------------
-09:01:52            215┆ time.sleep(2)  # between query types
-09:01:52  
-09:01:52  
-09:01:52  
-09:01:52  ┌──────────────┐
-09:01:52  │ Scan Summary │
-09:01:52  └──────────────┘
-09:01:52  Some files were skipped or only partially analyzed.
-09:01:52    Scan skipped: 1 files matching .semgrepignore patterns.
-09:01:52    For a full list of skipped files, run opengrep with the --verbose flag.
-09:01:52  
-09:01:52  Ran 393 rules on 61 files: 4 findings.
-script returned exit code 1
+pipeline_policy_check.groovy
+##############################
+import jenkins.model.Jenkins
+import org.jenkinsci.plugins.workflow.job.WorkflowJob
+import org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition
+
+@NonCPS
+String resolveJenkinsfilePath(String jobFullName) {
+    def job = Jenkins.get().getItemByFullName(jobFullName)
+    if (!(job instanceof WorkflowJob)) {
+        return 'Jenkinsfile'
+    }
+    def defn = job.definition
+    if (defn instanceof CpsScmFlowDefinition) {
+        return defn.scriptPath ?: 'Jenkinsfile'
+    }
+    return 'Jenkinsfile'
+}
+
+private String extractTag(String xml, String tag) {
+    def m = java.util.regex.Pattern.compile("<${tag}>([^<]+)</${tag}>").matcher(xml)
+    return m.find() ? m.group(1).trim() : ''
+}
+
+String generateOpaInput() {
+    def segments     = env.JOB_NAME.split('/')
+    def mbSegments   = segments.dropRight(1) as List
+    def pipelineName = mbSegments[-1]
+    def folder       = mbSegments.size() >= 2 ? mbSegments[0] : ''
+    def subfolder    = mbSegments.size() == 3 ? mbSegments[1] : ''
+    // replace the encoded / from the JOB_NAME so that it matches BRANCH_NAME
+    // for cases where the branch contains /
+    def mbNameOnly = env.JOB_NAME.replace('%2F','/').replace("/${env.BRANCH_NAME}", "")
+
+    def job = Jenkins.get().getItemByFullName(mbNameOnly)
+    def configXml = job.getConfigFile().asString()
+
+    def repoUrl     = extractTag(configXml, 'repositoryUrl')
+    def scriptPath  = extractTag(configXml, 'scriptPath')
+    def configPath  = extractTag(configXml, 'configurationPath')
+
+    def opaInput = [
+        pipeline: [
+            folder         : folder,
+            subfolder      : subfolder,
+            name           : pipelineName,
+            repo           : repoUrl,
+            jenkinsfile    : scriptPath,
+            pipeline_config: configPath,
+        ]
+    ]
+    def opaInputJson = groovy.json.JsonOutput.prettyPrint(
+                        groovy.json.JsonOutput.toJson(opaInput))
+    return opaInputJson
+}
+
+@AfterStep({ hookContext.step.equals("git_checkout") })
+void call() {
+    String detectTechStackScript        = resource("detect_pipeline_tech_stack.sh")
+    String detectPipelineStepsScript    = resource("detect_pipeline_steps.sh")
+    String detectDeprecatedStepsScript  = resource("detect_deprecated_steps.sh")
+    String detectRestrictedStepsScript  = resource("detect_restricted_steps.sh")
+    String detectSastDastScript         = resource("detect_sast_dast.sh")
+    String fetchPoliciesScript          = resource("fetch_policies.sh")
+    String fetchGithubSettingsScript    = resource("fetch_github_settings.sh")
+    String pipelinePolicyCheckScript    = resource("pipeline_policy_check.sh")
+
+    node(jte.keywords.project) {
+        ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
+            stage("Governance: Pipeline Policy Check") {
+                println "[GOVERNANCE] Running pipeline OPA policy checks..."
+                println ""
+
+                // Single toggle for verbose governance output. When "true", the
+                // detection scripts and pipeline_policy_check.sh echo full input
+                // JSON payloads; when unset/false they stay quiet and only print
+                // human-readable summary + PASS/FAIL lines. Set via job/env as
+                // needed for troubleshooting.
+                def governanceDebug = (env.GOVERNANCE_DEBUG ?: "false")
+
+                withEnv([
+                    "NEEDED_PATHS=policies/cdo/pipelines",
+                    "PROJECT=$jte.keywords.project",
+                    "GOVERNANCE_DEBUG=${governanceDebug}",
+                ]) {
+                    sh fetchPoliciesScript
+                }
+
+                // ---------------------------------------------------------------
+                // SEED VALIDATION CHECK
+                // ---------------------------------------------------------------
+                println "[GOVERNANCE] Seed validation check: generate pre-requisites..."
+                def opaInputJson = generateOpaInput()
+
+                def seedInputPath = "governance/seed_input.json"
+                writeFile file: seedInputPath, text: opaInputJson, encoding: 'UTF-8'
+                println "[GOVERNANCE] OPA input written to: ${env.WORKSPACE}/${seedInputPath}"
+
+                println "[GOVERNANCE] Seed validation check: Running OPA policy..."
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    withEnv([
+                        "OPA_DECISION=cdo/pipelines/seed_validation/violations",
+                        "OPA_INPUT_JSON=${seedInputPath}"
+                    ]) {
+                        sh pipelinePolicyCheckScript
+                    }
+                }
+                println "[GOVERNANCE] Seed validation check complete."
+
+                // Parse once; reused by GitHub + SAST/DAST checks.
+                def parsedInput = readJSON text: opaInputJson
+                String repoUrl = parsedInput.pipeline.repo ?: ""
+
+                // ---------------------------------------------------------------
+                // GITHUB REPOSITORY SETTINGS CHECK
+                // ---------------------------------------------------------------
+                println "[GOVERNANCE] GitHub repository settings check: generate pre-requisites..."
+
+                if (repoUrl) {
+                    def githubInputPath = "governance/github_settings_input.json"
+
+                    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                        withCredentials([usernamePassword(credentialsId: 'github_svc_account', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+                            withEnv([
+                                "REPO_URL=${repoUrl}",
+                                "OPA_DECISION=cdo/pipelines/github_settings/deny",
+                                "OPA_INPUT_JSON=${githubInputPath}"
+                            ]) {
+                                sh fetchGithubSettingsScript
+
+                                println "[GOVERNANCE] GitHub settings check: Running OPA policy..."
+                                sh pipelinePolicyCheckScript
+                            }
+                        }
+                    }
+                } else {
+                    println "[GOVERNANCE] WARNING: No repository URL discovered in configuration XML. Skipping GitHub checks."
+                }
+                println "[GOVERNANCE] GitHub repository settings check complete."
+
+                // ---------------------------------------------------------------
+                // REQUIRED STEPS / DEPRECATED / RESTRICTED / SECURITY CHECKS
+                // ---------------------------------------------------------------
+                // Jenkinsfile path: prefer the value already parsed from the job's
+                // config XML into the seed input (parsedInput.pipeline.jenkinsfile).
+                // This is the same value restricted_steps consumes, and it has
+                // proven reliable. resolveJenkinsfilePath() does a second, LIVE
+                // lookup against Jenkins.get().getItemByFullName(...) — this has
+                // been observed to intermittently disagree with the seed-derived
+                // value on the same execution (returning the default 'Jenkinsfile'
+                // when the real file was e.g. 'Jenkinsfile.main'), so it is now
+                // only a fallback, not the primary source.
+                String seedJenkinsfilePath = parsedInput.pipeline.jenkinsfile
+                String liveJenkinsfilePath = resolveJenkinsfilePath(env.JOB_NAME as String)
+
+                if (seedJenkinsfilePath && seedJenkinsfilePath != liveJenkinsfilePath) {
+                    println "[GOVERNANCE] NOTICE: Jenkinsfile path mismatch between seed data " +
+                            "('${seedJenkinsfilePath}') and live lookup ('${liveJenkinsfilePath}'). " +
+                            "Using seed-derived value. If this appears frequently, investigate " +
+                            "resolveJenkinsfilePath() / job model staleness."
+                }
+
+                String jenkinsfilePath = seedJenkinsfilePath ?: liveJenkinsfilePath
+                println "[GOVERNANCE] Current Jenkinsfile path: ${jenkinsfilePath}"
+
+                withEnv(["JENKINSFILE_PATH=${jenkinsfilePath}"]) {
+                    // ---------------------------------------------------------------
+                    // REQUIRED STEPS CHECK
+                    // ---------------------------------------------------------------
+                    println "[GOVERNANCE] Required steps check: generate pre-requisites..."
+                    sh detectTechStackScript
+                    sh detectPipelineStepsScript
+
+                    println "[GOVERNANCE] Required steps check: Running OPA policy..."
+                    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/required_steps/deny",
+                            "OPA_INPUT_JSON=policy_input.json",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+                    println "[GOVERNANCE] Required steps check complete."
+
+                    // ---------------------------------------------------------------
+                    // DEPRECATED STEPS CHECK
+                    // ---------------------------------------------------------------
+                    println "[GOVERNANCE] Deprecated steps check: generate pre-requisites..."
+                    sh detectDeprecatedStepsScript
+
+                    println "[GOVERNANCE] Deprecated steps check: Running OPA policy..."
+                    def enforceDate = '2026-07-01'
+                    def currentDateEpoch = sh(returnStdout: true, script: 'date +%s').trim().toLong()
+                    def enforceDateEpoch = sh(returnStdout: true, script: "date -d '${enforceDate}' +%s").trim().toLong()
+                    def outsideGracePeriod = currentDateEpoch >= enforceDateEpoch
+
+                    def buildResultForDeprecatedSteps = "SUCCESS"
+                    if (outsideGracePeriod) {
+                        buildResultForDeprecatedSteps = "FAILURE"
+                        println "[GOVERNANCE] Enforcement date ${enforceDate} has been reached. Violations will fail the build."
+                    } else {
+                        println "[GOVERNANCE] Grace period active until ${enforceDate}. Violations will be warnings only."
+                    }
+
+                    catchError(buildResult: buildResultForDeprecatedSteps, stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/deprecated_steps/deny",
+                            "OPA_INPUT_JSON=deprecated_input.json",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+                    println "[GOVERNANCE] Deprecated steps check complete."
+
+                    // ---------------------------------------------------------------
+                    // RESTRICTED STEPS CHECK
+                    // ---------------------------------------------------------------
+                    println "[GOVERNANCE] Restricted steps check: generate pre-requisites..."
+                    sh detectRestrictedStepsScript
+
+                    println "[GOVERNANCE] Restricted steps check: Running OPA policy..."
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_PIPELINE_INPUT_JSON=${seedInputPath}",
+                            "OPA_DECISION=cdo/pipelines/restricted_steps/deny",
+                            "OPA_INPUT_JSON=restricted_input.json",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+                    println "[GOVERNANCE] Restricted steps check complete."
+
+                    // ---------------------------------------------------------------
+                    // REQUIRED SECURITY STEPS CHECK (SAST / DAST)
+                    // ---------------------------------------------------------------
+                    println "[GOVERNANCE] Security steps check (SAST/DAST): generate pre-requisites..."
+
+                    // pipeline_config path comes from the seed input (job XML
+                    // configurationPath) so the detector can read loaded libraries.
+                    def pipelineConfigPath = parsedInput.pipeline.pipeline_config ?: "pipeline_config.groovy"
+
+                    // Detector sh wrapped in catchError: the script has an ERR trap
+                    // that emits a fail-safe input and exits 0, but if it ever
+                    // hard-fails anyway, this keeps a prereq failure from ABORTING
+                    // the whole stage the way the exit-2 jq incident did.
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        withEnv([
+                            "PIPELINE_CONFIG_PATH=${pipelineConfigPath}",
+                            "REPO_URL=${repoUrl}",
+                            "GOVERNANCE_DEBUG=${governanceDebug}",
+                        ]) {
+                            sh detectSastDastScript
+                        }
+                    }
+
+                    // Guard: if the detector died before writing dast_input.json,
+                    // synthesize the same fail-safe document its ERR trap would
+                    // have emitted, so the OPA evals and readJSON below can run.
+                    if (!fileExists("dast_input.json")) {
+                        println "[GOVERNANCE] WARNING: dast_input.json missing after detector run; " +
+                                "writing fail-safe input (invocation_check_failed=true)."
+                        writeJSON file: "dast_input.json", json: [
+                            repo                   : repoUrl,
+                            jenkinsfile            : jenkinsfilePath,
+                            pipeline_steps         : [],
+                            loaded_libraries       : [],
+                            dast_target_url        : null,
+                            dast_blocking          : true,
+                            invocation_check_failed: true,
+                            signals                : [:]
+                        ]
+                    }
+
+                    // CHANGED: SAST/DAST grace period — same framework as the
+                    // deprecated_steps check above (enforcement date + epoch
+                    // comparison + buildResult flip). Until the enforcement date,
+                    // violations are surfaced (stage marked FAILURE, messages in
+                    // the log) but do NOT fail the overall build, giving teams
+                    // time to add the steps or file security_overrides entries.
+                    // On/after the date, prior behavior resumes: SAST always
+                    // blocks; DAST blocks unless dast(url, false).
+                    def securityEnforceDate = '2026-11-01'
+                    def secCurrentEpoch = sh(returnStdout: true, script: 'date +%s').trim().toLong()
+                    def secEnforceEpoch = sh(returnStdout: true, script: "date -d '${securityEnforceDate}' +%s").trim().toLong()
+                    def securityEnforced = secCurrentEpoch >= secEnforceEpoch
+
+                    if (securityEnforced) {
+                        println "[GOVERNANCE] Security steps enforcement date ${securityEnforceDate} has been reached. SAST/DAST violations will fail the build."
+                    } else {
+                        println "[GOVERNANCE] Security steps grace period active until ${securityEnforceDate}. SAST/DAST violations are warnings only (stage marked, build not failed)."
+                    }
+
+                    println "[GOVERNANCE] Security steps check (SAST/DAST): Running OPA policies..."
+
+                    // Invocation-verification warning — never blocks. Suspends
+                    // sast_deny/dast_deny's invocation checks when the Jenkinsfile
+                    // couldn't be read, instead of falsely denying a compliant repo.
+                    // OPA_NEVER_FAIL=true: warn returning non-empty is expected and
+                    // must not fail the build.
+                    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/required_security_steps/warn",
+                            "OPA_INPUT_JSON=dast_input.json",
+                            "OPA_NEVER_FAIL=true",
+                            "GOVERNANCE_DEBUG=${governanceDebug}",
+
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+
+                    // ---- SAST ---------------------------------------------------
+                    // CHANGED: blocking only after the enforcement date.
+                    def buildResultForSast = securityEnforced ? "FAILURE" : "SUCCESS"
+                    catchError(buildResult: buildResultForSast, stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/required_security_steps/sast_deny",
+                            "OPA_INPUT_JSON=dast_input.json",
+                            "GOVERNANCE_DEBUG=${governanceDebug}",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+
+                    // ---- DAST ---------------------------------------------------
+                    // dast.groovy is call(String targetUrl, Boolean blocking=true).
+                    // The detector reads that second argument into dast_blocking;
+                    // false means the author opted into non-blocking (warn only).
+                    // CHANGED: the author's blocking choice only takes effect after
+                    // the enforcement date; during grace, never fail the build.
+                    def sastDastInput = readJSON file: "dast_input.json"
+                    def dastBlocking  = sastDastInput.dast_blocking != false  // default true
+
+                    def buildResultForDast = (securityEnforced && dastBlocking) ? "FAILURE" : "SUCCESS"
+                    if (!securityEnforced) {
+                        println "[GOVERNANCE] DAST in grace period. Violations are warnings only."
+                    } else if (dastBlocking) {
+                        println "[GOVERNANCE] DAST is blocking. Violations will FAIL the build."
+                    } else {
+                        println "[GOVERNANCE] DAST set to non-blocking via dast(url, false). Violations are warnings only."
+                    }
+
+                    catchError(buildResult: buildResultForDast, stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/required_security_steps/dast_deny",
+                            "OPA_INPUT_JSON=dast_input.json",
+                            "GOVERNANCE_DEBUG=${governanceDebug}",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+                    println "[GOVERNANCE] Security steps check (SAST/DAST) complete."
+                }
+            }
+        }
+    }
+}
+
+
+##############
+detect_sast_dast.sh
+########################
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# ---------------------------------------------------------------------------
+# detect_sast_dast: inspect the checked-out repo and emit the applicability +
+# step document for the required_security_steps policy.
+#
+# SAST applies to every project (enforced unconditionally by the policy), so
+# nothing to detect there beyond whether the step actually runs. This script
+# produces:
+#   signals.is_frontend        : package.json declares a web framework
+#   signals.has_api_gateway    : Terraform provisions API Gateway (v1 or v2)
+#   signals.has_http_listener  : Terraform provisions an ALB HTTP/HTTPS listener
+#   signals.target_url_output  : (informational) name of a TF output emitting a
+#                                URL; NOT used for applicability
+#   pipeline_steps             : sast/dast INVOKED in the Jenkinsfile (authoritative)
+#   loaded_libraries           : sast/dast LOADED in pipeline_config.groovy (secondary)
+#   dast_target_url            : URL argument passed to dast(...) — the reliable
+#                                targetUrl source
+#
+# The Rego decides applicability from these; jobs/{project}.json can override.
+#
+# FAILURE PHILOSOPHY: this script must never hard-fail the build. Wiring bugs
+# and unexpected data get reported as invocation_check_failed=true so the
+# policy emits a loud, non-blocking warn instead of a false denial or a crash.
+# ---------------------------------------------------------------------------
+
+REPO_ROOT="${WORKSPACE:-.}"
+OUTPUT_FILE="dast_input.json"
+
+# ── Fail-safe emitter ───────────────────────────────────────────────────────
+# On ANY unexpected error, emit a minimal input marked unverified and exit 0.
+# The policy suspends invocation-based denials and fires its warn decision,
+# making the breakage visible in the build log without killing the pipeline.
+# (Incident this guards against: a multi-document JSON value reaching
+# --argjson crashed the script with exit 2; the sh step was outside catchError,
+# so the whole pipeline aborted before the security checks even ran.)
+emit_failsafe() {
+    local line="${1:-?}"
+    {
+        echo "[GOVERNANCE] ERROR: detect_sast_dast.sh hit an unexpected error near line ${line}."
+        echo "[GOVERNANCE]        Emitting fail-safe input (invocation_check_failed=true): the"
+        echo "[GOVERNANCE]        policy will WARN, not deny, and the build will not crash here."
+    } >&2
+    jq -n \
+        --arg repo "${REPO_URL:-}" \
+        --arg jenkinsfile "${JENKINSFILE:-${JENKINSFILE_PATH:-}}" \
+        '{
+            repo: $repo,
+            jenkinsfile: $jenkinsfile,
+            pipeline_steps: [],
+            loaded_libraries: [],
+            dast_target_url: null,
+            dast_blocking: true,
+            invocation_check_failed: true,
+            signals: {}
+        }' > "$OUTPUT_FILE" || true
+    exit 0
+}
+trap 'emit_failsafe $LINENO' ERR
+
+# ── JSON hygiene helpers ────────────────────────────────────────────────────
+# The old guards used `echo "$val" | jq -e .`, which ACCEPTS a stream of
+# multiple JSON documents — but --argjson requires exactly ONE JSON text, so a
+# multi-document value passed validation and then crashed the final jq -n.
+# These normalizers guarantee exactly one well-typed value or a safe default.
+
+# Exactly one compact JSON array, else [].
+as_json_array() {
+    printf '%s' "${1:-}" \
+        | jq -ces 'if (length == 1) and (.[0] | type == "array") then .[0] else empty end' 2>/dev/null \
+        || printf '[]'
+}
+
+# Exactly the literal true/false, else the supplied default.
+as_json_bool() {
+    case "${1:-}" in
+        true|false) printf '%s' "$1" ;;
+        *)          printf '%s' "$2" ;;
+    esac
+}
+
+# JENKINSFILE_PATH must be passed in explicitly by the hook (same variable
+# detect_restricted_steps.sh relies on). Do NOT default this to a bare
+# "Jenkinsfile" — several repos (e.g. sie-frontend) have no file with that
+# exact name, only variants like Jenkinsfile.main / Jenkinsfile.feature. A
+# silent default here scans the wrong (nonexistent) file, finds no invoked
+# steps, and produces a false "library loaded but never invoked" violation
+# against a fully compliant pipeline. Fail loudly instead.
+if [ -z "${JENKINSFILE_PATH:-}" ]; then
+    echo "[GOVERNANCE] ERROR: JENKINSFILE_PATH is not set. Cannot reliably detect" >&2
+    echo "[GOVERNANCE]        invoked security steps. Refusing to guess a filename." >&2
+    JENKINSFILE=""
+else
+    JENKINSFILE="$JENKINSFILE_PATH"
+fi
+PIPELINE_CONFIG="${PIPELINE_CONFIG_PATH:-pipeline_config.groovy}"
+
+echo "[GOVERNANCE] detect_sast_dast scanning repo at: ${REPO_ROOT}"
+echo "[GOVERNANCE] JENKINSFILE_PATH received: ${JENKINSFILE_PATH:-<unset>} (resolved: ${JENKINSFILE:-<none>})"
+
+# ── Tier 1: front-end web framework in package.json ─────────────────────────
+# Cheapest, strongest signal. Reads top-level deps + devDeps only (not the
+# lockfile), so transitive pulls don't produce false positives.
+WEB_FRAMEWORKS='["next","react","react-dom","vue","@angular/core","svelte","express"]'
+IS_FRONTEND=false
+while IFS= read -r pkg; do
+    [ -z "$pkg" ] && continue
+    match=$(jq --argjson fw "$WEB_FRAMEWORKS" '
+        ((.dependencies // {}) + (.devDependencies // {}))
+        | keys
+        | any(. as $k | $fw | index($k))
+    ' "$pkg" 2>/dev/null || echo false)
+    # A malformed package.json (or a multi-document file) can yield a
+    # multi-line result; keep only the first line before comparing.
+    match="${match%%$'\n'*}"
+    if [ "$match" = "true" ]; then
+        IS_FRONTEND=true
+        break
+    fi
+done < <(find "$REPO_ROOT" -name package.json -not -path '*/node_modules/*' 2>/dev/null)
+
+# ── Tier 2: Terraform HTTP surface ──────────────────────────────────────────
+# Grep resource declarations across all .tf files. Cheap, no HCL parsing.
+TF_FILES=$(find "$REPO_ROOT" -name '*.tf' -not -path '*/.terraform/*' 2>/dev/null || true)
+
+HAS_API_GATEWAY=false
+HAS_HTTP_LISTENER=false
+TARGET_URL_OUTPUT=""
+
+if [ -n "$TF_FILES" ]; then
+    # API Gateway (v1 REST or v2 HTTP/WebSocket)
+    if echo "$TF_FILES" | xargs grep -lE 'resource[[:space:]]+"aws_(api_gateway_rest_api|apigatewayv2_api)"' >/dev/null 2>&1; then
+        HAS_API_GATEWAY=true
+    fi
+
+    # ALB/NLB listener speaking HTTP or HTTPS. Require an HTTP(S) protocol
+    # somewhere in the .tf files, not just the listener resource, to reduce
+    # internal/TCP-only noise.
+    if echo "$TF_FILES" | xargs grep -lE 'resource[[:space:]]+"aws_lb_listener"' >/dev/null 2>&1; then
+        if echo "$TF_FILES" | xargs grep -hE 'protocol[[:space:]]*=[[:space:]]*"HTTPS?"' >/dev/null 2>&1; then
+            HAS_HTTP_LISTENER=true
+        fi
+    fi
+
+    # A Terraform output emitting a reachable URL. INFORMATIONAL ONLY — this is
+    # a best-effort convenience; its absence must never affect applicability.
+    # Custom-domain APIs (aws_apigatewayv2_domain_name) frequently expose a URL
+    # that is never emitted as an output, so a miss here is expected. The
+    # authoritative targetUrl comes from the dast() call argument below.
+    TARGET_URL_OUTPUT=$(echo "$TF_FILES" | xargs grep -hEA3 '^[[:space:]]*output[[:space:]]+"' 2>/dev/null \
+        | awk '
+            /^[[:space:]]*output[[:space:]]+"/ {
+                if (match($0, /output[[:space:]]+"[^"]+"/)) {
+                    s = substr($0, RSTART, RLENGTH)
+                    gsub(/output[[:space:]]+"/, "", s); gsub(/"/, "", s)
+                    name = s
+                }
+                next
+            }
+            /execute-api|dns_name|api_url/ { if (name != "") { print name; name="" } }
+        ' \
+        | head -n1 || true)
+fi
+
+# Sanitize the booleans no matter which code path set them.
+IS_FRONTEND=$(as_json_bool "$IS_FRONTEND" false)
+HAS_API_GATEWAY=$(as_json_bool "$HAS_API_GATEWAY" false)
+HAS_HTTP_LISTENER=$(as_json_bool "$HAS_HTTP_LISTENER" false)
+
+echo "[GOVERNANCE] signals: is_frontend=${IS_FRONTEND} has_api_gateway=${HAS_API_GATEWAY} has_http_listener=${HAS_HTTP_LISTENER} target_url_output=${TARGET_URL_OUTPUT:-<none>}"
+
+# ── Detect which security steps actually run ─────────────────────────────────
+# JTE steps appear two ways, meaning different things:
+#   1. LOADED as a library in pipeline_config.groovy → capability available.
+#   2. INVOKED in the Jenkinsfile, e.g. sast(true) / dast("https://...")
+#      → the step actually runs. Authoritative for a required-steps check.
+#
+# invocation_check_failed is true when we could not read the Jenkinsfile at
+# all (unset path, or path resolved but file missing). In that case
+# CALLED_STEPS is [] but that MUST NOT be read as "steps are absent" — it means
+# "we don't know." The policy should not deny for missing/dormant steps when
+# this flag is set.
+INVOCATION_CHECK_FAILED=true
+CALLED_STEPS='[]'
+DAST_TARGET_URL=""
+DAST_BLOCKING=true
+
+if [ -n "$JENKINSFILE" ] && [ -f "$JENKINSFILE" ]; then
+    INVOCATION_CHECK_FAILED=false
+
+    # (1) Invoked steps: sast(...) / dast(...) at line start (indentation
+    #     allowed) or via jte.libraries.<lib>.<step>(...). Match the step name
+    #     before a paren.
+    #     `|| true`: grep exits 1 on no matches, which under `set -e` + pipefail
+    #     would otherwise kill the script on a Jenkinsfile with no sast/dast calls.
+    CALLED_STEPS_RAW=$(grep -oP '(?:^\s*|\.)\K(sast|dast)(?=\s*\()' "$JENKINSFILE" 2>/dev/null | sort -u || true)
+    if [ -z "$CALLED_STEPS_RAW" ]; then
+        CALLED_STEPS='[]'
+    else
+        CALLED_STEPS=$(printf '%s\n' "$CALLED_STEPS_RAW" | jq -R . | jq -cs . 2>/dev/null || true)
+    fi
+    # Normalize: exactly one compact array, or []. This closes the loophole
+    # where a multi-document stream passed `jq -e` validation but crashed
+    # --argjson (single-JSON-text required).
+    CALLED_STEPS=$(as_json_array "$CALLED_STEPS")
+    echo "[GOVERNANCE] security steps INVOKED in ${JENKINSFILE}: ${CALLED_STEPS}"
+
+    # (3) Target URL: the reliable source is the dast() call argument itself.
+    DAST_TARGET_URL=$(grep -oP 'dast\(\s*"\K[^"]+' "$JENKINSFILE" 2>/dev/null | head -n1 || true)
+    echo "[GOVERNANCE] dast target URL from Jenkinsfile: ${DAST_TARGET_URL:-<none>}"
+
+    # (4) Blocking flag: dast.groovy is call(String targetUrl, Boolean blocking=true).
+    #     A second argument of `false` means the author chose non-blocking.
+    if grep -qP 'dast\(\s*"[^"]*"\s*,\s*false\s*\)' "$JENKINSFILE" 2>/dev/null; then
+        DAST_BLOCKING=false
+    fi
+    DAST_BLOCKING=$(as_json_bool "$DAST_BLOCKING" true)
+    echo "[GOVERNANCE] dast blocking mode: ${DAST_BLOCKING}"
+else
+    echo "[GOVERNANCE] WARNING: Jenkinsfile not readable at '${JENKINSFILE:-<empty>}'." >&2
+    echo "[GOVERNANCE] WARNING: Invocation status is UNKNOWN, not absent. The policy" >&2
+    echo "[GOVERNANCE]          will skip invocation-based denials for this run." >&2
+fi
+
+# (2) Loaded libraries: sast / dast inside the libraries { } block. This reads
+# pipeline_config.groovy, a fixed filename, so it is unaffected by which
+# Jenkinsfile variant this build used.
+LOADED_LIBS_RAW=$(awk '
+    /libraries[[:space:]]*\{/ { inblock=1; depth=0 }
+    inblock {
+        depth += gsub(/\{/, "{")
+        depth -= gsub(/\}/, "}")
+        if ($0 ~ /^[[:space:]]*(sast|dast)([[:space:]]*\{)?[[:space:]]*$/) {
+            gsub(/[^a-z]/, ""); print
+        }
+        if (depth <= 0 && inblock && NR>1) inblock=0
+    }
+' "$PIPELINE_CONFIG" 2>/dev/null | sort -u || true)
+
+if [ -z "$LOADED_LIBS_RAW" ]; then
+    LOADED_LIBS='[]'
+else
+    LOADED_LIBS=$(printf '%s\n' "$LOADED_LIBS_RAW" | jq -R . | jq -cs . 2>/dev/null || true)
+fi
+# Same normalization as CALLED_STEPS: one compact array or [].
+LOADED_LIBS=$(as_json_array "$LOADED_LIBS")
+
+if [ -f "$PIPELINE_CONFIG" ]; then
+    echo "[GOVERNANCE] security libraries LOADED in ${PIPELINE_CONFIG}: ${LOADED_LIBS}"
+else
+    echo "[GOVERNANCE] WARNING: pipeline config not found at ${PIPELINE_CONFIG}."
+fi
+
+INVOCATION_CHECK_FAILED=$(as_json_bool "$INVOCATION_CHECK_FAILED" true)
+
+# Authoritative present-steps = invoked steps. The policy keys on these.
+STEPS="$CALLED_STEPS"
+
+# ── Emit policy input ───────────────────────────────────────────────────────
+# Every --argjson value below has been normalized to exactly one well-typed
+# JSON value; if anything slips through anyway, the ERR trap emits the
+# fail-safe document instead of crashing the build.
+jq -n \
+    --argjson is_frontend "$IS_FRONTEND" \
+    --argjson has_api_gateway "$HAS_API_GATEWAY" \
+    --argjson has_http_listener "$HAS_HTTP_LISTENER" \
+    --arg target_url_output "$TARGET_URL_OUTPUT" \
+    --argjson steps "$STEPS" \
+    --argjson loaded_libs "$LOADED_LIBS" \
+    --arg dast_target_url "$DAST_TARGET_URL" \
+    --argjson dast_blocking "$DAST_BLOCKING" \
+    --argjson invocation_check_failed "$INVOCATION_CHECK_FAILED" \
+    --arg repo "${REPO_URL:-}" \
+    --arg jenkinsfile "${JENKINSFILE:-}" \
+    '{
+        repo: $repo,
+        jenkinsfile: $jenkinsfile,
+        pipeline_steps: $steps,
+        loaded_libraries: $loaded_libs,
+        dast_target_url: (if $dast_target_url == "" then null else $dast_target_url end),
+        dast_blocking: $dast_blocking,
+        invocation_check_failed: $invocation_check_failed,
+        signals: {
+            is_frontend:       $is_frontend,
+            has_api_gateway:   $has_api_gateway,
+            has_http_listener: $has_http_listener,
+            target_url_output: (if $target_url_output == "" then null else $target_url_output end)
+        }
+    }' \
+    > "$OUTPUT_FILE"
+
+echo "[GOVERNANCE] SAST/DAST input written to: ${OUTPUT_FILE}"
+if [ "${GOVERNANCE_DEBUG:-false}" = "true" ]; then
+    cat "$OUTPUT_FILE"
+fi
+
+
+######################
+pipeline_policy_check.sh
+######################
+#!/bin/bash
+set -euo pipefail
+
+# Use OPA_DECISION and INPUT_JSON env var from Groovy, default to required_scan_steps if not set
+POLICIES_ROOT_DIR="opa_policies"
+DECISION="${OPA_DECISION:-cdo/pipelines/required_steps/deny}"
+INPUT_JSON="${OPA_INPUT_JSON:-policy_input.json}"
+TECH_STACK_FILE="tech_stack.json"
+PIPELINE_STEPS_FILE="pipeline_steps.json"
+
+echo "[GOVERNANCE] Starting OPA pipeline policy evaluation..." >&2
+echo "[GOVERNANCE] Using decision: ${DECISION}" >&2
+echo "[GOVERNANCE] Using input JSON: ${INPUT_JSON}" >&2
+
+# Only build/merge input when using the default required-scan input file.
+if [[ "${INPUT_JSON}" == "policy_input.json" ]]; then
+  echo "[GOVERNANCE] Merging tech stack + Jenkins pipeline steps into ${INPUT_JSON}" >&2
+
+  if [[ -f "${TECH_STACK_FILE}" ]]; then
+    tech_runtimes=$(jq -r '.tech_stack // []' "${TECH_STACK_FILE}")
+  else
+    tech_runtimes="[]"
+  fi
+
+  if [[ -f "${PIPELINE_STEPS_FILE}" ]]; then
+    pipeline_steps=$(jq -r '.gov_steps // []' "${PIPELINE_STEPS_FILE}")
+  else
+    pipeline_steps="[]"
+  fi
+
+  jq -n \
+    --argjson runtimes "${tech_runtimes}" \
+    --argjson steps "${pipeline_steps}" \
+    '{ tech: { runtimes: $runtimes }, jenkins: { steps: $steps } }' \
+    > "${INPUT_JSON}"
+
+  if [[ "${GOVERNANCE_DEBUG:-false}" == "true" ]]; then
+    echo "[GOVERNANCE] Generated OPA pipeline input:" >&2
+    cat "${INPUT_JSON}" >&2
+  fi
+else
+  if [[ ! -f "${INPUT_JSON}" ]]; then
+    echo "[GOVERNANCE] ERROR: Input JSON not found: ${INPUT_JSON}" >&2
+    exit 1
+  fi
+  if [[ "${GOVERNANCE_DEBUG:-false}" == "true" ]]; then
+    echo "[GOVERNANCE] Using pre-built input JSON:" >&2
+    cat "${INPUT_JSON}" >&2
+  fi
+fi
+
+# OPA_NEVER_FAIL=true skips --fail-non-empty for warn-only decisions, where a
+# non-empty result is expected and should not fail the build.
+OPA_ARGS=(--format json --decision "${DECISION}" --bundle "${POLICIES_ROOT_DIR}")
+if [[ "${OPA_NEVER_FAIL:-false}" != "true" ]]; then
+  OPA_ARGS+=(--fail-non-empty)
+fi
+
+echo "[GOVERNANCE] Running OPA exec with decision: ${DECISION}" >&2
+if opa exec "${OPA_ARGS[@]}" "${INPUT_JSON}"; then
+  echo "[GOVERNANCE] OPA pipeline policy check PASSED: ${DECISION}" >&2
+else
+  if [[ "${OPA_NEVER_FAIL:-false}" == "true" ]]; then
+    echo "[GOVERNANCE] OPA pipeline policy check completed with warnings (non-blocking): ${DECISION}" >&2
+  else
+    echo "[GOVERNANCE] OPA pipeline policy check FAILED: ${DECISION}" >&2
+    exit 1
+  fi
+fi
+
+echo "[GOVERNANCE] OPA pipeline policy evaluation complete." >&2
