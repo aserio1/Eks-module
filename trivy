@@ -1,4 +1,20 @@
+08:25:41  + echo 'Exporting Redis container variables needed for executing redis-mock python tests'
+08:25:41  Exporting Redis container variables needed for executing redis-mock python tests
+08:25:41  + set +x
+08:25:42  + command -v /home/jenkins/anaconda3/bin/conda
+08:25:42  + echo 'Activating Conda python312'
+08:25:42  Activating Conda python312
+08:25:42  + set +x
+08:25:42  + python3 --version
+08:25:42  Python 3.12.4
+08:25:42  + python3 -m pytest --cov --cov-report term --cov-report xml:coverage.xml --cov-config=.coveragerc
+08:25:42  ERROR: usage: __main__.py [options] [file_or_dir] [file_or_dir] [...]
+08:25:42  __main__.py: error: unrecognized arguments: --cov --cov-report --cov-report xml:coverage.xml --cov-config=.coveragerc
+08:25:42    inifile: None
+08:25:42    rootdir: /home/jenkins/workspace/IMAC/IMAC Jenkins Cleanup EFS/PR-32/62
 
+
+#########################
 #!/usr/bin/env python3
 
 # Recursively remove .terraform directories of any age.
@@ -400,3 +416,67 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+####
+pipeline 
+
+customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
+
+pipeline {
+    agent { label jte.keywords.project }
+
+    triggers {
+        cron('0 2 * * 1-5') // Every Monday-Friday at 9:00 pm EST.
+    }
+
+    stages {
+        stage('Disable Concurrent Builds') {
+            steps {
+                echo "Disabling Concurrent Builds"
+                script {
+                    disable_concurrent_builds()
+                }
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                script {
+                    git_checkout()
+                }
+            }
+        }
+
+        stage('Run EFS Cleanup') {
+            steps {
+                echo "Starting EFS Cleanup..."
+                script {
+                    setup()
+                    sast(true)
+                    scan_dependencies()
+                    unit_test()
+                    ws("${customPath}/admin/scripts"){
+                        sh """
+                        /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
+                        """
+                    }
+                }
+            }
+        }
+
+    }
+
+    post {
+        success {
+            echo 'EFS Cleanup completed successfully!'
+        }
+        failure {
+            echo 'EFS Cleanup failed. Check console output for details.'
+            // email_via_sns()
+        }
+    }
+}
+
+
