@@ -1,29 +1,365 @@
- 4 Code Findings │
-09:01:52  └─────────────────┘
-09:01:52  
-09:01:52      admin/scripts/create_git_repo.py
-09:01:52     ❯❯❱ arbitrary-sleep
-09:01:52            time.sleep() call; did you mean to leave this in?
-09:01:52  
-09:01:52            337┆ sleep(10)
-09:01:52  
-09:01:52      audits/scripts/python310_audit.py
-09:01:52     ❯❯❱ arbitrary-sleep
-09:01:52            time.sleep() call; did you mean to leave this in?
-09:01:52  
-09:01:52            116┆ time.sleep(1)  # stay inside secondary rate limits
-09:01:52              ⋮┆----------------------------------------
-09:01:52            144┆ time.sleep(0.5)
-09:01:52              ⋮┆----------------------------------------
-09:01:52            215┆ time.sleep(2)  # between query types
-09:01:52  
-09:01:52  
-09:01:52  
-09:01:52  ┌──────────────┐
-09:01:52  │ Scan Summary │
-09:01:52  └──────────────┘
-09:01:52  Some files were skipped or only partially analyzed.
-09:01:52    Scan skipped: 1 files matching .semgrepignore patterns.
-09:01:52    For a full list of skipped files, run opengrep with the --verbose flag.
-09:01:52  
-09:01:52  Ran 393 rules on 61 files: 4 findings.
+Noticed that the pipeline does not stop after the failed check for sast|dast - it continues executing until the end when it fails and u cannot tell why it fails.
+
+Fix the governance JTE step to fully stop and fail the pipeline at the failed opa check.
+
+Acceptance:
+
+sast/dast checks are enforced so they should fully stop and fail the pipeline at the check time
+
+
+#####################################
+import jenkins.model.Jenkins
+import org.jenkinsci.plugins.workflow.job.WorkflowJob
+import org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition
+
+@NonCPS
+String resolveJenkinsfilePath(String jobFullName) {
+    def job = Jenkins.get().getItemByFullName(jobFullName)
+    if (!(job instanceof WorkflowJob)) {
+        return 'Jenkinsfile'
+    }
+    def defn = job.definition
+    if (defn instanceof CpsScmFlowDefinition) {
+        return defn.scriptPath ?: 'Jenkinsfile'
+    }
+    return 'Jenkinsfile'
+}
+
+private String extractTag(String xml, String tag) {
+    def m = java.util.regex.Pattern.compile("<${tag}>([^<]+)</${tag}>").matcher(xml)
+    return m.find() ? m.group(1).trim() : ''
+}
+
+String generateOpaInput() {
+    def segments     = env.JOB_NAME.split('/')
+    def mbSegments   = segments.dropRight(1) as List
+    def pipelineName = mbSegments[-1]
+    def folder       = mbSegments.size() >= 2 ? mbSegments[0] : ''
+    def subfolder    = mbSegments.size() == 3 ? mbSegments[1] : ''
+    // replace the encoded / from the JOB_NAME so that it matches BRANCH_NAME
+    // for cases where the branch contains /
+    def mbNameOnly = env.JOB_NAME.replace('%2F','/').replace("/${env.BRANCH_NAME}", "")
+
+    def job = Jenkins.get().getItemByFullName(mbNameOnly)
+    def configXml = job.getConfigFile().asString()
+
+    def repoUrl     = extractTag(configXml, 'repositoryUrl')
+    def scriptPath  = extractTag(configXml, 'scriptPath')
+    def configPath  = extractTag(configXml, 'configurationPath')
+
+    def opaInput = [
+        pipeline: [
+            folder         : folder,
+            subfolder      : subfolder,
+            name           : pipelineName,
+            repo           : repoUrl,
+            jenkinsfile    : scriptPath,
+            pipeline_config: configPath,
+        ]
+    ]
+    def opaInputJson = groovy.json.JsonOutput.prettyPrint(
+                        groovy.json.JsonOutput.toJson(opaInput))
+    return opaInputJson
+}
+
+@AfterStep({ hookContext.step.equals("git_checkout") })
+void call() {
+    String detectTechStackScript        = resource("detect_pipeline_tech_stack.sh")
+    String detectPipelineStepsScript    = resource("detect_pipeline_steps.sh")
+    String detectDeprecatedStepsScript  = resource("detect_deprecated_steps.sh")
+    String detectRestrictedStepsScript  = resource("detect_restricted_steps.sh")
+    String detectSastDastScript         = resource("detect_sast_dast.sh")
+    String fetchPoliciesScript          = resource("fetch_policies.sh")
+    String fetchGithubSettingsScript    = resource("fetch_github_settings.sh")
+    String pipelinePolicyCheckScript    = resource("pipeline_policy_check.sh")
+
+    node(jte.keywords.project) {
+        ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
+            stage("Governance: Pipeline Policy Check") {
+                println "[GOVERNANCE] Running pipeline OPA policy checks..."
+                println ""
+
+                // Single toggle for verbose governance output. When "true", the
+                // detection scripts and pipeline_policy_check.sh echo full input
+                // JSON payloads; when unset/false they stay quiet and only print
+                // human-readable summary + PASS/FAIL lines. Set via job/env as
+                // needed for troubleshooting.
+                def governanceDebug = (env.GOVERNANCE_DEBUG ?: "false")
+
+                withEnv([
+                    "NEEDED_PATHS=policies/cdo/pipelines",
+                    "PROJECT=$jte.keywords.project",
+                    "GOVERNANCE_DEBUG=${governanceDebug}",
+                ]) {
+                    sh fetchPoliciesScript
+                }
+
+                // ---------------------------------------------------------------
+                // SEED VALIDATION CHECK
+                // ---------------------------------------------------------------
+                println "[GOVERNANCE] Seed validation check: generate pre-requisites..."
+                def opaInputJson = generateOpaInput()
+
+                def seedInputPath = "governance/seed_input.json"
+                writeFile file: seedInputPath, text: opaInputJson, encoding: 'UTF-8'
+                println "[GOVERNANCE] OPA input written to: ${env.WORKSPACE}/${seedInputPath}"
+
+                println "[GOVERNANCE] Seed validation check: Running OPA policy..."
+                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                    withEnv([
+                        "OPA_DECISION=cdo/pipelines/seed_validation/violations",
+                        "OPA_INPUT_JSON=${seedInputPath}"
+                    ]) {
+                        sh pipelinePolicyCheckScript
+                    }
+                }
+                println "[GOVERNANCE] Seed validation check complete."
+
+                // Parse once; reused by GitHub + SAST/DAST checks.
+                def parsedInput = readJSON text: opaInputJson
+                String repoUrl = parsedInput.pipeline.repo ?: ""
+
+                // ---------------------------------------------------------------
+                // GITHUB REPOSITORY SETTINGS CHECK
+                // ---------------------------------------------------------------
+                println "[GOVERNANCE] GitHub repository settings check: generate pre-requisites..."
+
+                if (repoUrl) {
+                    def githubInputPath = "governance/github_settings_input.json"
+
+                    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                        withCredentials([usernamePassword(credentialsId: 'github_svc_account', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
+                            withEnv([
+                                "REPO_URL=${repoUrl}",
+                                "OPA_DECISION=cdo/pipelines/github_settings/deny",
+                                "OPA_INPUT_JSON=${githubInputPath}"
+                            ]) {
+                                sh fetchGithubSettingsScript
+
+                                println "[GOVERNANCE] GitHub settings check: Running OPA policy..."
+                                sh pipelinePolicyCheckScript
+                            }
+                        }
+                    }
+                } else {
+                    println "[GOVERNANCE] WARNING: No repository URL discovered in configuration XML. Skipping GitHub checks."
+                }
+                println "[GOVERNANCE] GitHub repository settings check complete."
+
+                // ---------------------------------------------------------------
+                // REQUIRED STEPS / DEPRECATED / RESTRICTED / SECURITY CHECKS
+                // ---------------------------------------------------------------
+                // Jenkinsfile path: prefer the value already parsed from the job's
+                // config XML into the seed input (parsedInput.pipeline.jenkinsfile).
+                // This is the same value restricted_steps consumes, and it has
+                // proven reliable. resolveJenkinsfilePath() does a second, LIVE
+                // lookup against Jenkins.get().getItemByFullName(...) — this has
+                // been observed to intermittently disagree with the seed-derived
+                // value on the same execution (returning the default 'Jenkinsfile'
+                // when the real file was e.g. 'Jenkinsfile.main'), so it is now
+                // only a fallback, not the primary source.
+                String seedJenkinsfilePath = parsedInput.pipeline.jenkinsfile
+                String liveJenkinsfilePath = resolveJenkinsfilePath(env.JOB_NAME as String)
+
+                if (seedJenkinsfilePath && seedJenkinsfilePath != liveJenkinsfilePath) {
+                    println "[GOVERNANCE] NOTICE: Jenkinsfile path mismatch between seed data " +
+                            "('${seedJenkinsfilePath}') and live lookup ('${liveJenkinsfilePath}'). " +
+                            "Using seed-derived value. If this appears frequently, investigate " +
+                            "resolveJenkinsfilePath() / job model staleness."
+                }
+
+                String jenkinsfilePath = seedJenkinsfilePath ?: liveJenkinsfilePath
+                println "[GOVERNANCE] Current Jenkinsfile path: ${jenkinsfilePath}"
+
+                withEnv(["JENKINSFILE_PATH=${jenkinsfilePath}"]) {
+                    // ---------------------------------------------------------------
+                    // REQUIRED STEPS CHECK
+                    // ---------------------------------------------------------------
+                    println "[GOVERNANCE] Required steps check: generate pre-requisites..."
+                    sh detectTechStackScript
+                    sh detectPipelineStepsScript
+
+                    println "[GOVERNANCE] Required steps check: Running OPA policy..."
+                    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/required_steps/deny",
+                            "OPA_INPUT_JSON=policy_input.json",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+                    println "[GOVERNANCE] Required steps check complete."
+
+                    // ---------------------------------------------------------------
+                    // DEPRECATED STEPS CHECK
+                    // ---------------------------------------------------------------
+                    println "[GOVERNANCE] Deprecated steps check: generate pre-requisites..."
+                    sh detectDeprecatedStepsScript
+
+                    println "[GOVERNANCE] Deprecated steps check: Running OPA policy..."
+                    def enforceDate = '2026-07-01'
+                    def currentDateEpoch = sh(returnStdout: true, script: 'date +%s').trim().toLong()
+                    def enforceDateEpoch = sh(returnStdout: true, script: "date -d '${enforceDate}' +%s").trim().toLong()
+                    def outsideGracePeriod = currentDateEpoch >= enforceDateEpoch
+
+                    def buildResultForDeprecatedSteps = "SUCCESS"
+                    if (outsideGracePeriod) {
+                        buildResultForDeprecatedSteps = "FAILURE"
+                        println "[GOVERNANCE] Enforcement date ${enforceDate} has been reached. Violations will fail the build."
+                    } else {
+                        println "[GOVERNANCE] Grace period active until ${enforceDate}. Violations will be warnings only."
+                    }
+
+                    catchError(buildResult: buildResultForDeprecatedSteps, stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/deprecated_steps/deny",
+                            "OPA_INPUT_JSON=deprecated_input.json",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+                    println "[GOVERNANCE] Deprecated steps check complete."
+
+                    // ---------------------------------------------------------------
+                    // RESTRICTED STEPS CHECK
+                    // ---------------------------------------------------------------
+                    println "[GOVERNANCE] Restricted steps check: generate pre-requisites..."
+                    sh detectRestrictedStepsScript
+
+                    println "[GOVERNANCE] Restricted steps check: Running OPA policy..."
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_PIPELINE_INPUT_JSON=${seedInputPath}",
+                            "OPA_DECISION=cdo/pipelines/restricted_steps/deny",
+                            "OPA_INPUT_JSON=restricted_input.json",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+                    println "[GOVERNANCE] Restricted steps check complete."
+
+                    // ---------------------------------------------------------------
+                    // REQUIRED SECURITY STEPS CHECK (SAST / DAST)
+                    // ---------------------------------------------------------------
+                    println "[GOVERNANCE] Security steps check (SAST/DAST): generate pre-requisites..."
+
+                    // pipeline_config path comes from the seed input (job XML
+                    // configurationPath) so the detector can read loaded libraries.
+                    def pipelineConfigPath = parsedInput.pipeline.pipeline_config ?: "pipeline_config.groovy"
+
+                    // Detector sh wrapped in catchError: the script has an ERR trap
+                    // that emits a fail-safe input and exits 0, but if it ever
+                    // hard-fails anyway, this keeps a prereq failure from ABORTING
+                    // the whole stage the way the exit-2 jq incident did.
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        withEnv([
+                            "PIPELINE_CONFIG_PATH=${pipelineConfigPath}",
+                            "REPO_URL=${repoUrl}",
+                            "GOVERNANCE_DEBUG=${governanceDebug}",
+                        ]) {
+                            sh detectSastDastScript
+                        }
+                    }
+
+                    // Guard: if the detector died before writing dast_input.json,
+                    // synthesize the same fail-safe document its ERR trap would
+                    // have emitted, so the OPA evals and readJSON below can run.
+                    if (!fileExists("dast_input.json")) {
+                        println "[GOVERNANCE] WARNING: dast_input.json missing after detector run; " +
+                                "writing fail-safe input (invocation_check_failed=true)."
+                        writeJSON file: "dast_input.json", json: [
+                            repo                   : repoUrl,
+                            jenkinsfile            : jenkinsfilePath,
+                            pipeline_steps         : [],
+                            loaded_libraries       : [],
+                            dast_target_url        : null,
+                            dast_blocking          : true,
+                            invocation_check_failed: true,
+                            signals                : [:]
+                        ]
+                    }
+
+                    // CHANGED: SAST/DAST grace period — same framework as the
+                    // deprecated_steps check above (enforcement date + epoch
+                    // comparison + buildResult flip). Until the enforcement date,
+                    // violations are surfaced (stage marked FAILURE, messages in
+                    // the log) but do NOT fail the overall build, giving teams
+                    // time to add the steps or file security_overrides entries.
+                    // On/after the date, prior behavior resumes: SAST always
+                    // blocks; DAST blocks unless dast(url, false).
+                    def securityEnforceDate = '2026-11-01'
+                    def secCurrentEpoch = sh(returnStdout: true, script: 'date +%s').trim().toLong()
+                    def secEnforceEpoch = sh(returnStdout: true, script: "date -d '${securityEnforceDate}' +%s").trim().toLong()
+                    def securityEnforced = secCurrentEpoch >= secEnforceEpoch
+
+                    if (securityEnforced) {
+                        println "[GOVERNANCE] Security steps enforcement date ${securityEnforceDate} has been reached. SAST/DAST violations will fail the build."
+                    } else {
+                        println "[GOVERNANCE] Security steps grace period active until ${securityEnforceDate}. SAST/DAST violations are warnings only (stage marked, build not failed)."
+                    }
+
+                    println "[GOVERNANCE] Security steps check (SAST/DAST): Running OPA policies..."
+
+                    // Invocation-verification warning — never blocks. Suspends
+                    // sast_deny/dast_deny's invocation checks when the Jenkinsfile
+                    // couldn't be read, instead of falsely denying a compliant repo.
+                    // OPA_NEVER_FAIL=true: warn returning non-empty is expected and
+                    // must not fail the build.
+                    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/required_security_steps/warn",
+                            "OPA_INPUT_JSON=dast_input.json",
+                            "OPA_NEVER_FAIL=true",
+                            "GOVERNANCE_DEBUG=${governanceDebug}",
+
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+
+                    // ---- SAST ---------------------------------------------------
+                    // CHANGED: blocking only after the enforcement date.
+                    def buildResultForSast = securityEnforced ? "FAILURE" : "SUCCESS"
+                    catchError(buildResult: buildResultForSast, stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/required_security_steps/sast_deny",
+                            "OPA_INPUT_JSON=dast_input.json",
+                            "GOVERNANCE_DEBUG=${governanceDebug}",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+
+                    // ---- DAST ---------------------------------------------------
+                    // dast.groovy is call(String targetUrl, Boolean blocking=true).
+                    // The detector reads that second argument into dast_blocking;
+                    // false means the author opted into non-blocking (warn only).
+                    // CHANGED: the author's blocking choice only takes effect after
+                    // the enforcement date; during grace, never fail the build.
+                    def sastDastInput = readJSON file: "dast_input.json"
+                    def dastBlocking  = sastDastInput.dast_blocking != false  // default true
+
+                    def buildResultForDast = (securityEnforced && dastBlocking) ? "FAILURE" : "SUCCESS"
+                    if (!securityEnforced) {
+                        println "[GOVERNANCE] DAST in grace period. Violations are warnings only."
+                    } else if (dastBlocking) {
+                        println "[GOVERNANCE] DAST is blocking. Violations will FAIL the build."
+                    } else {
+                        println "[GOVERNANCE] DAST set to non-blocking via dast(url, false). Violations are warnings only."
+                    }
+
+                    catchError(buildResult: buildResultForDast, stageResult: 'FAILURE') {
+                        withEnv([
+                            "OPA_DECISION=cdo/pipelines/required_security_steps/dast_deny",
+                            "OPA_INPUT_JSON=dast_input.json",
+                            "GOVERNANCE_DEBUG=${governanceDebug}",
+                        ]) {
+                            sh pipelinePolicyCheckScript
+                        }
+                    }
+                    println "[GOVERNANCE] Security steps check (SAST/DAST) complete."
+                }
+            }
+        }
+    }
+}
