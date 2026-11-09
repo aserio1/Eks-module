@@ -1,734 +1,658 @@
-pipeline_policy_check.groovy
-##############################
-import jenkins.model.Jenkins
-import org.jenkinsci.plugins.workflow.job.WorkflowJob
-import org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition
+Create_git_repo
+#################
+#!/usr/bin/env python3
+"""
+Create a public GitHub repository from a template using PyGithub + REST,
+with repo name validation and specific repository settings.
 
-@NonCPS
-String resolveJenkinsfilePath(String jobFullName) {
-    def job = Jenkins.get().getItemByFullName(jobFullName)
-    if (!(job instanceof WorkflowJob)) {
-        return 'Jenkinsfile'
+If the target repository already exists, generation from the template is
+skipped, and the script instead re-applies the required settings
+(default branch, branch protection, merge settings) to the existing repo.
+
+Requirements:
+  pip install PyGithub requests
+"""
+
+import argparse
+import re
+import sys
+import requests
+
+from typing import Any
+from time import sleep
+from github import Github, Auth, GithubObject
+from github.GithubException import GithubException, UnknownObjectException
+
+ALLOWED_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")  # letters, digits, dot, underscore, hyphen
+MAX_REPO_NAME_LEN = 100
+GITHUB_BASE_URL = "https://git.aws.hhsoig.gov/api/v3"
+
+
+def verify_repo_name(name: str) -> None:
+    """
+    Validate a GitHub repository name.
+
+    Rules:
+      - Non-empty
+      - Length <= 100 characters
+      - Allowed characters: letters, digits, '.', '_', '-'
+    Raises:
+      ValueError with a human-readable reason if invalid.
+    """
+    if not name or not name.strip():
+        raise ValueError("Repository name must be non-empty.")
+    if len(name) > MAX_REPO_NAME_LEN:
+        raise ValueError(f"Repository name must be <= {MAX_REPO_NAME_LEN} characters.")
+    if not ALLOWED_NAME_PATTERN.match(name):
+        raise ValueError(
+            "Repository name may only contain letters, digits, '.', '_' and '-'. "
+            "Examples: 'my-repo', 'service_api', 'cli.v2'"
+        )
+
+
+def get_existing_repo(g: Github, owner_login: str, repo_name: str):
+    """
+    Returns the Repository object for {owner_login}/{repo_name} if it exists,
+    otherwise returns None.
+    """
+    full_name = f"{owner_login}/{repo_name}"
+    try:
+        return g.get_repo(full_name)
+    except UnknownObjectException:
+        return None
+
+
+def resolve_owner(g: Github, owner_login: str):
+    """
+    Resolve the owner as either an Organization or a User object.
+    Tries organization first, then user.
+
+    Returns:
+      Tuple[owner_obj, owner_type] where owner_type is 'org' or 'user'.
+
+    Raises:
+      RuntimeError if owner cannot be resolved.
+    """
+    try:
+        org = g.get_organization(owner_login)
+        return org, "org"
+    except UnknownObjectException:
+        pass
+
+    try:
+        user = g.get_user(owner_login)  # NamedUser
+        return user, "user"
+    except UnknownObjectException:
+        raise RuntimeError(
+            f"Owner '{owner_login}' not found as an organization or user. "
+            "Check the login spelling and your token permissions."
+        )
+
+
+def ensure_default_branch_main(repo) -> None:
+    """
+    Ensure default branch is 'main'.
+    - If 'main' exists, set it as default.
+    - Else if 'master' exists, create 'main' from 'master' and set default to 'main'.
+    - Else do nothing (leave default as-is) and print a warning.
+    """
+    try:
+        repo.get_branch("main")
+        repo.edit(default_branch="main")
+        return
+    except GithubException:
+        pass
+
+    # Try from master
+    try:
+        master = repo.get_branch("master")
+        sha = master.commit.sha
+        # Create refs/heads/main at the same commit as master
+        repo.create_git_ref(ref="refs/heads/main", sha=sha)
+        repo.edit(default_branch="main")
+        return
+    except GithubException:
+        print(
+            "[WARN] Could not find 'main' or 'master' to set default branch to 'main'. "
+            "Leaving the template's default branch as-is.",
+            file=sys.stderr,
+        )
+
+
+def ensure_main_protected(repo) -> None:
+    """
+    Ensures the 'main' branch is protected with:
+      - Dismiss stale approvals when new commits/merge base changes
+      - Require review from CODEOWNERS
+      - Require status checks to pass (and branch up-to-date)
+      - Require conversation resolution before merging
+      - Require linear history (squash/rebase merges)
+      - No bypassing (empty bypass lists on org repos + enforce_admins)
+
+    Parameters
+    ----------
+    repo : github.Repository.Repository
+        A PyGithub Repository instance (already resolved).
+
+    Raises
+    ------
+    SystemExit on failure (prints the upstream error).
+    """
+    BRANCH_NAME = "main"
+
+    # Configure these to your workflow job names or external status contexts
+    # e.g., "security/semgrep", "CodeQL", etc.
+    REQUIRED_CHECK_CONTEXTS: list[str] = []
+
+    try:
+        branch = repo.get_branch(BRANCH_NAME)
+    except GithubException as e:
+        raise SystemExit(f"[ensure_main_protected] Failed to get branch '{BRANCH_NAME}': {e}")
+
+    # Detect org vs user repo for bypass allowances
+    owner = repo.owner
+    is_org_repo = getattr(owner, "type", None) == "Organization"
+
+    # Empty bypass lists => Do NOT allow bypassing (only valid for org repos)
+    users_bypass: object = [] if is_org_repo else GithubObject.NotSet
+    teams_bypass: object = [] if is_org_repo else GithubObject.NotSet
+    apps_bypass: object = [] if is_org_repo else GithubObject.NotSet
+
+    try:
+        # 1) Protect branch & enable the gates
+        #    - enforce_admins=True ensures admins cannot bypass
+        #    - strict=True enables "Require status checks to pass before merging"
+        branch.edit_protection(
+            enforce_admins=True,
+            dismiss_stale_reviews=True,  # Dismiss approvals on new commits / merge base change
+            require_code_owner_reviews=True,  # Require CODEOWNERS reviews
+            required_conversation_resolution=True,  # Must resolve all conversations
+            required_linear_history=True,  # Prevent merge commits; require squash/rebase
+            users_bypass_pull_request_allowances=users_bypass,
+            teams_bypass_pull_request_allowances=teams_bypass,
+            apps_bypass_pull_request_allowances=apps_bypass,
+            strict=True,  # Turn on the status-check gate
+        )
+
+        # 2) Define the required status checks + "up to date" policy
+        #    If you don't list contexts, the gate is on but nothing specific is required.
+        #    Most teams should list explicit job names.
+        branch.edit_required_status_checks(
+            strict=True,  # require branch to be up-to-date before merging
+            contexts=REQUIRED_CHECK_CONTEXTS,
+        )
+
+        print(f"[ensure_main_protected] Branch protection applied to {repo.full_name}@{BRANCH_NAME}")
+    except GithubException as e:
+        raise SystemExit(f"[ensure_main_protected] Failed to update branch protection: {e}")
+
+
+def configure_merge_settings(repo) -> None:
+    """
+    Configure repository to:
+      - only allow squash merging
+      - always suggest updating pull request branches
+      - automatically delete head branches on merge
+    """
+    # Turn on squash, disable merge commit and rebase merge
+    # Turn on "Allow update of pull request branches" and "Automatically delete head branches"
+    repo.edit(
+        allow_squash_merge=True,
+        allow_merge_commit=False,
+        allow_rebase_merge=False,
+        allow_update_branch=True,
+        delete_branch_on_merge=True,
+    )
+
+
+def generate_from_template(
+    token: str,
+    template_owner: str,
+    template_repo: str,
+    target_owner: str,
+    new_repo_name: str,
+    include_all_branches: bool = False,
+    private: bool = False,
+) -> dict:
+    """
+    Use GitHub REST API to generate a repository from a template.
+    Returns the new repository JSON payload.
+
+    Docs: POST /repos/{template_owner}/{template_repo}/generate
+    """
+    url = f"https://api.git.aws.hhsoig.gov/repos/{template_owner}/{template_repo}/generate"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
     }
-    def defn = job.definition
-    if (defn instanceof CpsScmFlowDefinition) {
-        return defn.scriptPath ?: 'Jenkinsfile'
+    payload: dict[str, Any] = {
+        "owner": target_owner,
+        "name": new_repo_name,
+        "private": private,
+        "include_all_branches": include_all_branches,
     }
-    return 'Jenkinsfile'
-}
-
-private String extractTag(String xml, String tag) {
-    def m = java.util.regex.Pattern.compile("<${tag}>([^<]+)</${tag}>").matcher(xml)
-    return m.find() ? m.group(1).trim() : ''
-}
-
-String generateOpaInput() {
-    def segments     = env.JOB_NAME.split('/')
-    def mbSegments   = segments.dropRight(1) as List
-    def pipelineName = mbSegments[-1]
-    def folder       = mbSegments.size() >= 2 ? mbSegments[0] : ''
-    def subfolder    = mbSegments.size() == 3 ? mbSegments[1] : ''
-    // replace the encoded / from the JOB_NAME so that it matches BRANCH_NAME
-    // for cases where the branch contains /
-    def mbNameOnly = env.JOB_NAME.replace('%2F','/').replace("/${env.BRANCH_NAME}", "")
-
-    def job = Jenkins.get().getItemByFullName(mbNameOnly)
-    def configXml = job.getConfigFile().asString()
-
-    def repoUrl     = extractTag(configXml, 'repositoryUrl')
-    def scriptPath  = extractTag(configXml, 'scriptPath')
-    def configPath  = extractTag(configXml, 'configurationPath')
-
-    def opaInput = [
-        pipeline: [
-            folder         : folder,
-            subfolder      : subfolder,
-            name           : pipelineName,
-            repo           : repoUrl,
-            jenkinsfile    : scriptPath,
-            pipeline_config: configPath,
-        ]
-    ]
-    def opaInputJson = groovy.json.JsonOutput.prettyPrint(
-                        groovy.json.JsonOutput.toJson(opaInput))
-    return opaInputJson
-}
-
-@AfterStep({ hookContext.step.equals("git_checkout") })
-void call() {
-    String detectTechStackScript        = resource("detect_pipeline_tech_stack.sh")
-    String detectPipelineStepsScript    = resource("detect_pipeline_steps.sh")
-    String detectDeprecatedStepsScript  = resource("detect_deprecated_steps.sh")
-    String detectRestrictedStepsScript  = resource("detect_restricted_steps.sh")
-    String detectSastDastScript         = resource("detect_sast_dast.sh")
-    String fetchPoliciesScript          = resource("fetch_policies.sh")
-    String fetchGithubSettingsScript    = resource("fetch_github_settings.sh")
-    String pipelinePolicyCheckScript    = resource("pipeline_policy_check.sh")
-
-    node(jte.keywords.project) {
-        ws("workspace/${env.JOB_NAME.replace('%2F','/')}/$BUILD_NUMBER") {
-            stage("Governance: Pipeline Policy Check") {
-                println "[GOVERNANCE] Running pipeline OPA policy checks..."
-                println ""
-
-                // Single toggle for verbose governance output. When "true", the
-                // detection scripts and pipeline_policy_check.sh echo full input
-                // JSON payloads; when unset/false they stay quiet and only print
-                // human-readable summary + PASS/FAIL lines. Set via job/env as
-                // needed for troubleshooting.
-                def governanceDebug = (env.GOVERNANCE_DEBUG ?: "false")
-
-                withEnv([
-                    "NEEDED_PATHS=policies/cdo/pipelines",
-                    "PROJECT=$jte.keywords.project",
-                    "GOVERNANCE_DEBUG=${governanceDebug}",
-                ]) {
-                    sh fetchPoliciesScript
-                }
-
-                // ---------------------------------------------------------------
-                // SEED VALIDATION CHECK
-                // ---------------------------------------------------------------
-                println "[GOVERNANCE] Seed validation check: generate pre-requisites..."
-                def opaInputJson = generateOpaInput()
-
-                def seedInputPath = "governance/seed_input.json"
-                writeFile file: seedInputPath, text: opaInputJson, encoding: 'UTF-8'
-                println "[GOVERNANCE] OPA input written to: ${env.WORKSPACE}/${seedInputPath}"
-
-                println "[GOVERNANCE] Seed validation check: Running OPA policy..."
-                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                    withEnv([
-                        "OPA_DECISION=cdo/pipelines/seed_validation/violations",
-                        "OPA_INPUT_JSON=${seedInputPath}"
-                    ]) {
-                        sh pipelinePolicyCheckScript
-                    }
-                }
-                println "[GOVERNANCE] Seed validation check complete."
-
-                // Parse once; reused by GitHub + SAST/DAST checks.
-                def parsedInput = readJSON text: opaInputJson
-                String repoUrl = parsedInput.pipeline.repo ?: ""
-
-                // ---------------------------------------------------------------
-                // GITHUB REPOSITORY SETTINGS CHECK
-                // ---------------------------------------------------------------
-                println "[GOVERNANCE] GitHub repository settings check: generate pre-requisites..."
-
-                if (repoUrl) {
-                    def githubInputPath = "governance/github_settings_input.json"
-
-                    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                        withCredentials([usernamePassword(credentialsId: 'github_svc_account', usernameVariable: 'GH_USER', passwordVariable: 'GH_TOKEN')]) {
-                            withEnv([
-                                "REPO_URL=${repoUrl}",
-                                "OPA_DECISION=cdo/pipelines/github_settings/deny",
-                                "OPA_INPUT_JSON=${githubInputPath}"
-                            ]) {
-                                sh fetchGithubSettingsScript
-
-                                println "[GOVERNANCE] GitHub settings check: Running OPA policy..."
-                                sh pipelinePolicyCheckScript
-                            }
-                        }
-                    }
-                } else {
-                    println "[GOVERNANCE] WARNING: No repository URL discovered in configuration XML. Skipping GitHub checks."
-                }
-                println "[GOVERNANCE] GitHub repository settings check complete."
-
-                // ---------------------------------------------------------------
-                // REQUIRED STEPS / DEPRECATED / RESTRICTED / SECURITY CHECKS
-                // ---------------------------------------------------------------
-                // Jenkinsfile path: prefer the value already parsed from the job's
-                // config XML into the seed input (parsedInput.pipeline.jenkinsfile).
-                // This is the same value restricted_steps consumes, and it has
-                // proven reliable. resolveJenkinsfilePath() does a second, LIVE
-                // lookup against Jenkins.get().getItemByFullName(...) — this has
-                // been observed to intermittently disagree with the seed-derived
-                // value on the same execution (returning the default 'Jenkinsfile'
-                // when the real file was e.g. 'Jenkinsfile.main'), so it is now
-                // only a fallback, not the primary source.
-                String seedJenkinsfilePath = parsedInput.pipeline.jenkinsfile
-                String liveJenkinsfilePath = resolveJenkinsfilePath(env.JOB_NAME as String)
-
-                if (seedJenkinsfilePath && seedJenkinsfilePath != liveJenkinsfilePath) {
-                    println "[GOVERNANCE] NOTICE: Jenkinsfile path mismatch between seed data " +
-                            "('${seedJenkinsfilePath}') and live lookup ('${liveJenkinsfilePath}'). " +
-                            "Using seed-derived value. If this appears frequently, investigate " +
-                            "resolveJenkinsfilePath() / job model staleness."
-                }
-
-                String jenkinsfilePath = seedJenkinsfilePath ?: liveJenkinsfilePath
-                println "[GOVERNANCE] Current Jenkinsfile path: ${jenkinsfilePath}"
-
-                withEnv(["JENKINSFILE_PATH=${jenkinsfilePath}"]) {
-                    // ---------------------------------------------------------------
-                    // REQUIRED STEPS CHECK
-                    // ---------------------------------------------------------------
-                    println "[GOVERNANCE] Required steps check: generate pre-requisites..."
-                    sh detectTechStackScript
-                    sh detectPipelineStepsScript
-
-                    println "[GOVERNANCE] Required steps check: Running OPA policy..."
-                    catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                        withEnv([
-                            "OPA_DECISION=cdo/pipelines/required_steps/deny",
-                            "OPA_INPUT_JSON=policy_input.json",
-                        ]) {
-                            sh pipelinePolicyCheckScript
-                        }
-                    }
-                    println "[GOVERNANCE] Required steps check complete."
-
-                    // ---------------------------------------------------------------
-                    // DEPRECATED STEPS CHECK
-                    // ---------------------------------------------------------------
-                    println "[GOVERNANCE] Deprecated steps check: generate pre-requisites..."
-                    sh detectDeprecatedStepsScript
-
-                    println "[GOVERNANCE] Deprecated steps check: Running OPA policy..."
-                    def enforceDate = '2026-07-01'
-                    def currentDateEpoch = sh(returnStdout: true, script: 'date +%s').trim().toLong()
-                    def enforceDateEpoch = sh(returnStdout: true, script: "date -d '${enforceDate}' +%s").trim().toLong()
-                    def outsideGracePeriod = currentDateEpoch >= enforceDateEpoch
-
-                    def buildResultForDeprecatedSteps = "SUCCESS"
-                    if (outsideGracePeriod) {
-                        buildResultForDeprecatedSteps = "FAILURE"
-                        println "[GOVERNANCE] Enforcement date ${enforceDate} has been reached. Violations will fail the build."
-                    } else {
-                        println "[GOVERNANCE] Grace period active until ${enforceDate}. Violations will be warnings only."
-                    }
-
-                    catchError(buildResult: buildResultForDeprecatedSteps, stageResult: 'FAILURE') {
-                        withEnv([
-                            "OPA_DECISION=cdo/pipelines/deprecated_steps/deny",
-                            "OPA_INPUT_JSON=deprecated_input.json",
-                        ]) {
-                            sh pipelinePolicyCheckScript
-                        }
-                    }
-                    println "[GOVERNANCE] Deprecated steps check complete."
-
-                    // ---------------------------------------------------------------
-                    // RESTRICTED STEPS CHECK
-                    // ---------------------------------------------------------------
-                    println "[GOVERNANCE] Restricted steps check: generate pre-requisites..."
-                    sh detectRestrictedStepsScript
-
-                    println "[GOVERNANCE] Restricted steps check: Running OPA policy..."
-                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                        withEnv([
-                            "OPA_PIPELINE_INPUT_JSON=${seedInputPath}",
-                            "OPA_DECISION=cdo/pipelines/restricted_steps/deny",
-                            "OPA_INPUT_JSON=restricted_input.json",
-                        ]) {
-                            sh pipelinePolicyCheckScript
-                        }
-                    }
-                    println "[GOVERNANCE] Restricted steps check complete."
-
-                    // ---------------------------------------------------------------
-                    // REQUIRED SECURITY STEPS CHECK (SAST / DAST)
-                    // ---------------------------------------------------------------
-                    println "[GOVERNANCE] Security steps check (SAST/DAST): generate pre-requisites..."
-
-                    // pipeline_config path comes from the seed input (job XML
-                    // configurationPath) so the detector can read loaded libraries.
-                    def pipelineConfigPath = parsedInput.pipeline.pipeline_config ?: "pipeline_config.groovy"
-
-                    // Detector sh wrapped in catchError: the script has an ERR trap
-                    // that emits a fail-safe input and exits 0, but if it ever
-                    // hard-fails anyway, this keeps a prereq failure from ABORTING
-                    // the whole stage the way the exit-2 jq incident did.
-                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                        withEnv([
-                            "PIPELINE_CONFIG_PATH=${pipelineConfigPath}",
-                            "REPO_URL=${repoUrl}",
-                            "GOVERNANCE_DEBUG=${governanceDebug}",
-                        ]) {
-                            sh detectSastDastScript
-                        }
-                    }
-
-                    // Guard: if the detector died before writing dast_input.json,
-                    // synthesize the same fail-safe document its ERR trap would
-                    // have emitted, so the OPA evals and readJSON below can run.
-                    if (!fileExists("dast_input.json")) {
-                        println "[GOVERNANCE] WARNING: dast_input.json missing after detector run; " +
-                                "writing fail-safe input (invocation_check_failed=true)."
-                        writeJSON file: "dast_input.json", json: [
-                            repo                   : repoUrl,
-                            jenkinsfile            : jenkinsfilePath,
-                            pipeline_steps         : [],
-                            loaded_libraries       : [],
-                            dast_target_url        : null,
-                            dast_blocking          : true,
-                            invocation_check_failed: true,
-                            signals                : [:]
-                        ]
-                    }
-
-                    // CHANGED: SAST/DAST grace period — same framework as the
-                    // deprecated_steps check above (enforcement date + epoch
-                    // comparison + buildResult flip). Until the enforcement date,
-                    // violations are surfaced (stage marked FAILURE, messages in
-                    // the log) but do NOT fail the overall build, giving teams
-                    // time to add the steps or file security_overrides entries.
-                    // On/after the date, prior behavior resumes: SAST always
-                    // blocks; DAST blocks unless dast(url, false).
-                    def securityEnforceDate = '2026-11-01'
-                    def secCurrentEpoch = sh(returnStdout: true, script: 'date +%s').trim().toLong()
-                    def secEnforceEpoch = sh(returnStdout: true, script: "date -d '${securityEnforceDate}' +%s").trim().toLong()
-                    def securityEnforced = secCurrentEpoch >= secEnforceEpoch
-
-                    if (securityEnforced) {
-                        println "[GOVERNANCE] Security steps enforcement date ${securityEnforceDate} has been reached. SAST/DAST violations will fail the build."
-                    } else {
-                        println "[GOVERNANCE] Security steps grace period active until ${securityEnforceDate}. SAST/DAST violations are warnings only (stage marked, build not failed)."
-                    }
-
-                    println "[GOVERNANCE] Security steps check (SAST/DAST): Running OPA policies..."
-
-                    // Invocation-verification warning — never blocks. Suspends
-                    // sast_deny/dast_deny's invocation checks when the Jenkinsfile
-                    // couldn't be read, instead of falsely denying a compliant repo.
-                    // OPA_NEVER_FAIL=true: warn returning non-empty is expected and
-                    // must not fail the build.
-                    catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS') {
-                        withEnv([
-                            "OPA_DECISION=cdo/pipelines/required_security_steps/warn",
-                            "OPA_INPUT_JSON=dast_input.json",
-                            "OPA_NEVER_FAIL=true",
-                            "GOVERNANCE_DEBUG=${governanceDebug}",
-
-                        ]) {
-                            sh pipelinePolicyCheckScript
-                        }
-                    }
-
-                    // ---- SAST ---------------------------------------------------
-                    // CHANGED: blocking only after the enforcement date.
-                    def buildResultForSast = securityEnforced ? "FAILURE" : "SUCCESS"
-                    catchError(buildResult: buildResultForSast, stageResult: 'FAILURE') {
-                        withEnv([
-                            "OPA_DECISION=cdo/pipelines/required_security_steps/sast_deny",
-                            "OPA_INPUT_JSON=dast_input.json",
-                            "GOVERNANCE_DEBUG=${governanceDebug}",
-                        ]) {
-                            sh pipelinePolicyCheckScript
-                        }
-                    }
-
-                    // ---- DAST ---------------------------------------------------
-                    // dast.groovy is call(String targetUrl, Boolean blocking=true).
-                    // The detector reads that second argument into dast_blocking;
-                    // false means the author opted into non-blocking (warn only).
-                    // CHANGED: the author's blocking choice only takes effect after
-                    // the enforcement date; during grace, never fail the build.
-                    def sastDastInput = readJSON file: "dast_input.json"
-                    def dastBlocking  = sastDastInput.dast_blocking != false  // default true
-
-                    def buildResultForDast = (securityEnforced && dastBlocking) ? "FAILURE" : "SUCCESS"
-                    if (!securityEnforced) {
-                        println "[GOVERNANCE] DAST in grace period. Violations are warnings only."
-                    } else if (dastBlocking) {
-                        println "[GOVERNANCE] DAST is blocking. Violations will FAIL the build."
-                    } else {
-                        println "[GOVERNANCE] DAST set to non-blocking via dast(url, false). Violations are warnings only."
-                    }
-
-                    catchError(buildResult: buildResultForDast, stageResult: 'FAILURE') {
-                        withEnv([
-                            "OPA_DECISION=cdo/pipelines/required_security_steps/dast_deny",
-                            "OPA_INPUT_JSON=dast_input.json",
-                            "GOVERNANCE_DEBUG=${governanceDebug}",
-                        ]) {
-                            sh pipelinePolicyCheckScript
-                        }
-                    }
-                    println "[GOVERNANCE] Security steps check (SAST/DAST) complete."
-                }
-            }
-        }
-    }
-}
+    resp = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+    if resp.status_code >= 300:
+        raise RuntimeError(f"Template generation failed ({resp.status_code}): {resp.text}")
+    return resp.json()
 
 
-##############
-detect_sast_dast.sh
-########################
-#!/usr/bin/env bash
-set -Eeuo pipefail
+def main():
+    parser = argparse.ArgumentParser(
+        description="Create (or reconfigure) a public GitHub repo from the 'cdo-template-repo' template."
+    )
+    parser.add_argument("-n", "--repo-name", required=True, help="Name of the new repository to create.")
+    parser.add_argument("-o", "--owner", required=True, help="Login of user or organization to own the new repo.")
+    parser.add_argument("-t", "--token", required=True, help="GitHub Personal Access Token with required scopes.")
+    parser.add_argument(
+        "--template-owner",
+        default="CDO",
+        help="Owner (user/org) of the template repo. Defaults to --owner if not provided.",
+    )
+    parser.add_argument(
+        "--template-repo",
+        default="cdo-template-repo",
+        help="Template repository name (default: cdo-template-repo).",
+    )
+    parser.add_argument(
+        "--include-all-branches",
+        action="store_true",
+        help="Include all branches from the template (default: only default branch).",
+    )
+    args = parser.parse_args()
+
+    repo_name = args.repo_name.strip()
+    owner_login = args.owner.strip()
+    token = args.token.strip()
+    template_owner = args.template_owner.strip() if args.template_owner else owner_login
+    template_repo = args.template_repo.strip()
+    include_all_branches = bool(args.include_all_branches)
+
+    # Validate repo name format
+    try:
+        verify_repo_name(repo_name)
+    except ValueError as e:
+        print(f"[ERROR] Invalid repository name: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    # Authenticate
+    auth = Auth.Token(token)
+    g = Github(auth=auth, base_url=GITHUB_BASE_URL, verify=False)
+
+    # Verify authentication
+    user = g.get_user()
+    print(f"Authenticated as: {user.login}")
+
+    # Ensure owner exists and token likely has permission
+    try:
+        owner_obj, owner_type = resolve_owner(g, owner_login)
+    except RuntimeError as e:
+        print(f"[ERROR] {e}", file=sys.stderr)
+        sys.exit(2)
+
+    # Check whether the repo already exists
+    try:
+        existing_repo = get_existing_repo(g, owner_login, repo_name)
+    except GithubException as e:
+        print(f"[ERROR] Failed to check existence: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    repo_already_existed = existing_repo is not None
+
+    if repo_already_existed:
+        full_name = existing_repo.full_name
+        html_url = existing_repo.html_url
+        print(
+            f"[INFO] Repository '{full_name}' already exists. "
+            "Skipping template generation; will (re)apply required settings."
+        )
+        repo = existing_repo
+    else:
+        # Create repo from template via REST
+        try:
+            new_repo_json = generate_from_template(
+                token=token,
+                template_owner=template_owner,
+                template_repo=template_repo,
+                target_owner=owner_login,
+                new_repo_name=repo_name,
+                include_all_branches=include_all_branches,
+                private=False,  # public as requested
+            )
+            full_name = new_repo_json.get("full_name", f"{owner_login}/{repo_name}")
+            html_url = new_repo_json.get("html_url", f"https://git.aws.hhsoig.gov/{full_name}")
+            print(f"[INFO] Generated repository: {full_name} -> {html_url}")
+
+        except RuntimeError as e:
+            print(f"[ERROR] {e}", file=sys.stderr)
+            sys.exit(4)
+
+        # Fetch repo via PyGithub
+        try:
+            repo = g.get_repo(full_name)
+        except UnknownObjectException:
+            print("[ERROR] Could not fetch the newly created repo via PyGithub.", file=sys.stderr)
+            sys.exit(5)
+
+        # Wait for branch main to become available (only needed for freshly generated repos)
+        sleep(10)
+
+    # Ensure default branch is 'main' (create if necessary)
+    try:
+        ensure_default_branch_main(repo)
+    except GithubException as e:
+        print(f"[WARN] Could not enforce default branch 'main': {e}", file=sys.stderr)
+
+    # Ensure branch 'main' is protected and has the required rules
+    ensure_main_protected(repo)
+
+    # Configure merge/pull request settings
+    try:
+        configure_merge_settings(repo)
+        print(
+            "[INFO] Repository settings updated: squash-only merges, suggest updating PR branches, auto-delete head branches."
+        )
+    except GithubException as e:
+        print(f"[ERROR] Failed to update repository settings: {e}", file=sys.stderr)
+        sys.exit(6)
+
+    if repo_already_existed:
+        print("[SUCCESS] Existing repository reconfigured with required settings.")
+    else:
+        print("[SUCCESS] Repository created and configured.")
+    print(f"URL: {html_url}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+#########
+python310_audit.py
+###########
+"""
+audit_python310.py
+Scans a GitHub org for repos still using Python 3.10 in:
+  - Dockerfiles  (FROM python:3.10...)
+  - Any .groovy file (JTE pipeline configs, etc.)  (python_version = "3.10...")
+
+Archived / read-only repos are excluded: the org's active repo list is
+fetched once up front, and search results are filtered against it before
+any file content is fetched. The original 5 org-wide search queries are
+unchanged — no extra search API calls are introduced.
+
+Requirements:
+  pip install requests
+
+Usage:
+  export GITHUB_TOKEN=ghp_...
+  python audit_python310.py --org my-org [--output report.csv]
+"""
+
+import argparse
+import base64
+import csv
+import os
+import re
+import sys
+import time
+from dataclasses import dataclass, fields
+from typing import Iterator
+
+import requests
 
 # ---------------------------------------------------------------------------
-# detect_sast_dast: inspect the checked-out repo and emit the applicability +
-# step document for the required_security_steps policy.
-#
-# SAST applies to every project (enforced unconditionally by the policy), so
-# nothing to detect there beyond whether the step actually runs. This script
-# produces:
-#   signals.is_frontend        : package.json declares a web framework
-#   signals.has_api_gateway    : Terraform provisions API Gateway (v1 or v2)
-#   signals.has_http_listener  : Terraform provisions an ALB HTTP/HTTPS listener
-#   signals.target_url_output  : (informational) name of a TF output emitting a
-#                                URL; NOT used for applicability
-#   pipeline_steps             : sast/dast INVOKED in the Jenkinsfile (authoritative)
-#   loaded_libraries           : sast/dast LOADED in pipeline_config.groovy (secondary)
-#   dast_target_url            : URL argument passed to dast(...) — the reliable
-#                                targetUrl source
-#
-# The Rego decides applicability from these; jobs/{project}.json can override.
-#
-# FAILURE PHILOSOPHY: this script must never hard-fail the build. Wiring bugs
-# and unexpected data get reported as invocation_check_failed=true so the
-# policy emits a loud, non-blocking warn instead of a false denial or a crash.
+# Config
 # ---------------------------------------------------------------------------
 
-REPO_ROOT="${WORKSPACE:-.}"
-OUTPUT_FILE="dast_input.json"
+DEPRECATED = re.compile(r"3\.10(\.\d+)?")
 
-# ── Fail-safe emitter ───────────────────────────────────────────────────────
-# On ANY unexpected error, emit a minimal input marked unverified and exit 0.
-# The policy suspends invocation-based denials and fires its warn decision,
-# making the breakage visible in the build log without killing the pipeline.
-# (Incident this guards against: a multi-document JSON value reaching
-# --argjson crashed the script with exit 2; the sh step was outside catchError,
-# so the whole pipeline aborted before the security checks even ran.)
-emit_failsafe() {
-    local line="${1:-?}"
-    {
-        echo "[GOVERNANCE] ERROR: detect_sast_dast.sh hit an unexpected error near line ${line}."
-        echo "[GOVERNANCE]        Emitting fail-safe input (invocation_check_failed=true): the"
-        echo "[GOVERNANCE]        policy will WARN, not deny, and the build will not crash here."
-    } >&2
-    jq -n \
-        --arg repo "${REPO_URL:-}" \
-        --arg jenkinsfile "${JENKINSFILE:-${JENKINSFILE_PATH:-}}" \
-        '{
-            repo: $repo,
-            jenkinsfile: $jenkinsfile,
-            pipeline_steps: [],
-            loaded_libraries: [],
-            dast_target_url: null,
-            dast_blocking: true,
-            invocation_check_failed: true,
-            signals: {}
-        }' > "$OUTPUT_FILE" || true
-    exit 0
-}
-trap 'emit_failsafe $LINENO' ERR
+DOCKERFILE_FROM = re.compile(r"^FROM\s+python:3\.10", re.IGNORECASE | re.MULTILINE)
+DOCKERFILE_ARG = re.compile(r"(?:ENV|ARG)\s+PYTHON_VERSION\s*=?\s*3\.10", re.IGNORECASE | re.MULTILINE)
+DOCKERFILE_ECR = re.compile(r"^FROM\b.*ib-python310", re.IGNORECASE | re.MULTILINE)
+JTE_VERSION = re.compile(r'python_version\s*[=:]\s*["\']?3\.10', re.IGNORECASE)
 
-# ── JSON hygiene helpers ────────────────────────────────────────────────────
-# The old guards used `echo "$val" | jq -e .`, which ACCEPTS a stream of
-# multiple JSON documents — but --argjson requires exactly ONE JSON text, so a
-# multi-document value passed validation and then crashed the final jq -n.
-# These normalizers guarantee exactly one well-typed value or a safe default.
-
-# Exactly one compact JSON array, else [].
-as_json_array() {
-    printf '%s' "${1:-}" \
-        | jq -ces 'if (length == 1) and (.[0] | type == "array") then .[0] else empty end' 2>/dev/null \
-        || printf '[]'
-}
-
-# Exactly the literal true/false, else the supplied default.
-as_json_bool() {
-    case "${1:-}" in
-        true|false) printf '%s' "$1" ;;
-        *)          printf '%s' "$2" ;;
-    esac
-}
-
-# JENKINSFILE_PATH must be passed in explicitly by the hook (same variable
-# detect_restricted_steps.sh relies on). Do NOT default this to a bare
-# "Jenkinsfile" — several repos (e.g. sie-frontend) have no file with that
-# exact name, only variants like Jenkinsfile.main / Jenkinsfile.feature. A
-# silent default here scans the wrong (nonexistent) file, finds no invoked
-# steps, and produces a false "library loaded but never invoked" violation
-# against a fully compliant pipeline. Fail loudly instead.
-if [ -z "${JENKINSFILE_PATH:-}" ]; then
-    echo "[GOVERNANCE] ERROR: JENKINSFILE_PATH is not set. Cannot reliably detect" >&2
-    echo "[GOVERNANCE]        invoked security steps. Refusing to guess a filename." >&2
-    JENKINSFILE=""
-else
-    JENKINSFILE="$JENKINSFILE_PATH"
-fi
-PIPELINE_CONFIG="${PIPELINE_CONFIG_PATH:-pipeline_config.groovy}"
-
-echo "[GOVERNANCE] detect_sast_dast scanning repo at: ${REPO_ROOT}"
-echo "[GOVERNANCE] JENKINSFILE_PATH received: ${JENKINSFILE_PATH:-<unset>} (resolved: ${JENKINSFILE:-<none>})"
-
-# ── Tier 1: front-end web framework in package.json ─────────────────────────
-# Cheapest, strongest signal. Reads top-level deps + devDeps only (not the
-# lockfile), so transitive pulls don't produce false positives.
-WEB_FRAMEWORKS='["next","react","react-dom","vue","@angular/core","svelte","express"]'
-IS_FRONTEND=false
-while IFS= read -r pkg; do
-    [ -z "$pkg" ] && continue
-    match=$(jq --argjson fw "$WEB_FRAMEWORKS" '
-        ((.dependencies // {}) + (.devDependencies // {}))
-        | keys
-        | any(. as $k | $fw | index($k))
-    ' "$pkg" 2>/dev/null || echo false)
-    # A malformed package.json (or a multi-document file) can yield a
-    # multi-line result; keep only the first line before comparing.
-    match="${match%%$'\n'*}"
-    if [ "$match" = "true" ]; then
-        IS_FRONTEND=true
-        break
-    fi
-done < <(find "$REPO_ROOT" -name package.json -not -path '*/node_modules/*' 2>/dev/null)
-
-# ── Tier 2: Terraform HTTP surface ──────────────────────────────────────────
-# Grep resource declarations across all .tf files. Cheap, no HCL parsing.
-TF_FILES=$(find "$REPO_ROOT" -name '*.tf' -not -path '*/.terraform/*' 2>/dev/null || true)
-
-HAS_API_GATEWAY=false
-HAS_HTTP_LISTENER=false
-TARGET_URL_OUTPUT=""
-
-if [ -n "$TF_FILES" ]; then
-    # API Gateway (v1 REST or v2 HTTP/WebSocket)
-    if echo "$TF_FILES" | xargs grep -lE 'resource[[:space:]]+"aws_(api_gateway_rest_api|apigatewayv2_api)"' >/dev/null 2>&1; then
-        HAS_API_GATEWAY=true
-    fi
-
-    # ALB/NLB listener speaking HTTP or HTTPS. Require an HTTP(S) protocol
-    # somewhere in the .tf files, not just the listener resource, to reduce
-    # internal/TCP-only noise.
-    if echo "$TF_FILES" | xargs grep -lE 'resource[[:space:]]+"aws_lb_listener"' >/dev/null 2>&1; then
-        if echo "$TF_FILES" | xargs grep -hE 'protocol[[:space:]]*=[[:space:]]*"HTTPS?"' >/dev/null 2>&1; then
-            HAS_HTTP_LISTENER=true
-        fi
-    fi
-
-    # A Terraform output emitting a reachable URL. INFORMATIONAL ONLY — this is
-    # a best-effort convenience; its absence must never affect applicability.
-    # Custom-domain APIs (aws_apigatewayv2_domain_name) frequently expose a URL
-    # that is never emitted as an output, so a miss here is expected. The
-    # authoritative targetUrl comes from the dast() call argument below.
-    TARGET_URL_OUTPUT=$(echo "$TF_FILES" | xargs grep -hEA3 '^[[:space:]]*output[[:space:]]+"' 2>/dev/null \
-        | awk '
-            /^[[:space:]]*output[[:space:]]+"/ {
-                if (match($0, /output[[:space:]]+"[^"]+"/)) {
-                    s = substr($0, RSTART, RLENGTH)
-                    gsub(/output[[:space:]]+"/, "", s); gsub(/"/, "", s)
-                    name = s
-                }
-                next
-            }
-            /execute-api|dns_name|api_url/ { if (name != "") { print name; name="" } }
-        ' \
-        | head -n1 || true)
-fi
-
-# Sanitize the booleans no matter which code path set them.
-IS_FRONTEND=$(as_json_bool "$IS_FRONTEND" false)
-HAS_API_GATEWAY=$(as_json_bool "$HAS_API_GATEWAY" false)
-HAS_HTTP_LISTENER=$(as_json_bool "$HAS_HTTP_LISTENER" false)
-
-echo "[GOVERNANCE] signals: is_frontend=${IS_FRONTEND} has_api_gateway=${HAS_API_GATEWAY} has_http_listener=${HAS_HTTP_LISTENER} target_url_output=${TARGET_URL_OUTPUT:-<none>}"
-
-# ── Detect which security steps actually run ─────────────────────────────────
-# JTE steps appear two ways, meaning different things:
-#   1. LOADED as a library in pipeline_config.groovy → capability available.
-#   2. INVOKED in the Jenkinsfile, e.g. sast(true) / dast("https://...")
-#      → the step actually runs. Authoritative for a required-steps check.
+# Each tuple: (kind, search term, filename qualifiers)
+# Two separate Dockerfile queries — one per filename — because GitHub code search
+# treats multiple filename: qualifiers as OR within the same query, but results
+# can be inconsistent for exact-name matches vs prefix matches. Explicit is safer.
 #
-# invocation_check_failed is true when we could not read the Jenkinsfile at
-# all (unset path, or path resolved but file missing). In that case
-# CALLED_STEPS is [] but that MUST NOT be read as "steps are absent" — it means
-# "we don't know." The policy should not deny for missing/dormant steps when
-# this flag is set.
-INVOCATION_CHECK_FAILED=true
-CALLED_STEPS='[]'
-DAST_TARGET_URL=""
-DAST_BLOCKING=true
-
-if [ -n "$JENKINSFILE" ] && [ -f "$JENKINSFILE" ]; then
-    INVOCATION_CHECK_FAILED=false
-
-    # (1) Invoked steps: sast(...) / dast(...) at line start (indentation
-    #     allowed) or via jte.libraries.<lib>.<step>(...). Match the step name
-    #     before a paren.
-    #     `|| true`: grep exits 1 on no matches, which under `set -e` + pipefail
-    #     would otherwise kill the script on a Jenkinsfile with no sast/dast calls.
-    CALLED_STEPS_RAW=$(grep -oP '(?:^\s*|\.)\K(sast|dast)(?=\s*\()' "$JENKINSFILE" 2>/dev/null | sort -u || true)
-    if [ -z "$CALLED_STEPS_RAW" ]; then
-        CALLED_STEPS='[]'
-    else
-        CALLED_STEPS=$(printf '%s\n' "$CALLED_STEPS_RAW" | jq -R . | jq -cs . 2>/dev/null || true)
-    fi
-    # Normalize: exactly one compact array, or []. This closes the loophole
-    # where a multi-document stream passed `jq -e` validation but crashed
-    # --argjson (single-JSON-text required).
-    CALLED_STEPS=$(as_json_array "$CALLED_STEPS")
-    echo "[GOVERNANCE] security steps INVOKED in ${JENKINSFILE}: ${CALLED_STEPS}"
-
-    # (3) Target URL: the reliable source is the dast() call argument itself.
-    DAST_TARGET_URL=$(grep -oP 'dast\(\s*"\K[^"]+' "$JENKINSFILE" 2>/dev/null | head -n1 || true)
-    echo "[GOVERNANCE] dast target URL from Jenkinsfile: ${DAST_TARGET_URL:-<none>}"
-
-    # (4) Blocking flag: dast.groovy is call(String targetUrl, Boolean blocking=true).
-    #     A second argument of `false` means the author chose non-blocking.
-    if grep -qP 'dast\(\s*"[^"]*"\s*,\s*false\s*\)' "$JENKINSFILE" 2>/dev/null; then
-        DAST_BLOCKING=false
-    fi
-    DAST_BLOCKING=$(as_json_bool "$DAST_BLOCKING" true)
-    echo "[GOVERNANCE] dast blocking mode: ${DAST_BLOCKING}"
-else
-    echo "[GOVERNANCE] WARNING: Jenkinsfile not readable at '${JENKINSFILE:-<empty>}'." >&2
-    echo "[GOVERNANCE] WARNING: Invocation status is UNKNOWN, not absent. The policy" >&2
-    echo "[GOVERNANCE]          will skip invocation-based denials for this run." >&2
-fi
-
-# (2) Loaded libraries: sast / dast inside the libraries { } block. This reads
-# pipeline_config.groovy, a fixed filename, so it is unaffected by which
-# Jenkinsfile variant this build used.
-LOADED_LIBS_RAW=$(awk '
-    /libraries[[:space:]]*\{/ { inblock=1; depth=0 }
-    inblock {
-        depth += gsub(/\{/, "{")
-        depth -= gsub(/\}/, "}")
-        if ($0 ~ /^[[:space:]]*(sast|dast)([[:space:]]*\{)?[[:space:]]*$/) {
-            gsub(/[^a-z]/, ""); print
-        }
-        if (depth <= 0 && inblock && NR>1) inblock=0
-    }
-' "$PIPELINE_CONFIG" 2>/dev/null | sort -u || true)
-
-if [ -z "$LOADED_LIBS_RAW" ]; then
-    LOADED_LIBS='[]'
-else
-    LOADED_LIBS=$(printf '%s\n' "$LOADED_LIBS_RAW" | jq -R . | jq -cs . 2>/dev/null || true)
-fi
-# Same normalization as CALLED_STEPS: one compact array or [].
-LOADED_LIBS=$(as_json_array "$LOADED_LIBS")
-
-if [ -f "$PIPELINE_CONFIG" ]; then
-    echo "[GOVERNANCE] security libraries LOADED in ${PIPELINE_CONFIG}: ${LOADED_LIBS}"
-else
-    echo "[GOVERNANCE] WARNING: pipeline config not found at ${PIPELINE_CONFIG}."
-fi
-
-INVOCATION_CHECK_FAILED=$(as_json_bool "$INVOCATION_CHECK_FAILED" true)
-
-# Authoritative present-steps = invoked steps. The policy keys on these.
-STEPS="$CALLED_STEPS"
-
-# ── Emit policy input ───────────────────────────────────────────────────────
-# Every --argjson value below has been normalized to exactly one well-typed
-# JSON value; if anything slips through anyway, the ERR trap emits the
-# fail-safe document instead of crashing the build.
-jq -n \
-    --argjson is_frontend "$IS_FRONTEND" \
-    --argjson has_api_gateway "$HAS_API_GATEWAY" \
-    --argjson has_http_listener "$HAS_HTTP_LISTENER" \
-    --arg target_url_output "$TARGET_URL_OUTPUT" \
-    --argjson steps "$STEPS" \
-    --argjson loaded_libs "$LOADED_LIBS" \
-    --arg dast_target_url "$DAST_TARGET_URL" \
-    --argjson dast_blocking "$DAST_BLOCKING" \
-    --argjson invocation_check_failed "$INVOCATION_CHECK_FAILED" \
-    --arg repo "${REPO_URL:-}" \
-    --arg jenkinsfile "${JENKINSFILE:-}" \
-    '{
-        repo: $repo,
-        jenkinsfile: $jenkinsfile,
-        pipeline_steps: $steps,
-        loaded_libraries: $loaded_libs,
-        dast_target_url: (if $dast_target_url == "" then null else $dast_target_url end),
-        dast_blocking: $dast_blocking,
-        invocation_check_failed: $invocation_check_failed,
-        signals: {
-            is_frontend:       $is_frontend,
-            has_api_gateway:   $has_api_gateway,
-            has_http_listener: $has_http_listener,
-            target_url_output: (if $target_url_output == "" then null else $target_url_output end)
-        }
-    }' \
-    > "$OUTPUT_FILE"
-
-echo "[GOVERNANCE] SAST/DAST input written to: ${OUTPUT_FILE}"
-if [ "${GOVERNANCE_DEBUG:-false}" = "true" ]; then
-    cat "$OUTPUT_FILE"
-fi
+# For JTE, we search by extension:groovy rather than a specific filename, since
+# pipeline config files aren't always named pipeline_config.groovy.
+SEARCH_QUERIES = [
+    ("dockerfile", "FROM python:3.10", "filename:Dockerfile"),
+    ("dockerfile", "FROM python:3.10", "filename:DockerfileTemplate"),
+    ("dockerfile", "ib-python310", "filename:Dockerfile"),
+    ("dockerfile", "ib-python310", "filename:DockerfileTemplate"),
+    ("jte", "python_version = 3.10", "extension:groovy"),
+]# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
 
 
-######################
-pipeline_policy_check.sh
-######################
-#!/bin/bash
-set -euo pipefail
+@dataclass
+class Hit:
+    repo: str
+    file: str
+    kind: str  # 'dockerfile' | 'jte'
+    match: str  # the matched line(s)
+    html_url: str
 
-# Use OPA_DECISION and INPUT_JSON env var from Groovy, default to required_scan_steps if not set
-POLICIES_ROOT_DIR="opa_policies"
-DECISION="${OPA_DECISION:-cdo/pipelines/required_steps/deny}"
-INPUT_JSON="${OPA_INPUT_JSON:-policy_input.json}"
-TECH_STACK_FILE="tech_stack.json"
-PIPELINE_STEPS_FILE="pipeline_steps.json"
 
-echo "[GOVERNANCE] Starting OPA pipeline policy evaluation..." >&2
-echo "[GOVERNANCE] Using decision: ${DECISION}" >&2
-echo "[GOVERNANCE] Using input JSON: ${INPUT_JSON}" >&2
+# ---------------------------------------------------------------------------
+# GitHub client
+# ---------------------------------------------------------------------------
 
-# Only build/merge input when using the default required-scan input file.
-if [[ "${INPUT_JSON}" == "policy_input.json" ]]; then
-  echo "[GOVERNANCE] Merging tech stack + Jenkins pipeline steps into ${INPUT_JSON}" >&2
 
-  if [[ -f "${TECH_STACK_FILE}" ]]; then
-    tech_runtimes=$(jq -r '.tech_stack // []' "${TECH_STACK_FILE}")
-  else
-    tech_runtimes="[]"
-  fi
+class GitHub:
+    def __init__(self, token: str, host: str = "https://git.aws.hhsoig.gov/api/v3", cacert: str | None = None):
+        self.BASE = host.rstrip("/")
+        self.s = requests.Session()
+        self.s.headers.update(
+            {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            }
+        )
+        # Use corporate CA bundle if provided, otherwise default verification.
+        # Set cacert to False only as a last resort — disables SSL verification entirely.
+        self.s.verify = cacert if cacert else True
 
-  if [[ -f "${PIPELINE_STEPS_FILE}" ]]; then
-    pipeline_steps=$(jq -r '.gov_steps // []' "${PIPELINE_STEPS_FILE}")
-  else
-    pipeline_steps="[]"
-  fi
+    def _get(self, url: str, **params) -> dict:
+        r = self.s.get(url, params=params)
+        self._handle_rate(r)
+        r.raise_for_status()
+        return r.json()
 
-  jq -n \
-    --argjson runtimes "${tech_runtimes}" \
-    --argjson steps "${pipeline_steps}" \
-    '{ tech: { runtimes: $runtimes }, jenkins: { steps: $steps } }' \
-    > "${INPUT_JSON}"
+    def _handle_rate(self, r: requests.Response):
+        """Back off on secondary rate limits and search throttling."""
+        if r.status_code == 403 and "rate limit" in r.text.lower():
+            reset = int(r.headers.get("X-RateLimit-Reset", time.time() + 60))
+            wait = max(reset - int(time.time()), 10)
+            print(f"  [rate limit] sleeping {wait}s …", flush=True)
+            time.sleep(wait)
+        elif r.status_code == 422:
+            pass  # handled by caller
 
-  if [[ "${GOVERNANCE_DEBUG:-false}" == "true" ]]; then
-    echo "[GOVERNANCE] Generated OPA pipeline input:" >&2
-    cat "${INPUT_JSON}" >&2
-  fi
-else
-  if [[ ! -f "${INPUT_JSON}" ]]; then
-    echo "[GOVERNANCE] ERROR: Input JSON not found: ${INPUT_JSON}" >&2
-    exit 1
-  fi
-  if [[ "${GOVERNANCE_DEBUG:-false}" == "true" ]]; then
-    echo "[GOVERNANCE] Using pre-built input JSON:" >&2
-    cat "${INPUT_JSON}" >&2
-  fi
-fi
+    def search_code(self, q: str) -> Iterator[dict]:
+        """Paginate through all code search results (max 1 000 per query)."""
+        url = f"{self.BASE}/search/code"
+        page = 1
+        while True:
+            data = self._get(url, q=q, per_page=100, page=page)
+            yield from data.get("items", [])
+            if len(data.get("items", [])) < 100:
+                break
+            page += 1
+            time.sleep(1)  # stay inside secondary rate limits
 
-# OPA_NEVER_FAIL=true skips --fail-non-empty for warn-only decisions, where a
-# non-empty result is expected and should not fail the build.
-OPA_ARGS=(--format json --decision "${DECISION}" --bundle "${POLICIES_ROOT_DIR}")
-if [[ "${OPA_NEVER_FAIL:-false}" != "true" ]]; then
-  OPA_ARGS+=(--fail-non-empty)
-fi
+    def file_content(self, repo: str, path: str, ref: str = "HEAD") -> str | None:
+        """Fetch raw file content; returns None on error."""
+        url = f"{self.BASE}/repos/{repo}/contents/{path}"
+        try:
+            data = self._get(url, ref=ref)
+            return base64.b64decode(data["content"]).decode("utf-8", errors="replace")
+        except Exception:
+            return None
 
-echo "[GOVERNANCE] Running OPA exec with decision: ${DECISION}" >&2
-if opa exec "${OPA_ARGS[@]}" "${INPUT_JSON}"; then
-  echo "[GOVERNANCE] OPA pipeline policy check PASSED: ${DECISION}" >&2
-else
-  if [[ "${OPA_NEVER_FAIL:-false}" == "true" ]]; then
-    echo "[GOVERNANCE] OPA pipeline policy check completed with warnings (non-blocking): ${DECISION}" >&2
-  else
-    echo "[GOVERNANCE] OPA pipeline policy check FAILED: ${DECISION}" >&2
-    exit 1
-  fi
-fi
+    def list_active_repos(self, org: str) -> list[str]:
+        """
+        Return full_names of all non-archived (active) repos in an org.
+        Fetched once, up front, so archived repos are never included in
+        any subsequent code search.
+        """
+        active: list[str] = []
+        url = f"{self.BASE}/orgs/{org}/repos"
+        page = 1
+        while True:
+            data = self._get(url, per_page=100, page=page, type="all")
+            if not data:
+                break
+            active.extend(repo["full_name"] for repo in data if not repo.get("archived", False))
+            if len(data) < 100:
+                break
+            page += 1
+            time.sleep(0.5)
+        return active
 
-echo "[GOVERNANCE] OPA pipeline policy evaluation complete." >&2
+
+# ---------------------------------------------------------------------------
+# Audit logic
+# ---------------------------------------------------------------------------
+
+
+def extract_matches(content: str, kind: str) -> list[str]:
+    """Return the matching lines from a file."""
+    lines = []
+    for i, line in enumerate(content.splitlines(), 1):
+        if kind == "dockerfile":
+            # Three independent checks — any one is a violation:
+            #   1. Public image:  FROM python:3.10[.x][-suffix]
+            #   2. ENV/ARG pin:   PYTHON_VERSION=3.10.x
+            #   3. ECR image:     FROM <anything>ib-python310<anything>
+            matched = DOCKERFILE_FROM.search(line) or DOCKERFILE_ARG.search(line) or DOCKERFILE_ECR.search(line)
+            if matched:
+                lines.append(f"L{i}: {line.strip()}")
+        elif kind == "jte":
+            if JTE_VERSION.search(line):
+                lines.append(f"L{i}: {line.strip()}")
+    return lines
+
+
+def audit_org(gh: GitHub, org: str) -> list[Hit]:
+    hits: list[Hit] = []
+    seen: set[str] = set()
+
+    active_repos = set(gh.list_active_repos(org))
+
+    for kind, term, qualifier in SEARCH_QUERIES:
+        q = f"{term} org:{org} {qualifier}"
+        print(f"\n[search] {q}")
+
+        for item in gh.search_code(q):
+            repo = item["repository"]["full_name"]
+            path = item["path"]
+            html_url = item["html_url"]
+            key = f"{repo}/{path}"
+
+            if key in seen:
+                continue
+            seen.add(key)
+
+            if repo not in active_repos:
+                continue
+
+            print(f"  checking {key} …", end=" ", flush=True)
+            content = gh.file_content(repo, path)
+            if content is None:
+                print("⚠ could not fetch")
+                continue
+
+            matches = extract_matches(content, kind)
+            if matches:
+                hits.append(
+                    Hit(
+                        repo=repo,
+                        file=path,
+                        kind=kind,
+                        match=" | ".join(matches),
+                        html_url=html_url,
+                    )
+                )
+                print(f"✗ {len(matches)} match(es)")
+            else:
+                print("✓ false-positive, skipped")
+
+        time.sleep(2)  # between query types
+
+    return hits
+
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+
+
+def print_summary(hits: list[Hit]):
+    if not hits:
+        print("\n✅  No Python 3.10 usage found.")
+        return
+
+    repos = sorted({h.repo for h in hits})
+    print(f"\n{'='*60}")
+    print(f"  Found {len(hits)} file(s) across {len(repos)} repo(s)")
+    print(f"{'='*60}")
+
+    for repo in repos:
+        repo_hits = [h for h in hits if h.repo == repo]
+        print(f"\n  {repo}")
+        for h in repo_hits:
+            label = " Dockerfile" if h.kind == "dockerfile" else " .groovy file"
+            print(f"    {label}  →  {h.file}")
+            for line in h.match.split(" | "):
+                print(f"       {line}")
+            print(f"       {h.html_url}")
+
+
+def write_csv(hits: list[Hit], path: str):
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=[field.name for field in fields(Hit)])
+        w.writeheader()
+        for h in hits:
+            w.writerow({field.name: getattr(h, field.name) for field in fields(Hit)})
+    print(f"\n📄  Report written to {path}")
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Audit GitHub org for Python 3.10 usage")
+    parser.add_argument("--org", required=True, help="GitHub org name")
+    parser.add_argument("--host", default="https://git.aws.hhsoig.gov/api/v3", help="GitHub API base URL")
+    parser.add_argument("--output", default=None, help="CSV output file (optional)")
+    parser.add_argument("--cacert", default=None, help="Path to CA bundle (.pem) for corporate proxy")
+    args = parser.parse_args()
+
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        sys.exit("Error: GITHUB_TOKEN env var not set.")
+
+    gh = GitHub(token, host=args.host, cacert=args.cacert)
+    hits = audit_org(gh, args.org)
+
+    print_summary(hits)
+
+    if args.output:
+        write_csv(hits, args.output)
+
+
+if __name__ == "__main__":
+    main()
