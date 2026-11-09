@@ -1,3 +1,192 @@
-boto3
-PyGithub
-requests
+#opengrep-core scan -f --exclude-rule --exclude --experimental --taint-intrafile --inline-metavariables --output-enclosing-context --allow-rule-timeout-control --timeout 300 --no-git-ignore --json --output opengrep-out.json # TODO: Duplicate rules are currently being skipped due to duplicate IDs across rule files. # Rules need to have unique IDs for each type. opengrep-core scan \ --allow-rule-timeout-control \ --error -f ~/.opengrep/opengrep-rules \ --exclude-rule detected-aws-account-id \ --experimental \ --inline-metavariables \ --no-git-ignore \ --severity ERROR \ --taint-intrafile \ --timeout 300 \ .
+5s
+09:01:47  + opengrep-core scan --allow-rule-timeout-control --error -f /home/jenkins/.opengrep/opengrep-rules --exclude-rule detected-aws-account-id --experimental --inline-metavariables --no-git-ignore --severity ERROR --taint-intrafile --timeout 300 .
+09:01:48  
+09:01:48  ┌──────────────┐
+09:01:48  │ Opengrep CLI │
+09:01:48  └──────────────┘
+09:01:48  
+09:01:48  ✔ Opengrep OSS
+09:01:48    ✔ Basic security coverage for first-party code vulnerabilities.
+09:01:48  
+09:01:48    Loading rules from local config...
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/go/detect-gemini.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-openai' (/home/jenkins/.opengrep/opengrep-rules/ai/go/detect-openai.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/kotlin/detect-gemini.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/python/detect-gemini.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-openai' (/home/jenkins/.opengrep/opengrep-rules/ai/python/detect-openai.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/swift/detect-gemini.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-anthropic' (/home/jenkins/.opengrep/opengrep-rules/ai/typescript/detect-anthropic.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-gemini' (/home/jenkins/.opengrep/opengrep-rules/ai/typescript/detect-gemini.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-mistral' (/home/jenkins/.opengrep/opengrep-rules/ai/typescript/detect-mistral.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'detect-openai' (/home/jenkins/.opengrep/opengrep-rules/ai/typescript/detect-openai.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'ssrf' (/home/jenkins/.opengrep/opengrep-rules/csharp/lang/security/ssrf/rest-client.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'ssrf' (/home/jenkins/.opengrep/opengrep-rules/csharp/lang/security/ssrf/web-client.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'ssrf' (/home/jenkins/.opengrep/opengrep-rules/csharp/lang/security/ssrf/web-request.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-md5' (/home/jenkins/.opengrep/opengrep-rules/go/lang/security/audit/crypto/use_of_weak_crypto.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-sha1' (/home/jenkins/.opengrep/opengrep-rules/go/lang/security/audit/crypto/use_of_weak_crypto.yaml:35:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'open-redirect' (/home/jenkins/.opengrep/opengrep-rules/go/lang/security/injection/open-redirect.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/go/lang/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/java/aws-lambda/security/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'cookie-missing-httponly' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/cookie-missing-httponly.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-md5' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/crypto/use-of-md5.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-rc4' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/crypto/use-of-rc4.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-sha1' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/crypto/use-of-sha1.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'use-of-weak-rsa-key' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/crypto/weak-rsa.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'ldap-injection' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/ldap-injection.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/java/lang/security/audit/md5-used-as-password.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/java/spring/security/injection/tainted-sql-string.yaml:2:8) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/java/spring/security/injection/tainted-url-host.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'pg-sqli' (/home/jenkins/.opengrep/opengrep-rules/javascript/aws-lambda/security/pg-sqli.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-html-string' (/home/jenkins/.opengrep/opengrep-rules/javascript/aws-lambda/security/tainted-html-string.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/javascript/aws-lambda/security/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'eval-detected' (/home/jenkins/.opengrep/opengrep-rules/javascript/browser/security/eval-detected.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'insecure-document-method' (/home/jenkins/.opengrep/opengrep-rules/javascript/browser/security/insecure-document-method.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-href' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/ejs/var-in-href.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-script-src' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/ejs/var-in-script-src.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-script-tag' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/ejs/var-in-script-tag.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'template-explicit-unescape' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/mustache/explicit-unescape.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-script-tag' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/mustache/var-in-script-tag.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'template-explicit-unescape' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/pug/explicit-unescape.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-href' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/pug/var-in-href.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'var-in-script-tag' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/audit/xss/pug/var-in-script-tag.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'raw-html-format' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/injection/raw-html-format.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/javascript/express/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'hardcoded-jwt-secret' (/home/jenkins/.opengrep/opengrep-rules/javascript/jsonwebtoken/security/jwt-hardcode.yaml:2:6) will be ignored.
+09:01:50  [02.59][WARNING]: Duplicated rule id. Rule 'jwt-none-alg' (/home/jenkins/.opengrep/opengrep-rules/javascript/jsonwebtoken/security/jwt-none-alg.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'eqeq-is-bad' (/home/jenkins/.opengrep/opengrep-rules/javascript/lang/correctness/useless-eqeq.yaml:2:8) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/javascript/lang/security/audit/md5-used-as-password.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'detect-child-process' (/home/jenkins/.opengrep/opengrep-rules/javascript/lang/security/detect-child-process.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'build-gradle-password-hardcoded' (/home/jenkins/.opengrep/opengrep-rules/kotlin/gradle/security/build-gradle-password-hardcoded.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'anonymous-ldap-bind' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/anonymous-ldap-bind.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'bad-hexa-conversion' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/bad-hexa-conversion.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'command-injection-formatted-runtime-call' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/command-injection-formatted-runtime-call.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'cookie-missing-httponly' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/cookie-missing-httponly.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'cookie-missing-secure-flag' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/cookie-missing-secure-flag.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'defaulthttpclient-is-deprecated' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/defaulthttpclient-is-deprecated.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'ecb-cipher' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/ecb-cipher.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'gcm-detection' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/gcm-detection.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'no-null-cipher' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/no-null-cipher.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'unencrypted-socket' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/unencrypted-socket.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'use-of-md5' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/use-of-md5.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'use-of-sha1' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/use-of-sha1.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'use-of-weak-rsa-key' (/home/jenkins/.opengrep/opengrep-rules/kotlin/lang/security/weak-rsa.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/php/lang/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/php/lang/security/injection/tainted-url-host.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/php/lang/security/md5-used-as-password.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-exec' (/home/jenkins/.opengrep/opengrep-rules/php/lang/security/tainted-exec.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'bypass-tls-verification' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/java-spring/bypass-tls-verification.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'bypass-tls-verification' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/java-stdlib/bypass-tls-verification.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'ftp-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/java-stdlib/ftp-request.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'telnet-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/java-stdlib/telnet-request.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'bypass-tls-verification' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/bypass-tls-verification.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'disallow-old-tls-versions1' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/disallow-old-tls-versions1.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'disallow-old-tls-versions2' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/disallow-old-tls-versions2.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'ftp-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/ftp-request.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'http-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/http-request.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'telnet-request' (/home/jenkins/.opengrep/opengrep-rules/problem-based-packs/insecure-transport/js-node/telnet-request.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'mysql-sqli' (/home/jenkins/.opengrep/opengrep-rules/python/aws-lambda/security/mysql-sqli.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-html-response' (/home/jenkins/.opengrep/opengrep-rules/python/aws-lambda/security/tainted-html-response.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-html-string' (/home/jenkins/.opengrep/opengrep-rules/python/aws-lambda/security/tainted-html-string.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/python/aws-lambda/security/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'mass-assignment' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/mass-assignment.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'open-redirect' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/open-redirect.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'raw-html-format' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/raw-html-format.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/python/django/security/injection/tainted-url-host.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'csv-writer-injection' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/csv-writer-injection.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'nan-injection' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/nan-injection.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'path-traversal-open' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/path-traversal-open.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'raw-html-format' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/raw-html-concat.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'subprocess-injection' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/subprocess-injection.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/injection/tainted-url-host.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'open-redirect' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/open-redirect.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'template-autoescape-off' (/home/jenkins/.opengrep/opengrep-rules/python/flask/security/xss/audit/template-autoescape-off.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'useless-if-conditional' (/home/jenkins/.opengrep/opengrep-rules/python/lang/maintainability/useless-ifelse.yaml:2:8) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'useless-if-body' (/home/jenkins/.opengrep/opengrep-rules/python/lang/maintainability/useless-ifelse.yaml:17:8) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'eval-detected' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/audit/eval-detected.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/audit/md5-used-as-password.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'avoid-bind-to-all-interfaces' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/audit/network/bind.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'psycopg-sqli' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/audit/sqli/psycopg-sqli.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'dangerous-spawn-process' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/dangerous-spawn-process.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'dangerous-subprocess-use' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/dangerous-subprocess-use.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'dangerous-system-call' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/dangerous-system-call.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-hash-algorithm-md5' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/insecure-hash-algorithms-md5.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-hash-algorithm-sha1' (/home/jenkins/.opengrep/opengrep-rules/python/lang/security/insecure-hash-algorithms.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-cipher-algorithm-blowfish' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insecure-cipher-algorithm-blowfish.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-hash-algorithm-md5' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insecure-hash-algorithm-md5.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-hash-algorithm-sha1' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insecure-hash-algorithm.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insufficient-dsa-key-size' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insufficient-dsa-key-size.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insufficient-rsa-key-size' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/insufficient-rsa-key-size.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'crypto-mode-without-authentication' (/home/jenkins/.opengrep/opengrep-rules/python/pycryptodome/security/mode-without-authentication.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'disabled-cert-validation' (/home/jenkins/.opengrep/opengrep-rules/python/requests/security/disabled-cert-validation.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'pg-sqli' (/home/jenkins/.opengrep/opengrep-rules/ruby/aws-lambda/security/pg-sqli.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/ruby/aws-lambda/security/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insufficient-rsa-key-size' (/home/jenkins/.opengrep/opengrep-rules/ruby/lang/security/insufficient-rsa-key-size.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'md5-used-as-password' (/home/jenkins/.opengrep/opengrep-rules/ruby/lang/security/md5-used-as-password.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'avoid-content-tag' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/avoid-content-tag.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'avoid-html-safe' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/avoid-html-safe.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'avoid-raw' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/avoid-raw.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'var-in-href' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/var-in-href.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'var-in-script-tag' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/audit/xss/templates/var-in-script-tag.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'raw-html-format' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/injection/raw-html-format.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/injection/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-url-host' (/home/jenkins/.opengrep/opengrep-rules/ruby/rails/security/injection/tainted-url-host.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-string' (/home/jenkins/.opengrep/opengrep-rules/scala/lang/security/audit/tainted-sql-string.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-html-response' (/home/jenkins/.opengrep/opengrep-rules/scala/play/security/tainted-html-response.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'tainted-sql-from-http-request' (/home/jenkins/.opengrep/opengrep-rules/scala/play/security/tainted-sql-from-http-request.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'insecure-random' (/home/jenkins/.opengrep/opengrep-rules/swift/lang/crypto/insecure-random.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'eqeq-is-bad' (/home/jenkins/.opengrep/opengrep-rules/template.yaml:2:8) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'aws-fsx-lustre-filesystem-encrypted-with-cmk' (/home/jenkins/.opengrep/opengrep-rules/terraform/aws/security/aws-fsx-lustre-filesystem-encrypted-with-cmk.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'wildcard-assume-role' (/home/jenkins/.opengrep/opengrep-rules/terraform/aws/security/wildcard-assume-role.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'azure-monitor-log-profile-retention-days' (/home/jenkins/.opengrep/opengrep-rules/terraform/azure/security/azure-monitor-log-profile-retention-days.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'curl-eval' (/home/jenkins/.opengrep/opengrep-rules/yaml/github-actions/security/curl-eval.yaml:2:6) will be ignored.
+09:01:50  [02.60][WARNING]: Duplicated rule id. Rule 'seccomp-confinement-disabled' (/home/jenkins/.opengrep/opengrep-rules/yaml/kubernetes/security/seccomp-confinement-disabled.yaml:2:6) will be ignored.
+09:01:50  
+09:01:50  
+09:01:50  ┌─────────────┐
+09:01:50  │ Scan Status │
+09:01:50  └─────────────┘
+09:01:50    Scanning 61 files with 393 Code rules:
+09:01:50  
+09:01:50    Language      Rules   Files          Origin   Rules
+09:01:50   ─────────────────────────────        ────────────────
+09:01:50    <multilang>      61      61          Custom     188
+09:01:50    json              3       9
+09:01:50    python          114       7
+09:01:50    yaml             10       1
+09:01:50  
+09:01:52  
+09:01:52  
+09:01:52  ┌─────────────────┐
+09:01:52  │ 4 Code Findings │
+09:01:52  └─────────────────┘
+09:01:52  
+09:01:52      admin/scripts/create_git_repo.py
+09:01:52     ❯❯❱ arbitrary-sleep
+09:01:52            time.sleep() call; did you mean to leave this in?
+09:01:52  
+09:01:52            337┆ sleep(10)
+09:01:52  
+09:01:52      audits/scripts/python310_audit.py
+09:01:52     ❯❯❱ arbitrary-sleep
+09:01:52            time.sleep() call; did you mean to leave this in?
+09:01:52  
+09:01:52            116┆ time.sleep(1)  # stay inside secondary rate limits
+09:01:52              ⋮┆----------------------------------------
+09:01:52            144┆ time.sleep(0.5)
+09:01:52              ⋮┆----------------------------------------
+09:01:52            215┆ time.sleep(2)  # between query types
+09:01:52  
+09:01:52  
+09:01:52  
+09:01:52  ┌──────────────┐
+09:01:52  │ Scan Summary │
+09:01:52  └──────────────┘
+09:01:52  Some files were skipped or only partially analyzed.
+09:01:52    Scan skipped: 1 files matching .semgrepignore patterns.
+09:01:52    For a full list of skipped files, run opengrep with the --verbose flag.
+09:01:52  
+09:01:52  Ran 393 rules on 61 files: 4 findings.
+script returned exit code 1
