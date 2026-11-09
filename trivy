@@ -1,13 +1,4 @@
-Noticed that the pipeline does not stop after the failed check for sast|dast - it continues executing until the end when it fails and u cannot tell why it fails.
 
-Fix the governance JTE step to fully stop and fail the pipeline at the failed opa check.
-
-Acceptance:
-
-sast/dast checks are enforced so they should fully stop and fail the pipeline at the check time
-
-
-#####################################
 import jenkins.model.Jenkins
 import org.jenkinsci.plugins.workflow.job.WorkflowJob
 import org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition
@@ -279,14 +270,11 @@ void call() {
                         ]
                     }
 
-                    // CHANGED: SAST/DAST grace period — same framework as the
-                    // deprecated_steps check above (enforcement date + epoch
-                    // comparison + buildResult flip). Until the enforcement date,
-                    // violations are surfaced (stage marked FAILURE, messages in
-                    // the log) but do NOT fail the overall build, giving teams
-                    // time to add the steps or file security_overrides entries.
-                    // On/after the date, prior behavior resumes: SAST always
-                    // blocks; DAST blocks unless dast(url, false).
+                    // SAST/DAST enforcement begins on November 1, 2026.
+                    // Before enforcement, violations are reported as warnings.
+                    // After enforcement, SAST violations immediately stop the
+                    // pipeline. DAST violations immediately stop the pipeline
+                    // when blocking is enabled.
                     def securityEnforceDate = '2026-11-01'
                     def secCurrentEpoch = sh(returnStdout: true, script: 'date +%s').trim().toLong()
                     def secEnforceEpoch = sh(returnStdout: true, script: "date -d '${securityEnforceDate}' +%s").trim().toLong()
@@ -311,16 +299,17 @@ void call() {
                             "OPA_INPUT_JSON=dast_input.json",
                             "OPA_NEVER_FAIL=true",
                             "GOVERNANCE_DEBUG=${governanceDebug}",
-
                         ]) {
                             sh pipelinePolicyCheckScript
                         }
                     }
 
                     // ---- SAST ---------------------------------------------------
-                    // CHANGED: blocking only after the enforcement date.
-                    def buildResultForSast = securityEnforced ? "FAILURE" : "SUCCESS"
-                    catchError(buildResult: buildResultForSast, stageResult: 'FAILURE') {
+                    // Enforced SAST failures must immediately stop the pipeline.
+                    // During the grace period, violations remain non-blocking.
+                    if (securityEnforced) {
+                        println "[GOVERNANCE] SAST enforcement active. Violations will stop the pipeline."
+
                         withEnv([
                             "OPA_DECISION=cdo/pipelines/required_security_steps/sast_deny",
                             "OPA_INPUT_JSON=dast_input.json",
@@ -328,27 +317,32 @@ void call() {
                         ]) {
                             sh pipelinePolicyCheckScript
                         }
+                    } else {
+                        println "[GOVERNANCE] SAST grace period active. Violations are warnings only."
+
+                        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                            withEnv([
+                                "OPA_DECISION=cdo/pipelines/required_security_steps/sast_deny",
+                                "OPA_INPUT_JSON=dast_input.json",
+                                "GOVERNANCE_DEBUG=${governanceDebug}",
+                            ]) {
+                                sh pipelinePolicyCheckScript
+                            }
+                        }
                     }
 
                     // ---- DAST ---------------------------------------------------
                     // dast.groovy is call(String targetUrl, Boolean blocking=true).
                     // The detector reads that second argument into dast_blocking;
                     // false means the author opted into non-blocking (warn only).
-                    // CHANGED: the author's blocking choice only takes effect after
-                    // the enforcement date; during grace, never fail the build.
+                    // Enforced blocking DAST failures must immediately stop the
+                    // pipeline. Non-blocking DAST failures remain warnings.
                     def sastDastInput = readJSON file: "dast_input.json"
-                    def dastBlocking  = sastDastInput.dast_blocking != false  // default true
+                    def dastBlocking = sastDastInput.dast_blocking != false
 
-                    def buildResultForDast = (securityEnforced && dastBlocking) ? "FAILURE" : "SUCCESS"
-                    if (!securityEnforced) {
-                        println "[GOVERNANCE] DAST in grace period. Violations are warnings only."
-                    } else if (dastBlocking) {
-                        println "[GOVERNANCE] DAST is blocking. Violations will FAIL the build."
-                    } else {
-                        println "[GOVERNANCE] DAST set to non-blocking via dast(url, false). Violations are warnings only."
-                    }
+                    if (securityEnforced && dastBlocking) {
+                        println "[GOVERNANCE] DAST is blocking. Violations will stop the pipeline."
 
-                    catchError(buildResult: buildResultForDast, stageResult: 'FAILURE') {
                         withEnv([
                             "OPA_DECISION=cdo/pipelines/required_security_steps/dast_deny",
                             "OPA_INPUT_JSON=dast_input.json",
@@ -356,7 +350,24 @@ void call() {
                         ]) {
                             sh pipelinePolicyCheckScript
                         }
+                    } else {
+                        if (!securityEnforced) {
+                            println "[GOVERNANCE] DAST in grace period. Violations are warnings only."
+                        } else {
+                            println "[GOVERNANCE] DAST set to non-blocking via dast(url, false). Violations are warnings only."
+                        }
+
+                        catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+                            withEnv([
+                                "OPA_DECISION=cdo/pipelines/required_security_steps/dast_deny",
+                                "OPA_INPUT_JSON=dast_input.json",
+                                "GOVERNANCE_DEBUG=${governanceDebug}",
+                            ]) {
+                                sh pipelinePolicyCheckScript
+                            }
+                        }
                     }
+
                     println "[GOVERNANCE] Security steps check (SAST/DAST) complete."
                 }
             }
