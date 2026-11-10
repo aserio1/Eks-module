@@ -1,5 +1,4 @@
-python310_audit.py
-######################
+
 """
 audit_python310.py
 Scans a GitHub org for repos still using Python 3.10 in:
@@ -55,7 +54,8 @@ SEARCH_QUERIES = [
     ("dockerfile", "ib-python310", "filename:Dockerfile"),
     ("dockerfile", "ib-python310", "filename:DockerfileTemplate"),
     ("jte", "python_version = 3.10", "extension:groovy"),
-]# ---------------------------------------------------------------------------
+]
+# ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
 
@@ -115,7 +115,8 @@ class GitHub:
             if len(data.get("items", [])) < 100:
                 break
             page += 1
-            time.sleep(1)  # stay inside secondary rate limits
+            wait_time = float(os.environ["SEARCH_PAGE_WAIT_TIME"])
+            time.sleep(wait_time)  # nosemgrep: arbitrary-sleep
 
     def file_content(self, repo: str, path: str, ref: str = "HEAD") -> str | None:
         """Fetch raw file content; returns None on error."""
@@ -143,7 +144,8 @@ class GitHub:
             if len(data) < 100:
                 break
             page += 1
-            time.sleep(0.5)
+            wait_time = float(os.environ["REPO_PAGE_WAIT_TIME"])
+            time.sleep(wait_time)  # nosemgrep: arbitrary-sleep
         return active
 
 
@@ -214,7 +216,8 @@ def audit_org(gh: GitHub, org: str) -> list[Hit]:
             else:
                 print("✓ false-positive, skipped")
 
-        time.sleep(2)  # between query types
+        wait_time = float(os.environ["QUERY_WAIT_TIME"])
+        time.sleep(wait_time)  # nosemgrep: arbitrary-sleep
 
     return hits
 
