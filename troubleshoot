@@ -1,29 +1,4 @@
-17:01:07  ------
-17:01:07  Dockerfile:75
-17:01:07  --------------------
-17:01:07    74 |     # Install Jenkins plugins with retry logic
-17:01:07    75 | >>> RUN set -eu; \
-17:01:07    76 | >>>     success=0; \
-17:01:07    77 | >>>     for i in 1 2 3; do \
-17:01:07    78 | >>>       if timeout 900 java -jar jpm.jar --verbose \
-17:01:07    79 | >>>         --war $JENKINS_HOME/jenkins.war \
-17:01:07    80 | >>>         -f $JENKINS_HOME/plugins.txt \
-17:01:07    81 | >>>         -d $JENKINS_HOME/plugins; then \
-17:01:07    82 | >>>         success=1; \
-17:01:07    83 | >>>         break; \
-17:01:07    84 | >>>       fi; \
-17:01:07    85 | >>>       echo "jpm attempt $i failed/timed out, retrying in 30s..."; \
-17:01:07    86 | >>>       sleep 30; \
-17:01:07    87 | >>>     done; \
-17:01:07    88 | >>>     [ "$success" -eq 1 ] || { echo "All jpm attempts failed" >&2; exit 1; }; \
-17:01:07    89 | >>>     rm -rf $JENKINS_HOME/jpm.jar
-17:01:07    90 |     
-17:01:07  --------------------
-17:01:07  ERROR: failed to build: failed to solve: process "/bin/sh -c set -eu;     success=0;     for i in 1 2 3; do       if timeout 900 java -jar jpm.jar --verbose         --war $JENKINS_HOME/jenkins.war         -f $JENKINS_HOME/plugins.txt         -d $JENKINS_HOME/plugins; then         success=1;         break;       fi;       echo \"jpm attempt $i failed/timed out, retrying in 30s...\";       sleep 30;     done;     [ \"$success\" -eq 1 ] || { echo \"All jpm attempts failed\" >&2; exit 1; };     rm -rf $JENKINS_HOME/jpm.jar" did not complete successfully: exit code: 1
-script returned exit code 1
 
-
-##########################
 ################################################################################
 # IMAC Jenkins Controller Docker Image
 #
@@ -54,7 +29,7 @@ USER root
 RUN mkdir -p $JENKINS_HOME \
   && groupadd -g ${gid} ${group} \
   && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user} \
-  && chage -M -1 -E -1 ${user} \ 
+  && chage -M -1 -E -1 ${user} \
   && passwd -d ${user} \
   && chown -R ${uid}:${gid} $JENKINS_HOME
 
@@ -97,23 +72,23 @@ ENV JENKINS_HOME $JENKINS_HOME
 # This comes from https://github.com/jenkinsci/plugin-installation-manager-tool/releases/download/2.13.2/jenkins-plugin-manager-2.13.2.jar
 ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
 
-# Install Jenkins plugins with retry logic
+# Install Jenkins plugins
 RUN set -eu; \
-    success=0; \
-    for i in 1 2 3; do \
-      if timeout 900 java -jar jpm.jar --verbose \
-        --war $JENKINS_HOME/jenkins.war \
-        -f $JENKINS_HOME/plugins.txt \
-        -d $JENKINS_HOME/plugins; then \
-        success=1; \
-        break; \
+    echo "Starting Jenkins plugin installation..."; \
+    rc=0; \
+    timeout 3600 java -jar jpm.jar --verbose \
+      --war $JENKINS_HOME/jenkins.war \
+      -f $JENKINS_HOME/plugins.txt \
+      -d $JENKINS_HOME/plugins || rc=$?; \
+    if [ "$rc" -ne 0 ]; then \
+      echo "Jenkins plugin installation failed with exit code $rc"; \
+      if [ "$rc" -eq 124 ]; then \
+        echo "Jenkins plugin installation timed out after 3600 seconds"; \
       fi; \
-      echo "jpm attempt $i failed/timed out, retrying in 30s..."; \
-      sleep 30; \
-    done; \
-    [ "$success" -eq 1 ] || { echo "All jpm attempts failed" >&2; exit 1; }; \
+      exit "$rc"; \
+    fi; \
+    echo "Jenkins plugins installed successfully"; \
     rm -rf $JENKINS_HOME/jpm.jar
 
 CMD [ "./jenkins.sh"]
 ENTRYPOINT []
-
