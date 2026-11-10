@@ -1,1 +1,368 @@
-Updated the governance JTE pipeline to immediately stop and fail when enforced SAST or blocking DAST OPA policy checks fail, instead of continuing execution. Preserved the existing enforcement date, grace-period behavior, and non-blocking DAST configuration. This ensures policy violations are clearly reported at the point of failure.
+create_git_repo.py
+#######################
+#!/usr/bin/env python3
+"""
+Create a public GitHub repository from a template using PyGithub + REST,
+with repo name validation and specific repository settings.
+
+If the target repository already exists, generation from the template is
+skipped, and the script instead re-applies the required settings
+(default branch, branch protection, merge settings) to the existing repo.
+
+Requirements:
+  pip install PyGithub requests
+"""
+
+import argparse
+import re
+import sys
+import requests
+
+from typing import Any
+from time import sleep
+from github import Github, Auth, GithubObject
+from github.GithubException import GithubException, UnknownObjectException
+
+ALLOWED_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")  # letters, digits, dot, underscore, hyphen
+MAX_REPO_NAME_LEN = 100
+GITHUB_BASE_URL = "https://git.aws.hhsoig.gov/api/v3"
+
+
+def verify_repo_name(name: str) -> None:
+    """
+    Validate a GitHub repository name.
+
+    Rules:
+      - Non-empty
+      - Length <= 100 characters
+      - Allowed characters: letters, digits, '.', '_', '-'
+    Raises:
+      ValueError with a human-readable reason if invalid.
+    """
+    if not name or not name.strip():
+        raise ValueError("Repository name must be non-empty.")
+    if len(name) > MAX_REPO_NAME_LEN:
+        raise ValueError(f"Repository name must be <= {MAX_REPO_NAME_LEN} characters.")
+    if not ALLOWED_NAME_PATTERN.match(name):
+        raise ValueError(
+            "Repository name may only contain letters, digits, '.', '_' and '-'. "
+            "Examples: 'my-repo', 'service_api', 'cli.v2'"
+        )
+
+
+def get_existing_repo(g: Github, owner_login: str, repo_name: str):
+    """
+    Returns the Repository object for {owner_login}/{repo_name} if it exists,
+    otherwise returns None.
+    """
+    full_name = f"{owner_login}/{repo_name}"
+    try:
+        return g.get_repo(full_name)
+    except UnknownObjectException:
+        return None
+
+
+def resolve_owner(g: Github, owner_login: str):
+    """
+    Resolve the owner as either an Organization or a User object.
+    Tries organization first, then user.
+
+    Returns:
+      Tuple[owner_obj, owner_type] where owner_type is 'org' or 'user'.
+
+    Raises:
+      RuntimeError if owner cannot be resolved.
+    """
+    try:
+        org = g.get_organization(owner_login)
+        return org, "org"
+    except UnknownObjectException:
+        pass
+
+    try:
+        user = g.get_user(owner_login)  # NamedUser
+        return user, "user"
+    except UnknownObjectException:
+        raise RuntimeError(
+            f"Owner '{owner_login}' not found as an organization or user. "
+            "Check the login spelling and your token permissions."
+        )
+
+
+def ensure_default_branch_main(repo) -> None:
+    """
+    Ensure default branch is 'main'.
+    - If 'main' exists, set it as default.
+    - Else if 'master' exists, create 'main' from 'master' and set default to 'main'.
+    - Else do nothing (leave default as-is) and print a warning.
+    """
+    try:
+        repo.get_branch("main")
+        repo.edit(default_branch="main")
+        return
+    except GithubException:
+        pass
+
+    # Try from master
+    try:
+        master = repo.get_branch("master")
+        sha = master.commit.sha
+        # Create refs/heads/main at the same commit as master
+        repo.create_git_ref(ref="refs/heads/main", sha=sha)
+        repo.edit(default_branch="main")
+        return
+    except GithubException:
+        print(
+            "[WARN] Could not find 'main' or 'master' to set default branch to 'main'. "
+            "Leaving the template's default branch as-is.",
+            file=sys.stderr,
+        )
+
+
+def ensure_main_protected(repo) -> None:
+    """
+    Ensures the 'main' branch is protected with:
+      - Dismiss stale approvals when new commits/merge base changes
+      - Require review from CODEOWNERS
+      - Require status checks to pass (and branch up-to-date)
+      - Require conversation resolution before merging
+      - Require linear history (squash/rebase merges)
+      - No bypassing (empty bypass lists on org repos + enforce_admins)
+
+    Parameters
+    ----------
+    repo : github.Repository.Repository
+        A PyGithub Repository instance (already resolved).
+
+    Raises
+    ------
+    SystemExit on failure (prints the upstream error).
+    """
+    BRANCH_NAME = "main"
+
+    # Configure these to your workflow job names or external status contexts
+    # e.g., "security/semgrep", "CodeQL", etc.
+    REQUIRED_CHECK_CONTEXTS: list[str] = []
+
+    try:
+        branch = repo.get_branch(BRANCH_NAME)
+    except GithubException as e:
+        raise SystemExit(f"[ensure_main_protected] Failed to get branch '{BRANCH_NAME}': {e}")
+
+    # Detect org vs user repo for bypass allowances
+    owner = repo.owner
+    is_org_repo = getattr(owner, "type", None) == "Organization"
+
+    # Empty bypass lists => Do NOT allow bypassing (only valid for org repos)
+    users_bypass: object = [] if is_org_repo else GithubObject.NotSet
+    teams_bypass: object = [] if is_org_repo else GithubObject.NotSet
+    apps_bypass: object = [] if is_org_repo else GithubObject.NotSet
+
+    try:
+        # 1) Protect branch & enable the gates
+        #    - enforce_admins=True ensures admins cannot bypass
+        #    - strict=True enables "Require status checks to pass before merging"
+        branch.edit_protection(
+            enforce_admins=True,
+            dismiss_stale_reviews=True,  # Dismiss approvals on new commits / merge base change
+            require_code_owner_reviews=True,  # Require CODEOWNERS reviews
+            required_conversation_resolution=True,  # Must resolve all conversations
+            required_linear_history=True,  # Prevent merge commits; require squash/rebase
+            users_bypass_pull_request_allowances=users_bypass,
+            teams_bypass_pull_request_allowances=teams_bypass,
+            apps_bypass_pull_request_allowances=apps_bypass,
+            strict=True,  # Turn on the status-check gate
+        )
+
+        # 2) Define the required status checks + "up to date" policy
+        #    If you don't list contexts, the gate is on but nothing specific is required.
+        #    Most teams should list explicit job names.
+        branch.edit_required_status_checks(
+            strict=True,  # require branch to be up-to-date before merging
+            contexts=REQUIRED_CHECK_CONTEXTS,
+        )
+
+        print(f"[ensure_main_protected] Branch protection applied to {repo.full_name}@{BRANCH_NAME}")
+    except GithubException as e:
+        raise SystemExit(f"[ensure_main_protected] Failed to update branch protection: {e}")
+
+
+def configure_merge_settings(repo) -> None:
+    """
+    Configure repository to:
+      - only allow squash merging
+      - always suggest updating pull request branches
+      - automatically delete head branches on merge
+    """
+    # Turn on squash, disable merge commit and rebase merge
+    # Turn on "Allow update of pull request branches" and "Automatically delete head branches"
+    repo.edit(
+        allow_squash_merge=True,
+        allow_merge_commit=False,
+        allow_rebase_merge=False,
+        allow_update_branch=True,
+        delete_branch_on_merge=True,
+    )
+
+
+def generate_from_template(
+    token: str,
+    template_owner: str,
+    template_repo: str,
+    target_owner: str,
+    new_repo_name: str,
+    include_all_branches: bool = False,
+    private: bool = False,
+) -> dict:
+    """
+    Use GitHub REST API to generate a repository from a template.
+    Returns the new repository JSON payload.
+
+    Docs: POST /repos/{template_owner}/{template_repo}/generate
+    """
+    url = f"https://api.git.aws.hhsoig.gov/repos/{template_owner}/{template_repo}/generate"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+    }
+    payload: dict[str, Any] = {
+        "owner": target_owner,
+        "name": new_repo_name,
+        "private": private,
+        "include_all_branches": include_all_branches,
+    }
+    resp = requests.post(url, json=payload, headers=headers, timeout=30, verify=False)
+    if resp.status_code >= 300:
+        raise RuntimeError(f"Template generation failed ({resp.status_code}): {resp.text}")
+    return resp.json()
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Create (or reconfigure) a public GitHub repo from the 'cdo-template-repo' template."
+    )
+    parser.add_argument("-n", "--repo-name", required=True, help="Name of the new repository to create.")
+    parser.add_argument("-o", "--owner", required=True, help="Login of user or organization to own the new repo.")
+    parser.add_argument("-t", "--token", required=True, help="GitHub Personal Access Token with required scopes.")
+    parser.add_argument(
+        "--template-owner",
+        default="CDO",
+        help="Owner (user/org) of the template repo. Defaults to --owner if not provided.",
+    )
+    parser.add_argument(
+        "--template-repo",
+        default="cdo-template-repo",
+        help="Template repository name (default: cdo-template-repo).",
+    )
+    parser.add_argument(
+        "--include-all-branches",
+        action="store_true",
+        help="Include all branches from the template (default: only default branch).",
+    )
+    args = parser.parse_args()
+
+    repo_name = args.repo_name.strip()
+    owner_login = args.owner.strip()
+    token = args.token.strip()
+    template_owner = args.template_owner.strip() if args.template_owner else owner_login
+    template_repo = args.template_repo.strip()
+    include_all_branches = bool(args.include_all_branches)
+
+    # Validate repo name format
+    try:
+        verify_repo_name(repo_name)
+    except ValueError as e:
+        print(f"[ERROR] Invalid repository name: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    # Authenticate
+    auth = Auth.Token(token)
+    g = Github(auth=auth, base_url=GITHUB_BASE_URL, verify=False)
+
+    # Verify authentication
+    user = g.get_user()
+    print(f"Authenticated as: {user.login}")
+
+    # Ensure owner exists and token likely has permission
+    try:
+        owner_obj, owner_type = resolve_owner(g, owner_login)
+    except RuntimeError as e:
+        print(f"[ERROR] {e}", file=sys.stderr)
+        sys.exit(2)
+
+    # Check whether the repo already exists
+    try:
+        existing_repo = get_existing_repo(g, owner_login, repo_name)
+    except GithubException as e:
+        print(f"[ERROR] Failed to check existence: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    repo_already_existed = existing_repo is not None
+
+    if repo_already_existed:
+        full_name = existing_repo.full_name
+        html_url = existing_repo.html_url
+        print(
+            f"[INFO] Repository '{full_name}' already exists. "
+            "Skipping template generation; will (re)apply required settings."
+        )
+        repo = existing_repo
+    else:
+        # Create repo from template via REST
+        try:
+            new_repo_json = generate_from_template(
+                token=token,
+                template_owner=template_owner,
+                template_repo=template_repo,
+                target_owner=owner_login,
+                new_repo_name=repo_name,
+                include_all_branches=include_all_branches,
+                private=False,  # public as requested
+            )
+            full_name = new_repo_json.get("full_name", f"{owner_login}/{repo_name}")
+            html_url = new_repo_json.get("html_url", f"https://git.aws.hhsoig.gov/{full_name}")
+            print(f"[INFO] Generated repository: {full_name} -> {html_url}")
+
+        except RuntimeError as e:
+            print(f"[ERROR] {e}", file=sys.stderr)
+            sys.exit(4)
+
+        # Fetch repo via PyGithub
+        try:
+            repo = g.get_repo(full_name)
+        except UnknownObjectException:
+            print("[ERROR] Could not fetch the newly created repo via PyGithub.", file=sys.stderr)
+            sys.exit(5)
+
+        # Wait for branch main to become available (only needed for freshly generated repos)
+        sleep(10)
+
+    # Ensure default branch is 'main' (create if necessary)
+    try:
+        ensure_default_branch_main(repo)
+    except GithubException as e:
+        print(f"[WARN] Could not enforce default branch 'main': {e}", file=sys.stderr)
+
+    # Ensure branch 'main' is protected and has the required rules
+    ensure_main_protected(repo)
+
+    # Configure merge/pull request settings
+    try:
+        configure_merge_settings(repo)
+        print(
+            "[INFO] Repository settings updated: squash-only merges, suggest updating PR branches, auto-delete head branches."
+        )
+    except GithubException as e:
+        print(f"[ERROR] Failed to update repository settings: {e}", file=sys.stderr)
+        sys.exit(6)
+
+    if repo_already_existed:
+        print("[SUCCESS] Existing repository reconfigured with required settings.")
+    else:
+        print("[SUCCESS] Repository created and configured.")
+    print(f"URL: {html_url}")
+
+
+if __name__ == "__main__":
+    main()
