@@ -13,6 +13,7 @@ Requirements:
 """
 
 import argparse
+import os
 import re
 import sys
 import requests
@@ -287,7 +288,7 @@ def main():
     try:
         owner_obj, owner_type = resolve_owner(g, owner_login)
     except RuntimeError as e:
-        print(f"[ERROR] {e}", file=sys.stderr)
+        print(f"[ERROR] Failed to resolve owner: {e}", file=sys.stderr)
         sys.exit(2)
 
     # Check whether the repo already exists
@@ -335,7 +336,7 @@ def main():
             sys.exit(5)
 
         # Wait for branch main to become available (only needed for freshly generated repos)
-        wait_time = 10
+        wait_time = float(os.environ["REPO_WAIT_TIME"])
         sleep(wait_time)  # nosemgrep: arbitrary-sleep
 
     # Ensure default branch is 'main' (create if necessary)
