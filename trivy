@@ -1,78 +1,46 @@
+getting this error
 
-customPath = "workspace/${env.JOB_NAME.replace('%2F','/')}/${env.BUILD_NUMBER}"
 
-pipeline {
-    agent { label jte.keywords.project }
+15:31:37  Error: reading ECR Images: couldn't find resource
+15:31:37  
+15:31:37    with module.scanner_agent_nodes["sia"].data.aws_ecr_image.agent_image,
+15:31:37    on modules/jenkins_agent/data.tf line 18, in data "aws_ecr_image" "agent_image":
+15:31:37    18: data "aws_ecr_image" "agent_image" {
 
-    triggers {
-        cron('0 2 * * 1-5') // Every Monday-Friday at 9:00 pm EST.
-    }
 
-    stages {
-        stage('Disable Concurrent Builds') {
-            steps {
-                echo "Disabling Concurrent Builds"
-                script {
-                    disable_concurrent_builds()
-                }
-            }
-        }
+# Retrieve the private key from SSM Parameter Store dynamically based on the environment
+data "aws_ssm_parameter" "jenkins_agent_private_key" {
+  name            = "/ec2/keypair/${var.prefix}_jenkins_agent_private_key"
+  with_decryption = true
+}
 
-        stage('Checkout') {
-            steps {
-                script {
-                    git_checkout()
-                }
-            }
-        }
+# Retrieve the public key from SSM Parameter Store
+data "aws_ssm_parameter" "jenkins_agent_public_key" {
+  name            = "/ec2/keypair/${var.prefix}_jenkins_agent_public_key"
+  with_decryption = true
+}
 
-        stage('Run EFS Cleanup') {
-            steps {
-                echo "Starting EFS Cleanup..."
-                script {
-                    setup()
-                    sast(true)
-                    scan_dependencies()
+# Retrieve the key pair
+data "aws_key_pair" "jenkins_agent_linux" {
+  key_name = "${var.prefix}_jenkins_agent_private_key"
+}
 
-                    // Run unit tests only when Python test files exist
-                    echo "Checking for Python unit test files..."
+data "aws_ecr_image" "agent_image" {
+  repository_name = var.agent_image
+  image_tag       = var.agent_tag
+}
 
-                    def testFilesFound = sh(
-                        script: '''
-                            find . -type f \\( -name "test_*.py" -o -name "*_test.py" \\) \
-                                -not -path "*/.git/*" \
-                                -not -path "*/.venv/*" \
-                                -not -path "*/__pycache__/*" \
-                                -print -quit | grep -q .
-                        ''',
-                        returnStatus: true
-                    )
+# Fetch the Tenable key from SSM
+data "aws_ssm_parameter" "tenable_agent_key" {
+  name            = "/imac/jenkins/tenable-agent-key"
+  with_decryption = true
+}
 
-                    if (testFilesFound == 0) {
-                        echo "Python test files found. Running unit tests..."
-                        unit_test()
-                    } else {
-                        echo "No Python unit tests found. Skipping unit_test() for EFS Cleanup."
-                    }
-
-                    ws("${customPath}/admin/scripts") {
-                        sh """
-                            /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
-                        """
-                    }
-                }
-            }
-        }
-
-    }
-
-    post {
-        success {
-            echo 'EFS Cleanup completed successfully!'
-        }
-        failure {
-            echo 'EFS Cleanup failed. Check console output for details.'
-            // email_via_sns()
-        }
-    }
+# This data source will error out on plan/apply if the AMI no longer exists,
+# rather than silently succeeding and failing later at instance launch time.
+data "aws_ami" "validate_pinned" {
+  filter {
+    name   = "image-id"
+    values = [var.ami_id]
+  }
 }
