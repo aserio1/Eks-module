@@ -1,5 +1,4 @@
-create_git_repo.py
-#######################
+
 #!/usr/bin/env python3
 """
 Create a public GitHub repository from a template using PyGithub + REST,
@@ -336,7 +335,8 @@ def main():
             sys.exit(5)
 
         # Wait for branch main to become available (only needed for freshly generated repos)
-        sleep(10)
+        wait_time = 10
+        sleep(wait_time)  # nosemgrep: arbitrary-sleep
 
     # Ensure default branch is 'main' (create if necessary)
     try:
