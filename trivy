@@ -19,3 +19,130 @@
 13:49:40  no default value. Use a -var or -var-file command line argument to provide a
 13:49:40  value for this variable.
 script returned exit code 1
+
+########
+jenkins_agent.tf
+#############
+################################################################################
+# jenkins/jenkins_agent.tf
+################################################################################
+
+locals {
+  agent_node_deprecated_map = [for agent in local.agent_nodes : {
+    agent_tag     = agent.agent_tag
+    agent_image   = agent.agent_image
+    project       = agent.project
+    instance_type = agent.instance_type
+    ebs_size      = agent.ebs_size
+    environments = [for environment in agent.environments : {
+      name                = environment.name
+      target_account      = environment.target_account
+      target_account_role = "arn:aws:iam::${environment.target_account}:role/prod_jenkins_role_${agent.project}_${environment.name}"
+    }]
+  }]
+
+  agent_nodes_map = {
+    for obj in local.agent_node_deprecated_map : obj.project => obj
+    if length(var.allowed_agents) < 1 || contains(var.allowed_agents, obj.project)
+  }
+
+  # Keyed by project so for_each works correctly.
+  # No environments — scanner does not assume cross-account roles.
+  scanner_agent_nodes_map = {
+    for agent in local.scanner_nodes : agent.project => {
+      agent_tag     = agent.agent_tag
+      agent_image   = agent.agent_image
+      project       = agent.project
+      instance_type = agent.instance_type
+      ebs_size      = agent.ebs_size
+    }
+  }
+}
+
+module "all_agent_nodes" {
+  source     = "./modules/jenkins_agent"
+  depends_on = [module.base_infrastructure]
+
+  for_each = local.agent_nodes_map
+
+  agent_type                  = "regular"
+  prefix                      = var.prefix
+  project                     = each.value.project
+  environments                = each.value.environments
+  jenkins_main_url            = module.base_infrastructure.jenkins_url
+  ami_id                      = var.base_ami_id
+  subnet_ids                  = data.aws_subnets.all_subnets.ids
+  jenkins_controller_policies = local.jenkins_controller_policies
+  security_group_ids          = module.base_infrastructure.agent_security_group_ids
+  tags                        = local.tags
+  ecr_repo_account_id         = local.ecr_repo_account_id
+  agent_image                 = each.value.agent_image
+  agent_tag                   = each.value.agent_tag
+  efs_mount_target            = module.base_infrastructure.efs_mount_target
+  instance_type               = each.value.instance_type
+  ebs_size                    = each.value.ebs_size
+  kms_key_arn                 = data.aws_kms_alias.ebs_kms_key.target_key_arn
+  always_on_agent_nodes       = var.always_on_agent_nodes
+  agent_asg_instance_size = (
+    contains(var.always_on_agent_nodes, each.value.project)
+  ) ? 1 : var.agent_asg_instance_size
+}
+
+module "scanner_agent_nodes" {
+  source     = "./modules/jenkins_agent"
+  depends_on = [module.base_infrastructure]
+
+  for_each = local.scanner_agent_nodes_map
+
+  agent_type          = "scanner"
+  prefix              = var.prefix
+  project             = each.value.project
+  jenkins_main_url    = module.base_infrastructure.jenkins_url
+  ami_id              = var.base_ami_id
+  subnet_ids          = data.aws_subnets.all_subnets.ids
+  security_group_ids  = module.base_infrastructure.scanner_agent_security_group_ids
+  tags                = local.tags
+  ecr_repo_account_id = local.ecr_repo_account_id
+  agent_image         = each.value.agent_image
+  agent_tag           = each.value.agent_tag
+  efs_mount_target    = module.base_infrastructure.efs_mount_target
+  instance_type       = each.value.instance_type
+  ebs_size            = each.value.ebs_size
+  kms_key_arn         = data.aws_kms_alias.ebs_kms_key.target_key_arn
+  reports_bucket_arn  = local.scanner_reports_bucket_arn
+
+
+  # Intentionally omitted vs regular agent:
+  #   jenkins_controller_policies — scanner has least-privilege IAM only
+  #   always_on_agent_nodes       — scanner is always exactly 1 instance
+  #   agent_asg_instance_size     — hardcoded to 1 in ec2.tf via is_scanner local
+  #   environments                — scanner does not assume cross-account roles
+}
+
+
+######
+jenkins_controller.tf
+######
+module "jenkins_controller" {
+  source     = "./modules/jenkins_controller"
+  depends_on = [module.base_infrastructure]
+
+  prefix                       = var.prefix
+  jenkins_controller_policies  = local.jenkins_controller_policies
+  security_group_ids           = module.base_infrastructure.controller_security_group_ids
+  ami_id                       = var.base_ami_id
+  jenkins_controller_size      = var.jenkins_controller_size
+  subnet_ids                   = data.aws_subnets.all_subnets.ids
+  target_group_arns            = module.base_infrastructure.target_group_arns
+  efs_mount_target             = module.base_infrastructure.efs_mount_target
+  jenkins_idp_entity_id        = var.jenkins_idp_entity_id
+  jenkins_idp_metadata_url     = var.jenkins_idp_metadata_url
+  kms_key_arn                  = data.aws_kms_alias.ebs_kms_key.target_key_arn
+  cw_retention                 = var.cw_retention
+  enable_cloudwatch_build_logs = var.enable_cloudwatch_build_logs
+
+  ecr_repo_account_id = local.ecr_repo_account_id
+  controller_image    = local.controller_image
+  controller_tag      = local.controller_tag
+  tags                = local.tags
+}
