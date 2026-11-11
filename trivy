@@ -1,1 +1,68 @@
-controller_tag = var.prefix == "prod" ? var.jenkins_docker_tag_prod : var.jenkins_docker_tag_dev
+16:17:18          # (17 unchanged attributes hidden)
+16:17:18  
+16:17:18          # (4 unchanged blocks hidden)
+16:17:18      }
+16:17:18  
+16:17:18    # module.scanner_agent_nodes["sia"].aws_launch_template.jenkins_agent_node will be updated in-place
+16:17:18    ~ resource "aws_launch_template" "jenkins_agent_node" {
+16:17:18          id                                   = "lt-0e40b83153d48497f"
+16:17:18        ~ latest_version                       = 14 -> (known after apply)
+16:17:18          name                                 = "dev-jenkins-agent-node-sia20260623040947278400000013"
+16:17:18          tags                                 = {}
+16:17:18        ~ user_data                            = (sensitive value)
+16:17:18          # (17 unchanged attributes hidden)
+16:17:18  
+16:17:18          # (4 unchanged blocks hidden)
+16:17:18      }
+16:17:18  
+16:17:18  Plan: 0 to add, 13 to change, 0 to destroy.
+16:17:18  
+16:17:18  Error: reading ECR Images: couldn't find resource
+16:17:18  
+16:17:18    with module.scanner_agent_nodes["sia"].data.aws_ecr_image.agent_image,
+16:17:18    on modules/jenkins_agent/data.tf line 18, in data "aws_ecr_image" "agent_image":
+16:17:18    18: data "aws_ecr_image" "agent_image" {
+
+
+################
+getting this error 
+###############
+jenkins_agent folder has
+data.tf 
+# Retrieve the private key from SSM Parameter Store dynamically based on the environment
+data "aws_ssm_parameter" "jenkins_agent_private_key" {
+  name            = "/ec2/keypair/${var.prefix}_jenkins_agent_private_key"
+  with_decryption = true
+}
+
+# Retrieve the public key from SSM Parameter Store
+data "aws_ssm_parameter" "jenkins_agent_public_key" {
+  name            = "/ec2/keypair/${var.prefix}_jenkins_agent_public_key"
+  with_decryption = true
+}
+
+# Retrieve the key pair
+data "aws_key_pair" "jenkins_agent_linux" {
+  key_name = "${var.prefix}_jenkins_agent_private_key"
+}
+
+data "aws_ecr_image" "agent_image" {
+  repository_name = var.agent_image
+  image_tag       = var.agent_tag
+}
+
+# Fetch the Tenable key from SSM
+data "aws_ssm_parameter" "tenable_agent_key" {
+  name            = "/imac/jenkins/tenable-agent-key"
+  with_decryption = true
+}
+
+# This data source will error out on plan/apply if the AMI no longer exists,
+# rather than silently succeeding and failing later at instance launch time.
+data "aws_ami" "validate_pinned" {
+  filter {
+    name   = "image-id"
+    values = [var.ami_id]
+  }
+}
+
