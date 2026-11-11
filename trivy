@@ -1,40 +1,21 @@
-variable.tf
-#############
-variable "jenkins_docker_tag_dev" {
-  type        = string
-  description = "Docker image tag for Jenkins controller and agents in DEV"
-}
-
-variable "jenkins_docker_tag_prod" {
-  type        = string
-  description = "Docker image tag for Jenkins controller and agents in PROD"
-}
-
-
-locals.tf
-######
-controller_tag = (
-  var.prefix == "prod"
-  ? var.jenkins_docker_tag_prod
-  : var.jenkins_docker_tag_dev
-)
-
-default_agent_tag = (
-  var.prefix == "prod"
-  ? var.jenkins_docker_tag_prod
-  : var.jenkins_docker_tag_dev
-)
-
-######
-tfvars
-
-prefix = "dev"
-
-jenkins_docker_tag_dev  = "DEV_IMAGE_TAG"
-jenkins_docker_tag_prod = "PROD_IMAGE_TAG"
-
-
-prefix = "prod"
-
-jenkins_docker_tag_dev  = "DEV_IMAGE_TAG"
-jenkins_docker_tag_prod = "PROD_IMAGE_TAG"
+  + echo 'Running terraform plan...'
+13:49:37  Running terraform plan...
+13:49:37  + terraform plan -no-color --var-file=dev.tfvars -lock=false --out=dev.tfplan
+13:49:40  
+13:49:40  Warning: Deprecated Parameter
+13:49:40  
+13:49:40  The parameter "dynamodb_table" is deprecated. Use parameter "use_lockfile"
+13:49:40  instead.
+13:49:40  var.jenkins_docker_tag_prod
+13:49:40    Docker image tag for Jenkins controller and agents in PROD
+13:49:40  
+13:49:40    Enter a value: 
+13:49:40  Error: No value for required variable
+13:49:40  
+13:49:40    on variables.tf line 26:
+13:49:40    26: variable "jenkins_docker_tag_prod" {
+13:49:40  
+13:49:40  The root module input variable "jenkins_docker_tag_prod" is not set, and has
+13:49:40  no default value. Use a -var or -var-file command line argument to provide a
+13:49:40  value for this variable.
+script returned exit code 1
