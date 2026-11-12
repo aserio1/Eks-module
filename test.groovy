@@ -34,27 +34,6 @@ pipeline {
                     unit_test(false)
                     scan_dependencies()
 
-                    // Run unit tests only when Python test files exist
-                    echo "Checking for Python unit test files..."
-
-                    def testFilesFound = sh(
-                        script: '''
-                            find . -type f \\( -name "test_*.py" -o -name "*_test.py" \\) \
-                                -not -path "*/.git/*" \
-                                -not -path "*/.venv/*" \
-                                -not -path "*/__pycache__/*" \
-                                -print -quit | grep -q .
-                        ''',
-                        returnStatus: true
-                    )
-
-                    if (testFilesFound == 0) {
-                        echo "Python test files found. Running unit tests..."
-                        unit_test()
-                    } else {
-                        echo "No Python unit tests found. Skipping unit_test() for EFS Cleanup."
-                    }
-
                     ws("${customPath}/admin/scripts") {
                         sh """
                             /home/jenkins/anaconda3/envs/python312/bin/python3 cleanup_jenkins_efs.py
