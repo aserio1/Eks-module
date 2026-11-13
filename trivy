@@ -1,7 +1,20 @@
-CONTAINER ID   IMAGE                                                                                                                  COMMAND                  CREATED          STATUS          PORTS                                                                                  NAMES
-7dc4cc237a79   213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/jenkins/jenkins-agent:59f04798f1e6e889fafedb6dec7cf5f3aa6e7384   "./register.sh"          13 minutes ago   Up 6 minutes    0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp, 0.0.0.0:8022->22/tcp, [::]:8022->22/tcp   jenkins
-7ed75b3a2cf2   213141505949.dkr.ecr.us-east-1.amazonaws.com/ecr-public/aquasecurity/trivy-security:0.72.0                             "trivy server --list…"   13 minutes ago   Up 13 minutes   0.0.0.0:4954->4954/tcp                                                                 trivy-server
-05b7775c8a28   213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/redis:latest                                                     "docker-entrypoint.s…"   13 minutes ago   Up 13 minutes   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp  
-
-
 ERROR: Node 'sie' already exists
++ write_key
++ local ID_GROUP
+++ stat -c %U:%G /home/jenkins
++ ID_GROUP=jenkins:jenkins
++ chown -Rf jenkins:jenkins /home/jenkins/.ssh
++ chmod 0700 -R /home/jenkins/.ssh
++ sed /home/jenkins/.ssh/host_authorized_keys -e 's/.*ssh-rsa/ssh-rsa/g'
++ proxy_iam_role
++ local ID_GROUP
+++ stat -c %U:%G /home/jenkins
++ ID_GROUP=jenkins:jenkins
++ cp /home/jenkins/.aws/host_config /home/jenkins/.aws/config
++ chown -Rf jenkins:jenkins /home/jenkins/.aws
++ chmod 0700 -R /home/jenkins/.aws
++ echo Done
+Done
++ exec /usr/sbin/sshd -D -e
+Server listening on 0.0.0.0 port 22.
+Server listening on :: port 22.
