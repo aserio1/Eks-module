@@ -1,35 +1,10 @@
-got this comment 
-infrastructure/terraform/dev.tfvars
-@@ -1,6 +1,7 @@
-prefix                       = "dev"
-jenkins_controller_size      = "t3.large"
-jenkins_docker_tag           = "59f04798f1e6e889fafedb6dec7cf5f3aa6e7384"
-jenkins_docker_tag_dev       = "b3ab598e21016d6052b2a9cf32c3b0e1dd47c316"
-jenkins_agent_docker_tag     = "latest"
-Member
-@Cosmina-Chindris Cosmina-Chindris yesterday
-we cannot use tag "latest" - as it can change anytime with changes that are not ready for prod - u will have to have 2 vars one for agent one for controller - even if sometimes they are the same
-hardcoding var name with dev/prod defeats the env tfvars purpose
-maybe u can leave the original jenkins_docker_tag as is and have a separate jenkins_controller_tag and set it to fallback on jenkins_docker_tag when not defined
-
-# dev.tfvars
-jenkins_docker_tag = "59f04798f1e6e889fafedb6dec7cf5f3aa6e7384"
-# set this only when it differs
-# jenkins_controller_docker_tag = "b3ab598e21016d6052b2a9cf32c3b0e1dd47c316"
-
-
-infrastructure/terraform/variables.tf
-@@ -18,9 +18,20 @@ variable "jenkins_controller_size" {
-  description = "Instance size of the controller node."
+variable "jenkins_docker_tag" {
+  type        = string
+  description = "Docker image tag for Jenkins agents"
 }
 
-variable "jenkins_docker_tag" {
-variable "jenkins_docker_tag_dev" {
-Member
-@Cosmina-Chindris Cosmina-Chindris yesterday • 
-keep jenkins_docker_tag and have a separate one for jenkins_controller_docker_tag and default to jenkins_docker_tag when the var is not defined:
-
-locals {
-  # Returns var.jenkins_controller_docker_tag if set and not "", otherwise var.jenkins_docker_tag
-  controller_tag = coalesce(var.jenkins_controller_docker_tag, var.jenkins_docker_tag)
+variable "jenkins_controller_docker_tag" {
+  type        = string
+  description = "Optional Docker image tag for Jenkins controller. Defaults to jenkins_docker_tag when not specified."
+  default     = null
 }
