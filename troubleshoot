@@ -1,19 +1,16 @@
-Run Terraform Formatting...
-09:26:05  [Pipeline] sh
-09:26:06  + terraform fmt -check -recursive
-09:26:06  [Pipeline] echo
-09:26:06  Run tflint...
-09:26:06  [Pipeline] sh
-09:26:06  + tflint --no-color --recursive --minimum-failure-severity=error
-09:26:06  │ Failed to run in .; exit status 1
-09:26:06  
-09:26:06  Failed to build configurations; data.tf:54,27-36: Error in function call; Call to function "coalesce" failed: no non-null, non-empty-string arguments.:
-09:26:06  
-09:26:06  [31mError[0m: Error in function call
-09:26:06  
-09:26:06    on data.tf line 54, in locals:
-09:26:06    54:   controller_tag        = [1;4mcoalesce([0mvar.jenkins_controller_docker_tag, var.jenkins_controller_docker_tag)
-09:26:06  
-09:26:06  with var.jenkins_controller_docker_tag set to null.
-09:26:06  
-09:26:06  Call to function "coalesce" failed: no non-null, non-empty-string arguments.
+### PR Summary
+
+Updated the Jenkins Terraform configuration to support separate Docker image tags for the Jenkins controller and agents while maintaining backward compatibility.
+
+### Changes Made
+- Retained the existing `jenkins_docker_tag` variable for Jenkins agents.
+- Added an optional `jenkins_controller_docker_tag` variable to allow independent controller image updates.
+- Updated `data.tf` to use `coalesce()` so the controller defaults to `jenkins_docker_tag` when a separate controller tag is not specified.
+- Updated `dev.tfvars` to use a dedicated controller image tag while keeping agents on their existing pinned version.
+- Kept PROD using the existing Docker image tag for both controller and agents.
+- Removed the use of `latest` and environment-specific DEV/PROD variable names.
+- Fixed the `coalesce()` variable reference identified during TFLint validation.
+
+### Expected Outcome
+
+This change allows Jenkins controller images to be updated independently without affecting Jenkins agents or the SIA scanner. Existing deployments continue using `jenkins_docker_tag` unless a controller-specific tag is explicitly provided.
