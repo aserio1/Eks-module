@@ -1,10 +1,13 @@
-variable "jenkins_docker_tag" {
-  type        = string
-  description = "Docker image tag for Jenkins agents"
-}
+dev
 
-variable "jenkins_controller_docker_tag" {
-  type        = string
-  description = "Optional Docker image tag for Jenkins controller. Defaults to jenkins_docker_tag when not specified."
-  default     = null
-}
+prefix                        = "dev"
+jenkins_controller_size       = "t3.large"
+jenkins_docker_tag            = "59f04798f1e6e889fafedb6dec7cf5f3aa6e7384"
+jenkins_controller_docker_tag = "b3ab598e21016d6052b2a9cf32c3b0e1dd47c316"
+
+
+prod
+
+prefix                  = "prod"
+jenkins_controller_size = "t3.large"
+jenkins_docker_tag      = "59f04798f1e6e889fafedb6dec7cf5f3aa6e7384"
