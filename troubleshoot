@@ -1,13 +1,19 @@
-dev
-
-prefix                        = "dev"
-jenkins_controller_size       = "t3.large"
-jenkins_docker_tag            = "59f04798f1e6e889fafedb6dec7cf5f3aa6e7384"
-jenkins_controller_docker_tag = "b3ab598e21016d6052b2a9cf32c3b0e1dd47c316"
-
-
-prod
-
-prefix                  = "prod"
-jenkins_controller_size = "t3.large"
-jenkins_docker_tag      = "59f04798f1e6e889fafedb6dec7cf5f3aa6e7384"
+Run Terraform Formatting...
+09:26:05  [Pipeline] sh
+09:26:06  + terraform fmt -check -recursive
+09:26:06  [Pipeline] echo
+09:26:06  Run tflint...
+09:26:06  [Pipeline] sh
+09:26:06  + tflint --no-color --recursive --minimum-failure-severity=error
+09:26:06  │ Failed to run in .; exit status 1
+09:26:06  
+09:26:06  Failed to build configurations; data.tf:54,27-36: Error in function call; Call to function "coalesce" failed: no non-null, non-empty-string arguments.:
+09:26:06  
+09:26:06  [31mError[0m: Error in function call
+09:26:06  
+09:26:06    on data.tf line 54, in locals:
+09:26:06    54:   controller_tag        = [1;4mcoalesce([0mvar.jenkins_controller_docker_tag, var.jenkins_controller_docker_tag)
+09:26:06  
+09:26:06  with var.jenkins_controller_docker_tag set to null.
+09:26:06  
+09:26:06  Call to function "coalesce" failed: no non-null, non-empty-string arguments.
