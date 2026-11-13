@@ -1,14 +1,7 @@
-### PR Summary
+CONTAINER ID   IMAGE                                                                                                                  COMMAND                  CREATED          STATUS          PORTS                                                                                  NAMES
+7dc4cc237a79   213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/jenkins/jenkins-agent:59f04798f1e6e889fafedb6dec7cf5f3aa6e7384   "./register.sh"          13 minutes ago   Up 6 minutes    0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp, 0.0.0.0:8022->22/tcp, [::]:8022->22/tcp   jenkins
+7ed75b3a2cf2   213141505949.dkr.ecr.us-east-1.amazonaws.com/ecr-public/aquasecurity/trivy-security:0.72.0                             "trivy server --list…"   13 minutes ago   Up 13 minutes   0.0.0.0:4954->4954/tcp                                                                 trivy-server
+05b7775c8a28   213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/redis:latest                                                     "docker-entrypoint.s…"   13 minutes ago   Up 13 minutes   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp  
 
-Updated the Jenkins Terraform configuration to support separate Docker image tags for DEV and PROD controllers while keeping Jenkins agents on their existing `latest` tag.
 
-### Changes Made
-- Added separate `jenkins_docker_tag_dev` and `jenkins_docker_tag_prod` variables for environment-specific controller images.
-- Updated `data.tf` to select the appropriate controller image tag based on the deployment environment.
-- Added `jenkins_agent_docker_tag` with a default value of `latest` to manage agent images independently.
-- Updated `dev.tfvars` and `prod.tfvars` with their respective controller image tags.
-- Kept regular Jenkins agents and the SIA scanner agent on the `latest` image tag.
-- Preserved the existing Jenkins controller and agent module configurations.
-
-### Expected Outcome
-DEV and PROD Jenkins controllers can now be updated independently without requiring changes to the Jenkins agent image tags. This also prevents controller-specific image versions from causing ECR lookup failures for Jenkins agents.
+ERROR: Node 'sie' already exists
