@@ -1,20 +1,2 @@
-ERROR: Node 'sie' already exists
-+ write_key
-+ local ID_GROUP
-++ stat -c %U:%G /home/jenkins
-+ ID_GROUP=jenkins:jenkins
-+ chown -Rf jenkins:jenkins /home/jenkins/.ssh
-+ chmod 0700 -R /home/jenkins/.ssh
-+ sed /home/jenkins/.ssh/host_authorized_keys -e 's/.*ssh-rsa/ssh-rsa/g'
-+ proxy_iam_role
-+ local ID_GROUP
-++ stat -c %U:%G /home/jenkins
-+ ID_GROUP=jenkins:jenkins
-+ cp /home/jenkins/.aws/host_config /home/jenkins/.aws/config
-+ chown -Rf jenkins:jenkins /home/jenkins/.aws
-+ chmod 0700 -R /home/jenkins/.aws
-+ echo Done
-Done
-+ exec /usr/sbin/sshd -D -e
-Server listening on 0.0.0.0 port 22.
-Server listening on :: port 22.
+docker inspect jenkins --format \
+'RestartCount={{.RestartCount}} Status={{.State.Status}} ExitCode={{.State.ExitCode}}'
