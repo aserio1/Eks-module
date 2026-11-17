@@ -1,16 +1,199 @@
-### PR Summary
+i have this Jira ticket 
+##############
+Add alarm on missing jenkins logs in Cloudwatch. We need to ensure that the jenkins logs stream to cloudwatch from the Jenkins controller. 
 
-Updated the Jenkins Terraform configuration to support separate Docker image tags for the Jenkins controller and agents while maintaining backward compatibility.
+Acceptance:
 
-### Changes Made
-- Retained the existing `jenkins_docker_tag` variable for Jenkins agents.
-- Added an optional `jenkins_controller_docker_tag` variable to allow independent controller image updates.
-- Updated `data.tf` to use `coalesce()` so the controller defaults to `jenkins_docker_tag` when a separate controller tag is not specified.
-- Updated `dev.tfvars` to use a dedicated controller image tag while keeping agents on their existing pinned version.
-- Kept PROD using the existing Docker image tag for both controller and agents.
-- Removed the use of `latest` and environment-specific DEV/PROD variable names.
-- Fixed the `coalesce()` variable reference identified during TFLint validation.
+get notification if the cloudwatch stream does not work properly
 
-### Expected Outcome
 
-This change allows Jenkins controller images to be updated independently without affecting Jenkins agents or the SIA scanner. Existing deployments continue using `jenkins_docker_tag` unless a controller-specific tag is explicitly provided.
+###########
+cloudwatch.tf 
+
+# Log group with retention
+
+resource "aws_kms_key" "observability_logs" {
+  description             = "KMS key for observability CloudWatch log groups"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EnableRootPermissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowCloudWatchLogs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_kms_alias" "observability_logs" {
+  name          = "alias/imac-${var.prefix}-observability-logs"
+  target_key_id = aws_kms_key.observability_logs.key_id
+}
+
+
+resource "aws_cloudwatch_log_group" "jenkins_build_logs" {
+  count = var.enable_cloudwatch_build_logs ? 1 : 0
+
+  name              = "/imac/jenkins/${var.prefix}/builds"
+  region            = data.aws_region.current.region
+  retention_in_days = var.cw_retention
+
+  kms_key_id = aws_kms_key.observability_logs.arn
+}
+
+resource "aws_cloudwatch_log_subscription_filter" "jenkins_build_logs" {
+  count = var.enable_cloudwatch_build_logs && var.opensearch_log_destination_arn != "" ? 1 : 0
+
+  name            = "to-imac-opensearch"
+  log_group_name  = aws_cloudwatch_log_group.jenkins_build_logs[0].name
+  filter_pattern  = ""
+  destination_arn = var.opensearch_log_destination_arn
+}
+
+#####
+data.tf 
+
+data "aws_region" "current" {}
+
+data "aws_caller_identity" "current" {}
+
+data "aws_ecr_image" "controller_image" {
+  repository_name = var.controller_image
+  image_tag       = var.controller_tag
+}
+
+# This data source will error out on plan/apply if the AMI no longer exists,
+# rather than silently succeeding and failing later at instance launch time.
+data "aws_ami" "validate_pinned" {
+  filter {
+    name   = "image-id"
+    values = [var.ami_id]
+  }
+}
+
+locals {
+  jenkins_cwagent_config = var.enable_cloudwatch_build_logs ? templatefile(
+    "${path.module}/templates/cw-agent-config.json.tpl",
+    {
+      log_group_name = aws_cloudwatch_log_group.jenkins_build_logs[0].name
+    }
+  ) : ""
+}
+
+######
+cw-agent-config.json.tpl
+
+{
+  "agent": {
+    "run_as_user": "root",
+    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/jenkins-cwagent.log"
+  },
+  "logs": {
+    "force_flush_interval": 5,
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/jenkins_jobs/**/builds/[0-9]*/log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "jenkins-controller-{instance_id}",
+            "encoding": "utf-8"
+          }
+        ]
+      }
+    }
+  }
+}
+
+
+#########
+monitoring.tf 
+
+# Data source to find the agent ASG
+data "aws_autoscaling_groups" "monitored_agent" {
+  filter {
+    name   = "tag:Name"
+    values = ["${var.prefix}-Jenkins Agent - ${var.monitored_agent}"]
+  }
+}
+
+# utility lambda
+data "aws_lambda_function" "utility_lambda" {
+  function_name = "${var.prefix}-imac-scale-up-utility-agent-asg"
+}
+
+# EC2 Instance Status Check Alarm for Utility Agent
+resource "aws_cloudwatch_metric_alarm" "asg_capacity_alarm" {
+  alarm_name          = "${var.prefix}-${var.monitored_agent}-jenkins-agent-asg-zero-capacity-alarm"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = "3"
+  metric_name         = "GroupDesiredCapacity"
+  namespace           = "AWS/AutoScaling"
+  period              = "60"
+  statistic           = "Minimum"
+  threshold           = "1"
+  alarm_description   = "Alert when the ASG desired capacity is 0"
+  alarm_actions       = [aws_sns_topic.jenkins_alerts.arn, data.aws_lambda_function.utility_lambda.arn]
+  ok_actions          = [aws_sns_topic.jenkins_alerts.arn]
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    AutoScalingGroupName = length(data.aws_autoscaling_groups.monitored_agent.names) == 1 ? data.aws_autoscaling_groups.monitored_agent.names[0] : "No unique ASG found"
+  }
+
+  tags = merge(local.tags, {
+    Purpose = "Jenkins agent monitoring"
+  })
+
+  lifecycle {
+    ignore_changes = [dimensions]
+  }
+}
+
+# EFS size >=200 GB Alarm
+resource "aws_cloudwatch_metric_alarm" "efs_storagebytes_high" {
+  alarm_name          = "efs-${module.base_infrastructure.efs_file_system_id}-storagebytes-${var.efs_threshold_gib}GiB-daily"
+  alarm_description   = "Alarm when EFS size >= ${var.efs_threshold_gib} GiB (checked daily, using Maximum)"
+  namespace           = "AWS/EFS"
+  metric_name         = "StorageBytes"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = local.efs_threshold_bytes
+
+  # Check once per day
+  period             = 86400     # 24 hours in seconds
+  statistic          = "Maximum" # Trigger if any sample during the day exceeds threshold
+  evaluation_periods = 1
+
+  dimensions = {
+    FileSystemId = module.base_infrastructure.efs_file_system_id
+    StorageClass = "Total"
+  }
+
+  treat_missing_data = "notBreaching"
+  alarm_actions      = [aws_sns_topic.jenkins_alerts.arn]
+  ok_actions         = [aws_sns_topic.jenkins_alerts.arn]
+}
+
