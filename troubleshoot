@@ -1,17 +1,126 @@
-  + echo 'Running terraform plan...'
-17:04:40  Running terraform plan...
-17:04:40  + terraform plan -no-color --var-file=dev.tfvars -lock=false --out=dev.tfplan
-17:04:43  
-17:04:43  Warning: Deprecated Parameter
-17:04:43  
-17:04:43  The parameter "dynamodb_table" is deprecated. Use parameter "use_lockfile"
-17:04:43  instead.
-17:04:46  
-17:04:46  Error: Reference to undeclared resource
-17:04:46  
-17:04:46    on monitoring.tf line 75, in resource "aws_cloudwatch_log_metric_filter" "jenkins_heartbeat":
-17:04:46    75:   log_group_name = aws_cloudwatch_log_group.jenkins_build_logs[0].name
-17:04:46  
-17:04:46  A managed resource "aws_cloudwatch_log_group" "jenkins_build_logs" has not
-17:04:46  been declared in the root module.
-script returned exit code 1
+
+# Data source to find the agent ASG
+data "aws_autoscaling_groups" "monitored_agent" {
+  filter {
+    name   = "tag:Name"
+    values = ["${var.prefix}-Jenkins Agent - ${var.monitored_agent}"]
+  }
+}
+
+# utility lambda
+data "aws_lambda_function" "utility_lambda" {
+  function_name = "${var.prefix}-imac-scale-up-utility-agent-asg"
+}
+
+# EC2 Instance Status Check Alarm for Utility Agent
+resource "aws_cloudwatch_metric_alarm" "asg_capacity_alarm" {
+  alarm_name          = "${var.prefix}-${var.monitored_agent}-jenkins-agent-asg-zero-capacity-alarm"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = "3"
+  metric_name         = "GroupDesiredCapacity"
+  namespace           = "AWS/AutoScaling"
+  period              = "60"
+  statistic           = "Minimum"
+  threshold           = "1"
+  alarm_description   = "Alert when the ASG desired capacity is 0"
+  alarm_actions       = [aws_sns_topic.jenkins_alerts.arn, data.aws_lambda_function.utility_lambda.arn]
+  ok_actions          = [aws_sns_topic.jenkins_alerts.arn]
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    AutoScalingGroupName = length(data.aws_autoscaling_groups.monitored_agent.names) == 1 ? data.aws_autoscaling_groups.monitored_agent.names[0] : "No unique ASG found"
+  }
+
+  tags = merge(local.tags, {
+    Purpose = "Jenkins agent monitoring"
+  })
+
+  lifecycle {
+    ignore_changes = [dimensions]
+  }
+}
+
+# EFS size >=200 GB Alarm
+resource "aws_cloudwatch_metric_alarm" "efs_storagebytes_high" {
+  alarm_name          = "efs-${module.base_infrastructure.efs_file_system_id}-storagebytes-${var.efs_threshold_gib}GiB-daily"
+  alarm_description   = "Alarm when EFS size >= ${var.efs_threshold_gib} GiB (checked daily, using Maximum)"
+  namespace           = "AWS/EFS"
+  metric_name         = "StorageBytes"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = local.efs_threshold_bytes
+
+  # Check once per day
+  period             = 86400     # 24 hours in seconds
+  statistic          = "Maximum" # Trigger if any sample during the day exceeds threshold
+  evaluation_periods = 1
+
+  dimensions = {
+    FileSystemId = module.base_infrastructure.efs_file_system_id
+    StorageClass = "Total"
+  }
+
+  treat_missing_data = "notBreaching"
+  alarm_actions      = [aws_sns_topic.jenkins_alerts.arn]
+  ok_actions         = [aws_sns_topic.jenkins_alerts.arn]
+}
+
+# ------------------------------------------------------------------------
+# Jenkins CloudWatch heartbeat monitoring
+# Track heartbeat log events received by CloudWatch
+# ------------------------------------------------------------------------
+
+resource "aws_cloudwatch_log_metric_filter" "jenkins_heartbeat" {
+  count = var.enable_cloudwatch_build_logs ? 1 : 0
+
+  name           = "${var.prefix}-jenkins-heartbeat"
+  log_group_name = "/imac/jenkins/${var.prefix}/builds"
+
+  pattern = "JENKINS_CW_HEARTBEAT"
+
+  metric_transformation {
+    name      = "JenkinsHeartbeat"
+    namespace = "IMAC/Jenkins"
+    value     = "1"
+  }
+}
+
+# ------------------------------------------------------------------------
+# Jenkins CloudWatch missing logs alarm
+# Alert when heartbeat logs stop arriving for 5 minutes
+# ------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "jenkins_logs_missing" {
+  count = var.enable_cloudwatch_build_logs ? 1 : 0
+
+  alarm_name = "${var.prefix}-jenkins-cloudwatch-logs-missing"
+
+  alarm_description = "No Jenkins heartbeat logs received in CloudWatch for 5 consecutive minutes. Check Jenkins controller, CloudWatch Agent container, IAM permissions and log delivery."
+
+  namespace           = "IMAC/Jenkins"
+  metric_name         = "JenkinsHeartbeat"
+  statistic           = "Sum"
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 5
+
+  comparison_operator = "LessThanThreshold"
+  threshold           = 1
+
+  treat_missing_data = "breaching"
+
+  alarm_actions = [
+    aws_sns_topic.jenkins_alerts.arn
+  ]
+
+  ok_actions = [
+    aws_sns_topic.jenkins_alerts.arn
+  ]
+
+  insufficient_data_actions = [
+    aws_sns_topic.jenkins_alerts.arn
+  ]
+
+  tags = merge(local.tags, {
+    Purpose = "Jenkins CloudWatch log delivery monitoring"
+  })
+}
