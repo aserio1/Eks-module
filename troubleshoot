@@ -1,126 +1,1004 @@
-
-# Data source to find the agent ASG
-data "aws_autoscaling_groups" "monitored_agent" {
-  filter {
-    name   = "tag:Name"
-    values = ["${var.prefix}-Jenkins Agent - ${var.monitored_agent}"]
-  }
-}
-
-# utility lambda
-data "aws_lambda_function" "utility_lambda" {
-  function_name = "${var.prefix}-imac-scale-up-utility-agent-asg"
-}
-
-# EC2 Instance Status Check Alarm for Utility Agent
-resource "aws_cloudwatch_metric_alarm" "asg_capacity_alarm" {
-  alarm_name          = "${var.prefix}-${var.monitored_agent}-jenkins-agent-asg-zero-capacity-alarm"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = "3"
-  metric_name         = "GroupDesiredCapacity"
-  namespace           = "AWS/AutoScaling"
-  period              = "60"
-  statistic           = "Minimum"
-  threshold           = "1"
-  alarm_description   = "Alert when the ASG desired capacity is 0"
-  alarm_actions       = [aws_sns_topic.jenkins_alerts.arn, data.aws_lambda_function.utility_lambda.arn]
-  ok_actions          = [aws_sns_topic.jenkins_alerts.arn]
-  treat_missing_data  = "breaching"
-
-  dimensions = {
-    AutoScalingGroupName = length(data.aws_autoscaling_groups.monitored_agent.names) == 1 ? data.aws_autoscaling_groups.monitored_agent.names[0] : "No unique ASG found"
-  }
-
-  tags = merge(local.tags, {
-    Purpose = "Jenkins agent monitoring"
-  })
-
-  lifecycle {
-    ignore_changes = [dimensions]
-  }
-}
-
-# EFS size >=200 GB Alarm
-resource "aws_cloudwatch_metric_alarm" "efs_storagebytes_high" {
-  alarm_name          = "efs-${module.base_infrastructure.efs_file_system_id}-storagebytes-${var.efs_threshold_gib}GiB-daily"
-  alarm_description   = "Alarm when EFS size >= ${var.efs_threshold_gib} GiB (checked daily, using Maximum)"
-  namespace           = "AWS/EFS"
-  metric_name         = "StorageBytes"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  threshold           = local.efs_threshold_bytes
-
-  # Check once per day
-  period             = 86400     # 24 hours in seconds
-  statistic          = "Maximum" # Trigger if any sample during the day exceeds threshold
-  evaluation_periods = 1
-
-  dimensions = {
-    FileSystemId = module.base_infrastructure.efs_file_system_id
-    StorageClass = "Total"
-  }
-
-  treat_missing_data = "notBreaching"
-  alarm_actions      = [aws_sns_topic.jenkins_alerts.arn]
-  ok_actions         = [aws_sns_topic.jenkins_alerts.arn]
-}
-
-# ------------------------------------------------------------------------
-# Jenkins CloudWatch heartbeat monitoring
-# Track heartbeat log events received by CloudWatch
-# ------------------------------------------------------------------------
-
-resource "aws_cloudwatch_log_metric_filter" "jenkins_heartbeat" {
-  count = var.enable_cloudwatch_build_logs ? 1 : 0
-
-  name           = "${var.prefix}-jenkins-heartbeat"
-  log_group_name = "/imac/jenkins/${var.prefix}/builds"
-
-  pattern = "JENKINS_CW_HEARTBEAT"
-
-  metric_transformation {
-    name      = "JenkinsHeartbeat"
-    namespace = "IMAC/Jenkins"
-    value     = "1"
-  }
-}
-
-# ------------------------------------------------------------------------
-# Jenkins CloudWatch missing logs alarm
-# Alert when heartbeat logs stop arriving for 5 minutes
-# ------------------------------------------------------------------------
-
-resource "aws_cloudwatch_metric_alarm" "jenkins_logs_missing" {
-  count = var.enable_cloudwatch_build_logs ? 1 : 0
-
-  alarm_name = "${var.prefix}-jenkins-cloudwatch-logs-missing"
-
-  alarm_description = "No Jenkins heartbeat logs received in CloudWatch for 5 consecutive minutes. Check Jenkins controller, CloudWatch Agent container, IAM permissions and log delivery."
-
-  namespace           = "IMAC/Jenkins"
-  metric_name         = "JenkinsHeartbeat"
-  statistic           = "Sum"
-  period              = 60
-  evaluation_periods  = 5
-  datapoints_to_alarm = 5
-
-  comparison_operator = "LessThanThreshold"
-  threshold           = 1
-
-  treat_missing_data = "breaching"
-
-  alarm_actions = [
-    aws_sns_topic.jenkins_alerts.arn
-  ]
-
-  ok_actions = [
-    aws_sns_topic.jenkins_alerts.arn
-  ]
-
-  insufficient_data_actions = [
-    aws_sns_topic.jenkins_alerts.arn
-  ]
-
-  tags = merge(local.tags, {
-    Purpose = "Jenkins CloudWatch log delivery monitoring"
-  })
-}
+57:57  module.scanner_agent_nodes["sia"].aws_iam_role_policy_attachment.scanner[0]: Refreshing state... [id=dev_jenkins_agent_role_sia/arn:aws:iam::213141505949:policy/dev_scanner_agent_sia]
+08:57:57  module.jenkins_controller.aws_autoscaling_group.jenkins_controller_node: Refreshing state... [id=dev-jenkins-asg20251017232325402400000008]
+08:57:58  
+08:57:58  Terraform used the selected providers to generate the following execution
+08:57:58  plan. Resource actions are indicated with the following symbols:
+08:57:58    + create
+08:57:58    ~ update in-place
+08:57:58  
+08:57:58  Terraform will perform the following actions:
+08:57:58  
+08:57:58    # aws_cloudwatch_log_metric_filter.jenkins_heartbeat[0] will be created
+08:57:58    + resource "aws_cloudwatch_log_metric_filter" "jenkins_heartbeat" {
+08:57:58        + apply_on_transformed_logs = (known after apply)
+08:57:58        + id                        = (known after apply)
+08:57:58        + log_group_name            = "/imac/jenkins/dev/builds"
+08:57:58        + name                      = "dev-jenkins-heartbeat"
+08:57:58        + pattern                   = "JENKINS_CW_HEARTBEAT"
+08:57:58        + region                    = "us-east-1"
+08:57:58  
+08:57:58        + metric_transformation {
+08:57:58            + name      = "JenkinsHeartbeat"
+08:57:58            + namespace = "IMAC/Jenkins"
+08:57:58            + unit      = "None"
+08:57:58            + value     = "1"
+08:57:58          }
+08:57:58      }
+08:57:58  
+08:57:58    # aws_cloudwatch_metric_alarm.jenkins_logs_missing[0] will be created
+08:57:58    + resource "aws_cloudwatch_metric_alarm" "jenkins_logs_missing" {
+08:57:58        + actions_enabled                       = true
+08:57:58        + alarm_actions                         = [
+08:57:58            + "arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts",
+08:57:58          ]
+08:57:58        + alarm_description                     = "No Jenkins heartbeat logs received in CloudWatch for 5 consecutive minutes. Check Jenkins controller, CloudWatch Agent container, IAM permissions and log delivery."
+08:57:58        + alarm_name                            = "dev-jenkins-cloudwatch-logs-missing"
+08:57:58        + arn                                   = (known after apply)
+08:57:58        + comparison_operator                   = "LessThanThreshold"
+08:57:58        + datapoints_to_alarm                   = 5
+08:57:58        + evaluate_low_sample_count_percentiles = (known after apply)
+08:57:58        + evaluation_periods                    = 5
+08:57:58        + id                                    = (known after apply)
+08:57:58        + insufficient_data_actions             = [
+08:57:58            + "arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts",
+08:57:58          ]
+08:57:58        + metric_name                           = "JenkinsHeartbeat"
+08:57:58        + namespace                             = "IMAC/Jenkins"
+08:57:58        + ok_actions                            = [
+08:57:58            + "arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts",
+08:57:58          ]
+08:57:58        + period                                = 60
+08:57:58        + region                                = "us-east-1"
+08:57:58        + statistic                             = "Sum"
+08:57:58        + tags                                  = {
+08:57:58            + "ApplicationName" = "IMAC Jenkins"
+08:57:58            + "BusinessUnit"    = "cdo"
+08:57:58            + "Created"         = "2026-01-19T17:20:15Z"
+08:57:58            + "CreatedBy"       = "terraform"
+08:57:58            + "Environment"     = "dev"
+08:57:58            + "FISMABoundary"   = "dsgss"
+08:57:58            + "Owner"           = "Katie Rose"
+08:57:58            + "OwnerContact"    = "imac@oig.hhs.gov"
+08:57:58            + "Project"         = "imac"
+08:57:58            + "Purpose"         = "Jenkins CloudWatch log delivery monitoring"
+08:57:58            + "Version"         = "1.0"
+08:57:58          }
+08:57:58        + tags_all                              = {
+08:57:58            + "ApplicationName" = "IMAC Jenkins"
+08:57:58            + "BusinessUnit"    = "cdo"
+08:57:58            + "Created"         = "2026-01-19T17:20:15Z"
+08:57:58            + "CreatedBy"       = "terraform"
+08:57:58            + "Environment"     = "dev"
+08:57:58            + "FISMABoundary"   = "dsgss"
+08:57:58            + "Owner"           = "Katie Rose"
+08:57:58            + "OwnerContact"    = "imac@oig.hhs.gov"
+08:57:58            + "Project"         = "imac"
+08:57:58            + "Purpose"         = "Jenkins CloudWatch log delivery monitoring"
+08:57:58            + "Version"         = "1.0"
+08:57:58          }
+08:57:58        + threshold                             = 1
+08:57:58        + treat_missing_data                    = "breaching"
+08:57:58      }
+08:57:58  
+08:57:58    # aws_s3_bucket.jenkins_binaries will be updated in-place
+08:57:58    ~ resource "aws_s3_bucket" "jenkins_binaries" {
+08:57:58          id                          = "jenkins-binaries-213141505949"
+08:57:58        ~ tags                        = {
+08:57:58            - "Created"     = "2026-01-19T17:45:45Z" -> null
+08:57:58            - "Environment" = "prod" -> null
+08:57:58          }
+08:57:58        ~ tags_all                    = {
+08:57:58            ~ "Created"         = "2026-01-19T17:45:45Z" -> "2026-01-19T17:20:15Z"
+08:57:58            ~ "Environment"     = "prod" -> "dev"
+08:57:58              # (8 unchanged elements hidden)
+08:57:58          }
+08:57:58          # (13 unchanged attributes hidden)
+08:57:58  
+08:57:58          # (5 unchanged blocks hidden)
+08:57:58      }
+08:57:58  
+08:57:58    # module.jenkins_controller.aws_autoscaling_group.jenkins_controller_node will be updated in-place
+08:57:58    ~ resource "aws_autoscaling_group" "jenkins_controller_node" {
+08:57:58          id                               = "dev-jenkins-asg20251017232325402400000008"
+08:57:58          name                             = "dev-jenkins-asg20251017232325402400000008"
+08:57:58          # (32 unchanged attributes hidden)
+08:57:58  
+08:57:58        ~ launch_template {
+08:57:58              id      = "lt-083cc52ecc250930d"
+08:57:58              name    = "dev-jenkins-controller20251017232319827700000006"
+08:57:58            ~ version = "95" -> (known after apply)
+08:57:58          }
+08:57:58  
+08:57:58          # (16 unchanged blocks hidden)
+08:57:58      }
+08:57:58  
+08:57:58    # module.jenkins_controller.aws_launch_template.jenkins_controller_node will be updated in-place
+08:57:58    ~ resource "aws_launch_template" "jenkins_controller_node" {
+08:57:58          id                                   = "lt-083cc52ecc250930d"
+08:57:58        ~ latest_version                       = 95 -> (known after apply)
+08:57:58          name                                 = "dev-jenkins-controller20251017232319827700000006"
+08:57:58          tags                                 = {}
+08:57:58        ~ user_data                            = "IyEvYmluL2Jhc2gKc2V0IC1ldW8gcGlwZWZhaWwKIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKIyBqZW5raW5zX2NvbnRyb2xsZXIvc2NyaXB0cy91c2VyX2RhdGEudHBsCiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjCgojIFJlZGlyZWN0IGFsbCBvdXRwdXQgdG8gdXNlci1kYXRhIGxvZyBhbmQgY29uc29sZQpleGVjID4gPih0ZWUgL3Zhci9sb2cvdXNlci1kYXRhLmxvZyB8IGxvZ2dlciAtdCB1c2VyLWRhdGEgLXMgMj4vZGV2L2NvbnNvbGUpIDI+JjEKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgQW1hem9uIExpbnV4IDIgcm9vdCB2b2x1bWUgYXV0by1leHBhbmRzIHdpdGggRUMyLXByb3ZpZGVkIEFNSQojIExWTSByZXNpemUgbm90IG5lZWRlZCBhbmQgd2lsbCBmYWlsIOKAkyByZW1vdmluZyBsZWdhY3kgbG9naWMKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KCiMgVXBkYXRlIGFuZCBpbnN0YWxsIGVzc2VudGlhbCBwYWNrYWdlcwpkbmYgLXkgdXBncmFkZSAtLWV4Y2x1ZGU9a2VybmVsKgpkbmYgaW5zdGFsbCAteSBcCiAgYXdzY2xpIFwKICBqcSBcCiAgdW56aXAgXAogIHdnZXQgXAogIGRvY2tlciBcCiAgYW1hem9uLWVmcy11dGlscwoKIyBEb2NrZXIgaXMgYXZhaWxhYmxlIGluIHRoZSBkZWZhdWx0IEFMMjAyMyBwYWNrYWdlIHJlcG9zaXRvcnksCiMgc28geW91IGNhbiBpbnN0YWxsIGl0IGRpcmVjdGx5IHdpdGggZG5mLgpzeXN0ZW1jdGwgZW5hYmxlIGRvY2tlcgpzeXN0ZW1jdGwgc3RhcnQgZG9ja2VyCgojIENyZWF0ZSBKZW5raW5zIHVzZXIgYW5kIG1vdW50IGRpcmVjdG9yeQpncm91cGFkZCAtZyAyMDAwIGplbmtpbnMgXAogICYmIHVzZXJhZGQgLU4gLXUgMjAwMCAtZyAyMDAwIC1sIC1tIC1zIC9iaW4vYmFzaCBqZW5raW5zCgojIENyZWF0ZSBtb3VudCBwb2ludCBhbmQgbW91bnQgRUZTIFdyaXRlIHRvIGZzdGFiIHNvIGl0IHBlcnNpc3RzIGFjcm9zcyByZWJvb3RzCm1rZGlyIC1wIC9qZW5raW5zX2pvYnMKZWNobyAidXMtZWFzdC0xYy5mcy0wMjg1YWE1YTY0ZDY0NDdhYy5lZnMudXMtZWFzdC0xLmFtYXpvbmF3cy5jb206LyAvamVua2luc19qb2JzIGVmcyBfbmV0ZGV2LHRscyAwIDAiID4+IC9ldGMvZnN0YWIKbW91bnQgLWEKCmNob3duIGplbmtpbnM6amVua2lucyAvamVua2luc19qb2JzCgojIExvZ2luIHRvIEVDUgphd3MgZWNyIGdldC1sb2dpbi1wYXNzd29yZCAtLXJlZ2lvbiB1cy1lYXN0LTEgfCBkb2NrZXIgbG9naW4gLS11c2VybmFtZSBBV1MgLS1wYXNzd29yZC1zdGRpbiAyMTMxNDE1MDU5NDkuZGtyLmVjci51cy1lYXN0LTEuYW1hem9uYXdzLmNvbQoKIyBSdW4gSmVua2lucyBtYWluIGNvbnRhaW5lcgplY2hvICJSdW5uaW5nIHRoZSBqZW5raW5zIGNvbnRyb2xsZXIgY29udGFpbmVyLi4uIgpkb2NrZXIgcnVuIC1kIC1wIDgwODAtODA4ODo4MDgwLTgwODggXAogICAgLXAgODAyMjoyMiBcCiAgICAtZSBKRU5LSU5TX0FETUlOX1BBU1NXT1JEPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIHN2Yy1qZW5raW5zLWFnZW50LXBhc3N3b3JkIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgTERBUF9QQVNTV09SRD0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBsZGFwLXBhc3N3b3JkIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgU09OQVJRVUJFX1RPS0VOPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIHNvbmFycXViZS10b2tlbiAtLXJlZ2lvbiB1cy1lYXN0LTEgLS1xdWVyeSBTZWNyZXRTdHJpbmcgLS1vdXRwdXQgdGV4dCkiIFwKICAgIC1lIE5FWFVTX1VTRVI9IiQoYXdzIHNlY3JldHNtYW5hZ2VyIGdldC1zZWNyZXQtdmFsdWUgLS1zZWNyZXQtaWQgTkVYVVNfU0VSVklDRV9BQ0NPVU5UIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0IHwganEgLXIgJy51c2VybmFtZScpIiBcCiAgICAtZSBORVhVU19QQVNTV09SRD0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBORVhVU19TRVJWSUNFX0FDQ09VTlQgLS1yZWdpb24gdXMtZWFzdC0xIC0tcXVlcnkgU2VjcmV0U3RyaW5nIC0tb3V0cHV0IHRleHQgfCBqcSAtciAnLnBhc3N3b3JkJykiIFwKICAgIC1lIFNTSF9HSVRIVUJfU1ZDX0tFWT0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBzc2gtZ2l0aHViLXN2Yy1rZXkgLS1yZWdpb24gdXMtZWFzdC0xIC0tcXVlcnkgU2VjcmV0U3RyaW5nIC0tb3V0cHV0IHRleHQpIiBcCiAgICAtZSBHSVRIVUJfU1ZDX1RPS0VOPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIGltYWMtZ2l0aHViLXN2Yy1hY2NvdW50LXRva2VuIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgSkVOS0lOU19VUkw9aHR0cHM6Ly9kZXYuamVua2lucy5hd3MuaGhzb2lnLmdvdi8gXAogICAgLWUgSkVOS0lOU19JRFBfRU5USVRZX0lEPUplbmtpbnNTUCBcCiAgICAtZSBKRU5LSU5TX0lEUF9NRVRBREFUQV9VUkw9aHR0cHM6Ly9sb2dpbi5taWNyb3NvZnRvbmxpbmUuY29tL2RhZDVmODk0LTUzMDktNGRmNi05ZTQ4LTIzMmZkZjE1MDJhYi9mZWRlcmF0aW9ubWV0YWRhdGEvMjAwNy0wNi9mZWRlcmF0aW9ubWV0YWRhdGEueG1sP2FwcGlkPWNkMTMxNDFlLTVlM2YtNDk4Yi05ODE1LTc0MmUyMDQwMjg1YSBcCiAgICAtLW5hbWU9amVua2lucyBcCiAgICAtLXJlc3RhcnQgYWx3YXlzIFwKICAgIC12IC9qZW5raW5zX2pvYnM6L2hvbWUvamVua2lucy9qb2JzIFwKICAgIDIxMzE0MTUwNTk0OS5ka3IuZWNyLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL29pZy9pbWFjL2plbmtpbnMvamVua2lucy1jb250cm9sbGVyOmIzYWI1OThlMjEwMTZkNjA1MmIyYTljZjMyYzNiMGUxZGQ0N2MzMTYKCgoKZWNobyAiQ29uZmlndXJpbmcgYW5kIHJ1bm5pbmcgY2xvdWR3YXRjaCBhZ2VudCBjb250YWluZXIuLi4iCgojIFN0YXRlIGlzIHJlY29yZGVkIG9uIHRoZSBFRlMKbWtkaXIgLXAgL2plbmtpbnNfam9icy8uamVua2lucy1jd2FnZW50L3N0YXRlCm1rZGlyIC1wIC9vcHQvamVua2lucy1jd2FnZW50CgpjYXQgPi9vcHQvamVua2lucy1jd2FnZW50L2NvbmZpZy5qc29uIDw8J0VPRicKewogICJhZ2VudCI6IHsKICAgICJydW5fYXNfdXNlciI6ICJyb290IiwKICAgICJsb2dmaWxlIjogIi9vcHQvYXdzL2FtYXpvbi1jbG91ZHdhdGNoLWFnZW50L2xvZ3MvamVua2lucy1jd2FnZW50LmxvZyIKICB9LAogICJsb2dzIjogewogICAgImZvcmNlX2ZsdXNoX2ludGVydmFsIjogNSwKICAgICJsb2dzX2NvbGxlY3RlZCI6IHsKICAgICAgImZpbGVzIjogewogICAgICAgICJjb2xsZWN0X2xpc3QiOiBbCiAgICAgICAgICB7CiAgICAgICAgICAgICJmaWxlX3BhdGgiOiAiL2plbmtpbnNfam9icy8qKi9idWlsZHMvWzAtOV0qL2xvZyIsCiAgICAgICAgICAgICJsb2dfZ3JvdXBfbmFtZSI6ICIvaW1hYy9qZW5raW5zL2Rldi9idWlsZHMiLAogICAgICAgICAgICAibG9nX3N0cmVhbV9uYW1lIjogImplbmtpbnMtY29udHJvbGxlci17aW5zdGFuY2VfaWR9IiwKICAgICAgICAgICAgImVuY29kaW5nIjogInV0Zi04IgogICAgICAgICAgfQogICAgICAgIF0KICAgICAgfQogICAgfQogIH0KfQoKRU9GCgpkb2NrZXIgcm0gLWYgamVua2lucy1jd2FnZW50IDI+L2Rldi9udWxsIHx8IHRydWUKCmRvY2tlciBydW4gLWQgXAogIC0tbmFtZSBqZW5raW5zLWN3YWdlbnQgXAogIC0tcmVzdGFydCB1bmxlc3Mtc3RvcHBlZCBcCiAgLWUgQVdTX1JFR0lPTj11cy1lYXN0LTEgXAogIC12IC9vcHQvamVua2lucy1jd2FnZW50L2NvbmZpZy5qc29uOi9ldGMvY3dhZ2VudGNvbmZpZy9jb25maWcuanNvbjpybyBcCiAgLXYgL2plbmtpbnNfam9icy8uamVua2lucy1jd2FnZW50L3N0YXRlOi9vcHQvYXdzL2FtYXpvbi1jbG91ZHdhdGNoLWFnZW50L2xvZ3Mvc3RhdGUgXAogIC12IC9qZW5raW5zX2pvYnM6L2plbmtpbnNfam9iczpybyBcCiAgMjEzMTQxNTA1OTQ5LmRrci5lY3IudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZWNyLXB1YmxpYy9jbG91ZHdhdGNoLWFnZW50L2Nsb3Vkd2F0Y2gtYWdlbnQ6bGF0ZXN0CgoKCmVjaG8gIlVzZXIgZGF0YSBjb21wbGV0ZWQgc3VjY2Vzc2Z1bGx5LiIK" -> "IyEvYmluL2Jhc2gKc2V0IC1ldW8gcGlwZWZhaWwKIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKIyBqZW5raW5zX2NvbnRyb2xsZXIvc2NyaXB0cy91c2VyX2RhdGEudHBsCiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjCgojIFJlZGlyZWN0IGFsbCBvdXRwdXQgdG8gdXNlci1kYXRhIGxvZyBhbmQgY29uc29sZQpleGVjID4gPih0ZWUgL3Zhci9sb2cvdXNlci1kYXRhLmxvZyB8IGxvZ2dlciAtdCB1c2VyLWRhdGEgLXMgMj4vZGV2L2NvbnNvbGUpIDI+JjEKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgQW1hem9uIExpbnV4IDIgcm9vdCB2b2x1bWUgYXV0by1leHBhbmRzIHdpdGggRUMyLXByb3ZpZGVkIEFNSQojIExWTSByZXNpemUgbm90IG5lZWRlZCBhbmQgd2lsbCBmYWlsIOKAkyByZW1vdmluZyBsZWdhY3kgbG9naWMKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KCiMgVXBkYXRlIGFuZCBpbnN0YWxsIGVzc2VudGlhbCBwYWNrYWdlcwpkbmYgLXkgdXBncmFkZSAtLWV4Y2x1ZGU9a2VybmVsKgpkbmYgaW5zdGFsbCAteSBcCiAgYXdzY2xpIFwKICBqcSBcCiAgdW56aXAgXAogIHdnZXQgXAogIGRvY2tlciBcCiAgYW1hem9uLWVmcy11dGlscwoKIyBEb2NrZXIgaXMgYXZhaWxhYmxlIGluIHRoZSBkZWZhdWx0IEFMMjAyMyBwYWNrYWdlIHJlcG9zaXRvcnksCiMgc28geW91IGNhbiBpbnN0YWxsIGl0IGRpcmVjdGx5IHdpdGggZG5mLgpzeXN0ZW1jdGwgZW5hYmxlIGRvY2tlcgpzeXN0ZW1jdGwgc3RhcnQgZG9ja2VyCgojIENyZWF0ZSBKZW5raW5zIHVzZXIgYW5kIG1vdW50IGRpcmVjdG9yeQpncm91cGFkZCAtZyAyMDAwIGplbmtpbnMgXAogICYmIHVzZXJhZGQgLU4gLXUgMjAwMCAtZyAyMDAwIC1sIC1tIC1zIC9iaW4vYmFzaCBqZW5raW5zCgojIENyZWF0ZSBtb3VudCBwb2ludCBhbmQgbW91bnQgRUZTIFdyaXRlIHRvIGZzdGFiIHNvIGl0IHBlcnNpc3RzIGFjcm9zcyByZWJvb3RzCm1rZGlyIC1wIC9qZW5raW5zX2pvYnMKZWNobyAidXMtZWFzdC0xYy5mcy0wMjg1YWE1YTY0ZDY0NDdhYy5lZnMudXMtZWFzdC0xLmFtYXpvbmF3cy5jb206LyAvamVua2luc19qb2JzIGVmcyBfbmV0ZGV2LHRscyAwIDAiID4+IC9ldGMvZnN0YWIKbW91bnQgLWEKCmNob3duIGplbmtpbnM6amVua2lucyAvamVua2luc19qb2JzCgojIExvZ2luIHRvIEVDUgphd3MgZWNyIGdldC1sb2dpbi1wYXNzd29yZCAtLXJlZ2lvbiB1cy1lYXN0LTEgfCBkb2NrZXIgbG9naW4gLS11c2VybmFtZSBBV1MgLS1wYXNzd29yZC1zdGRpbiAyMTMxNDE1MDU5NDkuZGtyLmVjci51cy1lYXN0LTEuYW1hem9uYXdzLmNvbQoKIyBSdW4gSmVua2lucyBtYWluIGNvbnRhaW5lcgplY2hvICJSdW5uaW5nIHRoZSBqZW5raW5zIGNvbnRyb2xsZXIgY29udGFpbmVyLi4uIgpkb2NrZXIgcnVuIC1kIC1wIDgwODAtODA4ODo4MDgwLTgwODggXAogICAgLXAgODAyMjoyMiBcCiAgICAtZSBKRU5LSU5TX0FETUlOX1BBU1NXT1JEPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIHN2Yy1qZW5raW5zLWFnZW50LXBhc3N3b3JkIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgTERBUF9QQVNTV09SRD0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBsZGFwLXBhc3N3b3JkIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgU09OQVJRVUJFX1RPS0VOPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIHNvbmFycXViZS10b2tlbiAtLXJlZ2lvbiB1cy1lYXN0LTEgLS1xdWVyeSBTZWNyZXRTdHJpbmcgLS1vdXRwdXQgdGV4dCkiIFwKICAgIC1lIE5FWFVTX1VTRVI9IiQoYXdzIHNlY3JldHNtYW5hZ2VyIGdldC1zZWNyZXQtdmFsdWUgLS1zZWNyZXQtaWQgTkVYVVNfU0VSVklDRV9BQ0NPVU5UIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0IHwganEgLXIgJy51c2VybmFtZScpIiBcCiAgICAtZSBORVhVU19QQVNTV09SRD0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBORVhVU19TRVJWSUNFX0FDQ09VTlQgLS1yZWdpb24gdXMtZWFzdC0xIC0tcXVlcnkgU2VjcmV0U3RyaW5nIC0tb3V0cHV0IHRleHQgfCBqcSAtciAnLnBhc3N3b3JkJykiIFwKICAgIC1lIFNTSF9HSVRIVUJfU1ZDX0tFWT0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBzc2gtZ2l0aHViLXN2Yy1rZXkgLS1yZWdpb24gdXMtZWFzdC0xIC0tcXVlcnkgU2VjcmV0U3RyaW5nIC0tb3V0cHV0IHRleHQpIiBcCiAgICAtZSBHSVRIVUJfU1ZDX1RPS0VOPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIGltYWMtZ2l0aHViLXN2Yy1hY2NvdW50LXRva2VuIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgSkVOS0lOU19VUkw9aHR0cHM6Ly9kZXYuamVua2lucy5hd3MuaGhzb2lnLmdvdi8gXAogICAgLWUgSkVOS0lOU19JRFBfRU5USVRZX0lEPUplbmtpbnNTUCBcCiAgICAtZSBKRU5LSU5TX0lEUF9NRVRBREFUQV9VUkw9aHR0cHM6Ly9sb2dpbi5taWNyb3NvZnRvbmxpbmUuY29tL2RhZDVmODk0LTUzMDktNGRmNi05ZTQ4LTIzMmZkZjE1MDJhYi9mZWRlcmF0aW9ubWV0YWRhdGEvMjAwNy0wNi9mZWRlcmF0aW9ubWV0YWRhdGEueG1sP2FwcGlkPWNkMTMxNDFlLTVlM2YtNDk4Yi05ODE1LTc0MmUyMDQwMjg1YSBcCiAgICAtLW5hbWU9amVua2lucyBcCiAgICAtLXJlc3RhcnQgYWx3YXlzIFwKICAgIC12IC9qZW5raW5zX2pvYnM6L2hvbWUvamVua2lucy9qb2JzIFwKICAgIDIxMzE0MTUwNTk0OS5ka3IuZWNyLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL29pZy9pbWFjL2plbmtpbnMvamVua2lucy1jb250cm9sbGVyOmIzYWI1OThlMjEwMTZkNjA1MmIyYTljZjMyYzNiMGUxZGQ0N2MzMTYKCgoKZWNobyAiQ29uZmlndXJpbmcgYW5kIHJ1bm5pbmcgY2xvdWR3YXRjaCBhZ2VudCBjb250YWluZXIuLi4iCgojIFN0YXRlIGlzIHJlY29yZGVkIG9uIHRoZSBFRlMKbWtkaXIgLXAgL2plbmtpbnNfam9icy8uamVua2lucy1jd2FnZW50L3N0YXRlCm1rZGlyIC1wIC9vcHQvamVua2lucy1jd2FnZW50CgpjYXQgPi9vcHQvamVua2lucy1jd2FnZW50L2NvbmZpZy5qc29uIDw8J0VPRicKewogICJhZ2VudCI6IHsKICAgICJydW5fYXNfdXNlciI6ICJyb290IiwKICAgICJsb2dmaWxlIjogIi9vcHQvYXdzL2FtYXpvbi1jbG91ZHdhdGNoLWFnZW50L2xvZ3MvamVua2lucy1jd2FnZW50LmxvZyIKICB9LAogICJsb2dzIjogewogICAgImZvcmNlX2ZsdXNoX2ludGVydmFsIjogNSwKICAgICJsb2dzX2NvbGxlY3RlZCI6IHsKICAgICAgImZpbGVzIjogewogICAgICAgICJjb2xsZWN0X2xpc3QiOiBbCiAgICAgICAgICB7CiAgICAgICAgICAgICJmaWxlX3BhdGgiOiAiL2plbmtpbnNfam9icy8qKi9idWlsZHMvWzAtOV0qL2xvZyIsCiAgICAgICAgICAgICJsb2dfZ3JvdXBfbmFtZSI6ICIvaW1hYy9qZW5raW5zL2Rldi9idWlsZHMiLAogICAgICAgICAgICAibG9nX3N0cmVhbV9uYW1lIjogImplbmtpbnMtY29udHJvbGxlci17aW5zdGFuY2VfaWR9IiwKICAgICAgICAgICAgImVuY29kaW5nIjogInV0Zi04IgogICAgICAgICAgfSwKICAgICAgICAgIHsKICAgICAgICAgICAgImZpbGVfcGF0aCI6ICIvamVua2luc19qb2JzLy5qZW5raW5zLWN3YWdlbnQvaGVhcnRiZWF0LmxvZyIsCiAgICAgICAgICAgICJsb2dfZ3JvdXBfbmFtZSI6ICIvaW1hYy9qZW5raW5zL2Rldi9idWlsZHMiLAogICAgICAgICAgICAibG9nX3N0cmVhbV9uYW1lIjogImplbmtpbnMtaGVhcnRiZWF0LXtpbnN0YW5jZV9pZH0iLAogICAgICAgICAgICAiZW5jb2RpbmciOiAidXRmLTgiCiAgICAgICAgICB9CiAgICAgICAgXQogICAgICB9CiAgICB9CiAgfQp9CgpFT0YKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgSmVua2lucyBDbG91ZFdhdGNoIGhlYXJ0YmVhdCBtb25pdG9yaW5nCiMgR2VuZXJhdGUgYSBoZWFydGJlYXQgZXZlcnkgbWludXRlIHRvIHZlcmlmeSBsb2cgZGVsaXZlcnkKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KCmVjaG8gIkNvbmZpZ3VyaW5nIEplbmtpbnMgQ2xvdWRXYXRjaCBoZWFydGJlYXQuLi4iCgojIEluc3RhbGwgYW5kIGVuYWJsZSBjcm9uCmRuZiBpbnN0YWxsIC15IGNyb25pZQpzeXN0ZW1jdGwgZW5hYmxlIC0tbm93IGNyb25kCgojIENyZWF0ZSBsb2NhbCBoZWFydGJlYXQgZGlyZWN0b3J5Cm1rZGlyIC1wIC9vcHQvamVua2lucy1jd2FnZW50L2hlYXJ0YmVhdAoKdG91Y2ggL29wdC9qZW5raW5zLWN3YWdlbnQvaGVhcnRiZWF0L2hlYXJ0YmVhdC5sb2cKCmNobW9kIDc1NSAvb3B0L2plbmtpbnMtY3dhZ2VudC9oZWFydGJlYXQKY2htb2QgNjQ0IC9vcHQvamVua2lucy1jd2FnZW50L2hlYXJ0YmVhdC9oZWFydGJlYXQubG9nCgojIENyZWF0ZSBoZWFydGJlYXQgc2NyaXB0CmNhdCA+IC91c3IvbG9jYWwvYmluL2plbmtpbnMtY3ctaGVhcnRiZWF0LnNoIDw8J0VPRicKIyEvYmluL2Jhc2gKCmVjaG8gIiQoZGF0ZSAtdSArJVktJW0tJWRUJUg6JU06JVNaKSBKRU5LSU5TX0NXX0hFQVJUQkVBVCIgXAogID4+IC9vcHQvamVua2lucy1jd2FnZW50L2hlYXJ0YmVhdC9oZWFydGJlYXQubG9nCkVPRgoKY2htb2QgNzU1IC91c3IvbG9jYWwvYmluL2plbmtpbnMtY3ctaGVhcnRiZWF0LnNoCgojIFNjaGVkdWxlIGhlYXJ0YmVhdCBldmVyeSBtaW51dGUKY2F0ID4gL2V0Yy9jcm9uLmQvamVua2lucy1jdy1oZWFydGJlYXQgPDwnRU9GJwoqICogKiAqICogcm9vdCAvdXNyL2xvY2FsL2Jpbi9qZW5raW5zLWN3LWhlYXJ0YmVhdC5zaApFT0YKCmNobW9kIDY0NCAvZXRjL2Nyb24uZC9qZW5raW5zLWN3LWhlYXJ0YmVhdAoKIyBHZW5lcmF0ZSBpbml0aWFsIGhlYXJ0YmVhdAovdXNyL2xvY2FsL2Jpbi9qZW5raW5zLWN3LWhlYXJ0YmVhdC5zaAoKZWNobyAiSmVua2lucyBDbG91ZFdhdGNoIGhlYXJ0YmVhdCBjb25maWd1cmVkIHN1Y2Nlc3NmdWxseS4iCgojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQojIFN0YXJ0IENsb3VkV2F0Y2ggQWdlbnQgY29udGFpbmVyCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgpkb2NrZXIgcm0gLWYgamVua2lucy1jd2FnZW50IDI+L2Rldi9udWxsIHx8IHRydWUKCmRvY2tlciBydW4gLWQgXAogIC0tbmFtZSBqZW5raW5zLWN3YWdlbnQgXAogIC0tcmVzdGFydCB1bmxlc3Mtc3RvcHBlZCBcCiAgLWUgQVdTX1JFR0lPTj11cy1lYXN0LTEgXAogIC12IC9vcHQvamVua2lucy1jd2FnZW50L2NvbmZpZy5qc29uOi9ldGMvY3dhZ2VudGNvbmZpZy9jb25maWcuanNvbjpybyBcCiAgLXYgL2plbmtpbnNfam9icy8uamVua2lucy1jd2FnZW50L3N0YXRlOi9vcHQvYXdzL2FtYXpvbi1jbG91ZHdhdGNoLWFnZW50L2xvZ3Mvc3RhdGUgXAogIC12IC9qZW5raW5zX2pvYnM6L2plbmtpbnNfam9iczpybyBcCiAgLXYgL29wdC9qZW5raW5zLWN3YWdlbnQvaGVhcnRiZWF0Oi9vcHQvamVua2lucy1jd2FnZW50L2hlYXJ0YmVhdDpybyBcCiAgMjEzMTQxNTA1OTQ5LmRrci5lY3IudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZWNyLXB1YmxpYy9jbG91ZHdhdGNoLWFnZW50L2Nsb3Vkd2F0Y2gtYWdlbnQ6bGF0ZXN0CgoKCmVjaG8gIlVzZXIgZGF0YSBjb21wbGV0ZWQgc3VjY2Vzc2Z1bGx5LiIK"
+08:57:58          # (17 unchanged attributes hidden)
+08:57:58  
+08:57:58          # (4 unchanged blocks hidden)
+08:57:58      }
+08:57:58  
+08:57:58  Plan: 2 to add, 3 to change, 0 to destroy.
+08:57:58  
+08:57:58  ─────────────────────────────────────────────────────────────────────────────
+08:57:58  
+08:57:58  Saved the plan to: dev.tfplan
+08:57:58  
+08:57:58  To perform exactly these actions, run the following command to apply:
+08:57:58      terraform apply "dev.tfplan"
+08:57:58  [Pipeline] }
+08:57:58  [Pipeline] // withEnv
+08:57:58  [Pipeline] }
+08:57:58  [Pipeline] // dir
+08:57:58  [Pipeline] }
+08:57:58  [Pipeline] // stage
+08:57:59  [Pipeline] }
+08:57:59  [Pipeline] // ws
+08:57:59  [Pipeline] }
+08:57:59  [Pipeline] // node
+08:57:59  [JTE][@AfterStep - governance/infra_policy_check.call]
+08:57:59  [Pipeline] node
+08:57:59  Running on imac in /home/jenkins/workspace/s_Infrastructure_Scanning_PR-297
+08:57:59  [Pipeline] {
+08:57:59  [Pipeline] ws
+08:57:59  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Infrastructure Scanning/PR-297/2
+08:57:59  [Pipeline] {
+08:58:00  [Pipeline] stage
+08:58:00  [Pipeline] { (Governance: Infra Policy check)
+08:58:00  [Pipeline] dir
+08:58:00  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Infrastructure Scanning/PR-297/2/infrastructure/terraform
+08:58:00  [Pipeline] {
+08:58:00  [Pipeline] sh ([Get Current Timestamp])
+08:58:00  + date +%s
+08:58:00  [Pipeline] sh ([Get Enforcement Timestamp])
+08:58:01  + date -d 2026-05-01 +%s
+08:58:01  [Pipeline] fileExists
+08:58:01  [Pipeline] readFile
+08:58:01  [Pipeline] echo
+08:58:01  WARNING: Terraform Plan policy checks enforcement begins 2026-05-01!
+08:58:01  [Pipeline] withEnv
+08:58:01  [Pipeline] {
+08:58:01  [Pipeline] sh ([Execute Infrastructure Policy Check] - ${aws_profile}.tfplan)
+08:58:02  [GOVERNANCE] Starting OPA policy evaluation...
+08:58:02  [GOVERNANCE] Policies Bundle: opa/policies
+08:58:02  [GOVERNANCE] Input File: dev-tfplan.json
+08:58:02  [GOVERNANCE] Decision Path: cdo/terraform/required_default_tagging/deny
+08:58:02  [GOVERNANCE] Policies Branch: main
+08:58:08  Cloning into 'opa'...
+08:58:09  Your branch is up to date with 'origin/main'.
+08:58:09  [GOVERNANCE] Loading tagging configuration from dev-ImacConfigTable...
+08:58:10  [GOVERNANCE] OPA tagging data generated successfully.
+08:58:10  [GOVERNANCE] Executing OPA policy...
+08:58:11  {
+08:58:11    "result": [
+08:58:11      {
+08:58:11        "decision_id": "fd6f1bb5-927e-4b14-b325-58bc5a0d337f",
+08:58:11        "path": "dev-tfplan.json",
+08:58:11        "result": []
+08:58:11      }
+08:58:11    ]
+08:58:11  }
+08:58:11  [GOVERNANCE] OPA policy check PASSED: cdo/terraform/required_default_tagging/deny
+08:58:11  [GOVERNANCE] OPA policy evaluation complete.
+08:58:11  [Pipeline] }
+08:58:11  [Pipeline] // withEnv
+08:58:11  [Pipeline] }
+08:58:11  [Pipeline] // dir
+08:58:11  [Pipeline] }
+08:58:11  [Pipeline] // stage
+08:58:11  [Pipeline] }
+08:58:11  [Pipeline] // ws
+08:58:11  [Pipeline] }
+08:58:12  [Pipeline] // node
+08:58:12  [JTE][Step - terraform/plan_infrastructure.call(ApplicationEnvironment)]
+08:58:12  [Pipeline] node
+08:58:12  Running on imac in /home/jenkins/workspace/s_Infrastructure_Scanning_PR-297
+08:58:12  [Pipeline] {
+08:58:12  [Pipeline] ws
+08:58:12  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Infrastructure Scanning/PR-297/2
+08:58:12  [Pipeline] {
+08:58:12  [Pipeline] stage
+08:58:12  [Pipeline] { (Terraform Plan: prod)
+08:58:12  [Pipeline] dir
+08:58:12  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Infrastructure Scanning/PR-297/2/infrastructure/terraform
+08:58:12  [Pipeline] {
+08:58:13  Did you forget the `def` keyword? JTE_terraform_plan_infrastructure seems to be setting a field named tf_params (to a value of type String) which could lead to memory leaks or other issues.
+08:58:13  Did you forget the `def` keyword? JTE_terraform_plan_infrastructure seems to be setting a field named s3_key_param (to a value of type String) which could lead to memory leaks or other issues.
+08:58:13  Did you forget the `def` keyword? JTE_terraform_plan_infrastructure seems to be setting a field named prefix (to a value of type GStringImpl) which could lead to memory leaks or other issues.
+08:58:13  Did you forget the `def` keyword? JTE_terraform_plan_infrastructure seems to be setting a field named prefix (to a value of type String) which could lead to memory leaks or other issues.
+08:58:13  [Pipeline] writeFile
+08:58:13  [Pipeline] withEnv
+08:58:13  [Pipeline] {
+08:58:13  [Pipeline] sh ([Initialize TF_VAR_FILE])
+08:58:13  + touch prod.tfvars
+08:58:13  [Pipeline] sh ([Create Initial State Buckets])
+08:58:14  + set +x
+08:58:16  [Pipeline] sh ([Init Infrastructure])
+08:58:16  + echo 'Running terraform init...'
+08:58:16  Running terraform init...
+08:58:16  + '[' -f tools/terraform-provider-jenkins_v0.11.0 ']'
+08:58:16  + terraform init -no-color -backend-config region=us-east-1 -backend-config bucket=imac-prod-tf-state-hhsoig -backend-config dynamodb_table=imac-prod-tf-lock-hhsoig -upgrade -reconfigure
+08:58:16  Initializing the backend...
+08:58:19  
+08:58:19  Successfully configured the backend "s3"! Terraform will automatically
+08:58:19  use this backend unless the backend configuration changes.
+08:58:22  
+08:58:22  Upgrading modules...
+08:58:22  - base_infrastructure in modules/base_infrastructure
+08:58:22  - scanner_agent_nodes in modules/jenkins_agent
+08:58:22  - all_agent_nodes in modules/jenkins_agent
+08:58:22  - jenkins_controller in modules/jenkins_controller
+08:58:22  
+08:58:22  Initializing provider plugins...
+08:58:22  - Finding hashicorp/time versions matching "~> 0.13.1"...
+08:58:22  - Finding hashicorp/aws versions matching "~> 6.9.0"...
+08:58:22  - Using previously-installed hashicorp/time v0.13.1
+08:58:25  - Using previously-installed hashicorp/aws v6.9.0
+08:58:25  
+08:58:25  
+08:58:25  
+08:58:25  Warning: Deprecated Parameter
+08:58:25  
+08:58:25    on providers.tf line 12, in terraform:
+08:58:25    12:   backend "s3" {
+08:58:25  
+08:58:25  The parameter "dynamodb_table" is deprecated. Use parameter "use_lockfile"
+08:58:25  instead.
+08:58:25  Terraform has been successfully initialized!
+08:58:25  
+08:58:25  You may now begin working with Terraform. Try running "terraform plan" to see
+08:58:25  any changes that are required for your infrastructure. All Terraform commands
+08:58:25  should now work.
+08:58:25  
+08:58:25  If you ever set or change modules or backend configuration for Terraform,
+08:58:25  rerun this command to reinitialize your working directory. If you forget, other
+08:58:25  commands will detect it and remind you to do so if necessary.
+08:58:25  [Pipeline] sh ([Plan Infrastructure])
+08:58:25  + echo 'Running terraform plan...'
+08:58:25  Running terraform plan...
+08:58:25  + terraform plan -no-color --var-file=prod.tfvars -lock=false --out=prod.tfplan
+08:58:29  
+08:58:29  Warning: Deprecated Parameter
+08:58:29  
+08:58:29  The parameter "dynamodb_table" is deprecated. Use parameter "use_lockfile"
+08:58:29  instead.
+08:58:31  time_static.created: Refreshing state... [id=2026-01-19T17:45:45Z]
+08:58:32  data.aws_autoscaling_groups.monitored_agent: Reading...
+08:58:32  aws_ses_email_identity.team_email: Refreshing state... [id=imac@oig.hhs.gov]
+08:58:32  module.base_infrastructure.data.aws_availability_zones.available: Reading...
+08:58:32  module.base_infrastructure.data.aws_elb_service_account.main: Reading...
+08:58:32  data.aws_caller_identity.current: Reading...
+08:58:32  data.aws_subnets.all_subnets: Reading...
+08:58:32  data.aws_kms_alias.ebs_kms_key: Reading...
+08:58:32  data.aws_lambda_function.utility_lambda: Reading...
+08:58:32  data.aws_vpc.main: Reading...
+08:58:32  data.aws_default_tags.provider_tags: Reading...
+08:58:32  module.base_infrastructure.data.aws_elb_service_account.main: Read complete after 0s [id=127311923021]
+08:58:32  module.base_infrastructure.aws_kms_key.encryption_key: Refreshing state... [id=22090984-81cc-4137-a748-8b077dff5e48]
+08:58:32  data.aws_caller_identity.current: Read complete after 0s [id=213141505949]
+08:58:32  data.aws_default_tags.provider_tags: Read complete after 0s [id=aws]
+08:58:32  data.aws_s3_bucket.jenkins_binaries: Reading...
+08:58:32  module.base_infrastructure.aws_efs_file_system.jenkins_jobs: Refreshing state... [id=fs-02f59d5ae317cf9fe]
+08:58:32  data.aws_s3_bucket.jenkins_binaries: Read complete after 0s [id=jenkins-binaries-213141505949]
+08:58:32  aws_s3_bucket.jenkins_binaries: Refreshing state... [id=jenkins-binaries-213141505949]
+08:58:32  data.aws_kms_alias.ebs_kms_key: Read complete after 0s [id=arn:aws:kms:us-east-1:213141505949:alias/DWB-DEV-DWB-USAGE-KEY]
+08:58:32  aws_kms_key.jenkins_alerts_kms_key: Refreshing state... [id=0e09c142-d446-40e3-8d37-87e6a407f362]
+08:58:32  module.base_infrastructure.aws_s3_bucket.alb_logs: Refreshing state... [id=prod-jenkins-ingress-alb-logs-213141505949]
+08:58:32  module.base_infrastructure.data.aws_availability_zones.available: Read complete after 0s [id=us-east-1]
+08:58:32  data.aws_subnets.all_subnets: Read complete after 0s [id=us-east-1]
+08:58:32  aws_kms_alias.alarm_sns_key_alias: Refreshing state... [id=alias/prod-imac-jenkins-alerts-kms-key]
+08:58:32  aws_sns_topic.jenkins_notifications: Refreshing state... [id=arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications]
+08:58:32  aws_sns_topic.jenkins_alerts: Refreshing state... [id=arn:aws:sns:us-east-1:213141505949:prod-utility-jenkins-alerts]
+08:58:32  data.aws_autoscaling_groups.monitored_agent: Read complete after 0s [id=us-east-1]
+08:58:32  module.base_infrastructure.aws_efs_backup_policy.jenkins_jobs: Refreshing state... [id=fs-02f59d5ae317cf9fe]
+08:58:32  aws_s3_bucket_public_access_block.jenkins_binaries_acl: Refreshing state... [id=jenkins-binaries-213141505949]
+08:58:32  aws_s3_bucket_versioning.jenkins_binaries: Refreshing state... [id=jenkins-binaries-213141505949]
+08:58:32  aws_sns_topic_subscription.jenkins_alerts_email: Refreshing state... [id=arn:aws:sns:us-east-1:213141505949:prod-utility-jenkins-alerts:3c6be416-179e-40f0-80fd-3325f4b99454]
+08:58:32  aws_cloudwatch_metric_alarm.efs_storagebytes_high: Refreshing state... [id=efs-fs-02f59d5ae317cf9fe-storagebytes-150GiB-daily]
+08:58:32  aws_sns_topic_policy.jenkins_alerts: Refreshing state... [id=arn:aws:sns:us-east-1:213141505949:prod-utility-jenkins-alerts]
+08:58:32  aws_sns_topic_subscription.jenkins_notifications_email["imac@oig.hhs.gov"]: Refreshing state... [id=arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications:bffa5e72-52ac-4f06-b76c-80654ef7563b]
+08:58:32  aws_sns_topic_policy.jenkins_notifications: Refreshing state... [id=arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications]
+08:58:32  aws_sns_topic_subscription.jenkins_notifications_email["dataoperationsteam@oig.hhs.gov"]: Refreshing state... [id=arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications:c8d6e981-15bd-4ffe-83e9-ac5401b522fc]
+08:58:32  module.base_infrastructure.aws_s3_bucket_public_access_block.alb_logs: Refreshing state... [id=prod-jenkins-ingress-alb-logs-213141505949]
+08:58:32  module.base_infrastructure.aws_s3_bucket_server_side_encryption_configuration.alb_logs: Refreshing state... [id=prod-jenkins-ingress-alb-logs-213141505949]
+08:58:32  module.base_infrastructure.data.aws_iam_policy_document.allow_write_alb_logs: Reading...
+08:58:32  data.aws_lambda_function.utility_lambda: Read complete after 1s [id=prod-imac-scale-up-utility-agent-asg]
+08:58:32  module.base_infrastructure.aws_s3_bucket_logging.alb_logs: Refreshing state... [id=prod-jenkins-ingress-alb-logs-213141505949]
+08:58:32  module.base_infrastructure.data.aws_iam_policy_document.allow_write_alb_logs: Read complete after 0s [id=425208093]
+08:58:32  module.base_infrastructure.aws_s3_bucket_versioning.alb_logs: Refreshing state... [id=prod-jenkins-ingress-alb-logs-213141505949]
+08:58:32  module.base_infrastructure.aws_s3_bucket_policy.alb_logs: Refreshing state... [id=prod-jenkins-ingress-alb-logs-213141505949]
+08:58:32  aws_cloudwatch_metric_alarm.asg_capacity_alarm: Refreshing state... [id=prod-utility-jenkins-agent-asg-zero-capacity-alarm]
+08:58:32  data.aws_vpc.main: Read complete after 1s [id=vpc-03bf75a67277b3366]
+08:58:32  module.base_infrastructure.aws_security_group.allow_http: Refreshing state... [id=sg-022a8432bfc732a06]
+08:58:32  module.base_infrastructure.aws_lb_target_group.jenkins_controller: Refreshing state... [id=arn:aws:elasticloadbalancing:us-east-1:213141505949:targetgroup/prod-jenkins-vpc-target-group/c2549a16f5e2625a]
+08:58:32  module.base_infrastructure.aws_security_group.allow_docker_ssh: Refreshing state... [id=sg-047dad7228fdbc7a5]
+08:58:32  module.base_infrastructure.aws_security_group.allow_efs: Refreshing state... [id=sg-09d6bbf2d0a0f4449]
+08:58:32  module.base_infrastructure.aws_security_group.allow_jenkins_traffic: Refreshing state... [id=sg-026446d31ec608902]
+08:58:32  module.base_infrastructure.aws_security_group.allow_https: Refreshing state... [id=sg-02f202d2034ce9362]
+08:58:32  module.base_infrastructure.aws_security_group.allow_outbound_traffic: Refreshing state... [id=sg-060dabafd909aa2a2]
+08:58:32  module.base_infrastructure.aws_efs_mount_target.jenkins_jobs: Refreshing state... [id=fsmt-0e4f7c26e63a10a72]
+08:58:33  module.base_infrastructure.aws_security_group.scanner_egress: Refreshing state... [id=sg-0a43d3c295c9705f3]
+08:58:33  module.base_infrastructure.aws_lb.jenkins_ingress: Refreshing state... [id=arn:aws:elasticloadbalancing:us-east-1:213141505949:loadbalancer/app/prod-jenkins-ingress/7f9463acca3025a9]
+08:58:33  module.base_infrastructure.aws_lb_listener.jenkins_redirect: Refreshing state... [id=arn:aws:elasticloadbalancing:us-east-1:213141505949:listener/app/prod-jenkins-ingress/7f9463acca3025a9/b44c2766b1e6b2b7]
+08:58:33  module.base_infrastructure.aws_lb_listener.jenkins_secure_ingress: Refreshing state... [id=arn:aws:elasticloadbalancing:us-east-1:213141505949:listener/app/prod-jenkins-ingress/7f9463acca3025a9/e840312233c0700e]
+08:58:33  module.base_infrastructure.aws_lb_listener.jenkins_vpc: Refreshing state... [id=arn:aws:elasticloadbalancing:us-east-1:213141505949:listener/app/prod-jenkins-ingress/7f9463acca3025a9/ada72587a183d3a9]
+08:58:33  aws_s3_bucket_lifecycle_configuration.jenkins_binaries: Refreshing state... [id=jenkins-binaries-213141505949]
+08:58:33  module.all_agent_nodes["sie"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.all_agent_nodes["ml-engineering"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_ami.validate_pinned: Reading...
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_ecr_image.agent_image: Reading...
+08:58:33  module.all_agent_nodes["utility"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.all_agent_nodes["cgap"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.all_agent_nodes["ides"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.all_agent_nodes["salt"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.all_agent_nodes["utility"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:33  module.all_agent_nodes["cgap"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:33  module.all_agent_nodes["salt"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:33  module.all_agent_nodes["data_workbench"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:33  module.all_agent_nodes["sie"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:33  module.all_agent_nodes["ides"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_ecr_image.agent_image: Read complete after 0s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:33  module.all_agent_nodes["oams"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.all_agent_nodes["gis"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.all_agent_nodes["imac"].data.aws_ssm_parameter.tenable_agent_key: Reading...
+08:58:33  module.all_agent_nodes["ml-engineering"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_ami.validate_pinned: Read complete after 0s [id=ami-025222311822044d7]
+08:58:33  module.jenkins_controller.data.aws_region.current: Reading...
+08:58:33  module.all_agent_nodes["data_workbench"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:33  module.jenkins_controller.data.aws_caller_identity.current: Reading...
+08:58:33  module.all_agent_nodes["utility"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:33  module.jenkins_controller.data.aws_region.current: Read complete after 0s [id=us-east-1]
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:33  module.scanner_agent_nodes["sia"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.scanner_agent_nodes["sia"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=1132004489]
+08:58:34  module.jenkins_controller.data.aws_caller_identity.current: Read complete after 0s [id=213141505949]
+08:58:34  module.all_agent_nodes["gis"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:34  module.all_agent_nodes["cgap"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:34  module.all_agent_nodes["imac"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:34  module.all_agent_nodes["oams"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:34  module.all_agent_nodes["gis"].data.aws_ssm_parameter.tenable_agent_key: Read complete after 0s [id=/imac/jenkins/tenable-agent-key]
+08:58:34  module.all_agent_nodes["sie"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:34  module.all_agent_nodes["salt"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:34  module.scanner_agent_nodes["sia"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["ides"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:34  module.scanner_agent_nodes["sia"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["imac"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:34  module.scanner_agent_nodes["sia"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["utility"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:34  module.all_agent_nodes["oams"].data.aws_ssm_parameter.jenkins_agent_private_key: Reading...
+08:58:34  module.all_agent_nodes["cgap"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["sie"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["gis"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["utility"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["sie"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["cgap"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["salt"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["utility"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["ides"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["gis"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["imac"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["oams"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_ssm_parameter.jenkins_agent_private_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_private_key]
+08:58:34  module.all_agent_nodes["ides"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["imac"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["sie"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["oams"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["utility"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["salt"].data.aws_key_pair.jenkins_agent_linux: Reading...
+08:58:34  module.all_agent_nodes["utility"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["ides"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["gis"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["imac"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["cgap"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["oams"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["ides"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["salt"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["sie"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["ides"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["imac"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["cgap"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["gis"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["oams"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_ssm_parameter.jenkins_agent_public_key: Reading...
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["oams"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["salt"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.scanner_agent_nodes["sia"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_sia]
+08:58:34  module.all_agent_nodes["salt"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=1323505972]
+08:58:34  module.all_agent_nodes["salt"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["ides"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.all_agent_nodes["sie"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.all_agent_nodes["ides"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=1716066760]
+08:58:34  module.all_agent_nodes["sie"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=3897317455]
+08:58:34  module.all_agent_nodes["utility"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.all_agent_nodes["sie"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["gis"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["utility"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=3932098722]
+08:58:34  module.all_agent_nodes["imac"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["cgap"].data.aws_ssm_parameter.jenkins_agent_public_key: Read complete after 0s [id=/ec2/keypair/prod_jenkins_agent_public_key]
+08:58:34  module.all_agent_nodes["salt"].data.aws_key_pair.jenkins_agent_linux: Read complete after 0s [id=key-0e085b9cf69b14d13]
+08:58:34  module.all_agent_nodes["cgap"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.all_agent_nodes["imac"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=3894856059]
+08:58:34  module.all_agent_nodes["gis"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.all_agent_nodes["cgap"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=937146066]
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.all_agent_nodes["imac"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["cgap"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["gis"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=4075015585]
+08:58:34  module.all_agent_nodes["gis"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["oams"].data.aws_iam_policy_document.agent_assume_target_role: Reading...
+08:58:34  module.all_agent_nodes["utility"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["ides"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["imac"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=2642087803]
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=2996869995]
+08:58:34  module.all_agent_nodes["oams"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["oams"].data.aws_iam_policy_document.agent_assume_target_role: Read complete after 0s [id=2933924910]
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["salt"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["sie"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["ides"].data.aws_ami.validate_pinned: Read complete after 0s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_ami.validate_pinned: Reading...
+08:58:34  module.all_agent_nodes["utility"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["gis"].data.aws_ami.validate_pinned: Read complete after 0s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["cgap"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["utility"].data.aws_ami.validate_pinned: Read complete after 0s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["oams"].data.aws_ami.validate_pinned: Read complete after 0s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["gis"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["salt"].data.aws_ami.validate_pinned: Read complete after 0s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["ides"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["imac"].data.aws_ami.validate_pinned: Read complete after 0s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["utility"].data.aws_ecr_image.agent_image: Read complete after 0s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.all_agent_nodes["oams"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["cgap"].data.aws_ecr_image.agent_image: Read complete after 0s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.all_agent_nodes["salt"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_ami.validate_pinned: Read complete after 0s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["sie"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["sie"].data.aws_ami.validate_pinned: Read complete after 1s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["imac"].data.aws_ecr_image.agent_image: Reading...
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_ecr_image.agent_image: Read complete after 1s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.jenkins_controller.data.aws_ecr_image.controller_image: Reading...
+08:58:34  module.all_agent_nodes["gis"].data.aws_ecr_image.agent_image: Read complete after 1s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.jenkins_controller.aws_iam_role.jenkins_controller_ssm_role: Refreshing state... [id=prod-jenkins_main_ssm_role]
+08:58:34  module.all_agent_nodes["ides"].data.aws_ecr_image.agent_image: Read complete after 1s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.all_agent_nodes["imac"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_imac]
+08:58:34  module.all_agent_nodes["cgap"].data.aws_ami.validate_pinned: Read complete after 1s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["oams"].data.aws_ecr_image.agent_image: Read complete after 1s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.all_agent_nodes["salt"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_salt]
+08:58:34  module.scanner_agent_nodes["sia"].data.aws_dynamodb_table.imac_config[0]: Reading...
+08:58:34  module.all_agent_nodes["ml-engineering"].data.aws_ecr_image.agent_image: Read complete after 1s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.all_agent_nodes["imac"].data.aws_ecr_image.agent_image: Read complete after 0s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.all_agent_nodes["data_workbench"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_data_workbench]
+08:58:34  module.all_agent_nodes["cgap"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_cgap]
+08:58:34  module.all_agent_nodes["sie"].data.aws_ecr_image.agent_image: Read complete after 1s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.all_agent_nodes["salt"].data.aws_ecr_image.agent_image: Read complete after 1s [id=sha256:96f5c0ce2a8b7f70937761078bfa7d0e2c635ec7040a13c5cd318043d3fcecef]
+08:58:34  module.all_agent_nodes["gis"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_gis]
+08:58:34  module.all_agent_nodes["ml-engineering"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering]
+08:58:34  module.jenkins_controller.data.aws_ecr_image.controller_image: Read complete after 0s [id=sha256:05de1da1cfa4e1d6bdefaa0ad2609ecd3446347b3e179428594eeb81c00c281c]
+08:58:34  module.all_agent_nodes["oams"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_oams]
+08:58:34  module.all_agent_nodes["data_workbench"].data.aws_ami.validate_pinned: Read complete after 1s [id=ami-025222311822044d7]
+08:58:34  module.all_agent_nodes["sie"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_sie]
+08:58:34  module.scanner_agent_nodes["sia"].data.aws_dynamodb_table.imac_config[0]: Read complete after 0s [id=dev-ImacConfigTable]
+08:58:34  module.all_agent_nodes["utility"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_utility]
+08:58:34  module.all_agent_nodes["ides"].aws_iam_role.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_role_ides]
+08:58:34  module.jenkins_controller.data.aws_ami.validate_pinned: Reading...
+08:58:34  module.scanner_agent_nodes["sia"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_sia_role]
+08:58:34  module.scanner_agent_nodes["sia"].aws_iam_role_policy_attachment.scanner_ssm[0]: Refreshing state... [id=prod_jenkins_agent_role_sia/arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore]
+08:58:34  module.jenkins_controller.aws_kms_key.observability_logs: Refreshing state... [id=eb8ffde6-f210-4f93-8399-f864794decc0]
+08:58:34  module.scanner_agent_nodes["sia"].data.aws_iam_policy_document.scanner_permissions[0]: Reading...
+08:58:34  module.jenkins_controller.aws_iam_role_policy_attachment.jenkins_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod-jenkins_main_ssm_role-20221221004054011500000008]
+08:58:34  module.scanner_agent_nodes["sia"].data.aws_iam_policy_document.scanner_permissions[0]: Read complete after 0s [id=2078683312]
+08:58:34  module.jenkins_controller.aws_iam_instance_profile.jenkins_controller_ssm_role: Refreshing state... [id=prod-jenkins_ssm_role]
+08:58:34  module.jenkins_controller.aws_iam_role_policy_attachment.jenkins_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod-jenkins_main_ssm_role-20221221004053939100000001]
+08:58:34  module.jenkins_controller.aws_iam_role_policy_attachment.jenkins_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod-jenkins_main_ssm_role-20221221004053991200000004]
+08:58:35  module.jenkins_controller.aws_iam_role_policy_attachment.jenkins_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod-jenkins_main_ssm_role-20221221004053995100000005]
+08:58:35  module.jenkins_controller.aws_iam_role_policy_attachment.jenkins_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod-jenkins_main_ssm_role-20250421214442646700000002]
+08:58:35  module.jenkins_controller.aws_iam_role_policy_attachment.jenkins_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod-jenkins_main_ssm_role-20250421214442638100000001]
+08:58:35  module.jenkins_controller.aws_iam_role_policy_attachment.jenkins_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod-jenkins_main_ssm_role-20221221004053989700000003]
+08:58:35  module.jenkins_controller.aws_iam_role_policy_attachment.jenkins_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod-jenkins_main_ssm_role/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.jenkins_controller.aws_iam_role_policy_attachment.jenkins_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod-jenkins_main_ssm_role-20221221004053996400000006]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_gis]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_ides]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_oams]
+08:58:35  module.jenkins_controller.data.aws_ami.validate_pinned: Read complete after 0s [id=ami-025222311822044d7]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_imac]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_ml-engineering]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_cgap]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_salt]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_sie]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_data_workbench]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_policy.agent_assume_target_role[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_utility]
+08:58:35  module.scanner_agent_nodes["sia"].aws_iam_policy.scanner[0]: Refreshing state... [id=arn:aws:iam::213141505949:policy/prod_scanner_agent_sia]
+08:58:35  module.jenkins_controller.aws_kms_alias.observability_logs: Refreshing state... [id=alias/imac-prod-observability-logs]
+08:58:35  module.scanner_agent_nodes["sia"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-09418749eb58e1a16]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_imac_role]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_cgap_role]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_utility_role]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_gis_role]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_data_workbench_role]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_salt_role]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_ides_role]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_ml-engineering_role]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_oams_role]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_instance_profile.jenkins_agent_role: Refreshing state... [id=prod_jenkins_agent_sie_role]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench-2025042121444277540000000a]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_gis-20250421214442665500000004]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench-20240415155244647500000020]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ides-20250421214442903400000012]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_ides/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering-20250421214442714500000009]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_utility-20250108221912751200000007]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_gis/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_utility-20250108221912740900000002]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering-20250421214442804900000010]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::aws:policy/AmazonSSMFullAccess]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_sie/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_sie-20240415155245239500000026]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_gis-20250421214442675400000006]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_utility/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_imac-2024041515524612740000002c]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_cgap-20240729174423971100000001]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_cgap-20240729174424023700000007]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_utility-20250108221912800600000009]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_oams-20250421214442678500000007]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_sie-20240415155245395100000027]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_oams-2024041515524180060000000b]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_oams-20240415155241543300000006]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench-20240415155241456400000005]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_gis-2025033122325212220000000a]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_gis-20250331223252001000000006]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_ides-20240822145817172100000006]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_imac-20250421214912546600000001]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_oams/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_utility-20250108221912749500000006]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ides-20240822145817172800000007]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_cgap-20240729174424008200000003]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_cgap-20240729174424013400000004]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ides-20240822145817148200000004]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_imac-20250505131503067000000001]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_ides-20240822145817122800000001]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_utility-20250108221912743400000004]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_cgap-20250421214442911400000015]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_gis-20250331223251974600000003]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_imac-20250505131503080000000002]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering/arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_oams-20240415155243524200000017]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_sie-2025042121444280420000000f]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_utility-20250421214442805700000011]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_utility-20250421214442661800000003]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_gis-20250331223252029900000008]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering-20240524170027199100000002]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering-20240524170027297900000009]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_cgap-20240729174424117400000009]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_sie-20240415155244792400000021]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench-2024041515524414830000001b]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_imac-2024041515524626130000002e]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_imac-2024041515524601100000002b]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_imac/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering-20240524170027283000000006]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::aws:policy/AWSKeyManagementServicePowerUser]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_gis-20250331223251942100000002]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ides-20240822145817194300000008]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_oams-20240415155241576000000007]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::aws:policy/SecretsManagerReadWrite]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench-2024041515524452220000001f]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_imac-2025042121444278510000000c]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_imac-20240415155245822100000029]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_oams-20250421214442904300000013]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_oams-20240415155241669900000008]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::aws:policy/AmazonEC2FullAccess]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2ContainerRegistryFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_sie-20240415155245059500000025]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_sie-20240415155245490400000028]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench-20240415155241419400000004]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench-2025042121444280390000000e]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_cgap-20240729174424031000000008]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_cgap-2025042121444278330000000b]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench-20240415155243564400000018]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonDynamoDBFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering-20240524170027278700000005]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_gis-20250331223252001700000007]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_oams-20240415155242279500000011]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["CloudWatchAgentServerPolicy"]: Refreshing state... [id=prod_jenkins_agent_role_cgap/arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMFullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_ides-20240822145817164200000005]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonSSMManagedInstanceCore"]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering-20240524170027258500000003]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::aws:policy/AmazonS3FullAccess]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonEC2FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_sie-20240415155244881700000022]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AmazonS3FullAccess"]: Refreshing state... [id=prod_jenkins_agent_role_sie-20250421214442674600000005]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["AWSKeyManagementServicePowerUser"]: Refreshing state... [id=prod_jenkins_agent_role_utility-20250108221912741900000003]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_policy_attachment["SecretsManagerReadWrite"]: Refreshing state... [id=prod_jenkins_agent_role_ides-20250421214442679300000008]
+08:58:35  module.jenkins_controller.aws_launch_template.jenkins_controller_node: Refreshing state... [id=lt-03b6276764a123b01]
+08:58:35  module.scanner_agent_nodes["sia"].aws_iam_role_policy_attachment.scanner[0]: Refreshing state... [id=prod_jenkins_agent_role_sia/arn:aws:iam::213141505949:policy/prod_scanner_agent_sia]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_data_workbench/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_data_workbench]
+08:58:35  module.all_agent_nodes["imac"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_imac/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_imac]
+08:58:35  module.all_agent_nodes["gis"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_gis/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_gis]
+08:58:35  module.all_agent_nodes["salt"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_salt/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_salt]
+08:58:35  module.all_agent_nodes["sie"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_sie/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_sie]
+08:58:35  module.all_agent_nodes["cgap"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_cgap/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_cgap]
+08:58:35  module.all_agent_nodes["ides"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_ides/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_ides]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_ml-engineering/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_ml-engineering]
+08:58:35  module.all_agent_nodes["oams"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_oams/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_oams]
+08:58:35  module.all_agent_nodes["utility"].aws_iam_role_policy_attachment.jenkins_agent_assume_target_role_policy_attachment[0]: Refreshing state... [id=prod_jenkins_agent_role_utility/arn:aws:iam::213141505949:policy/prod_jenkins_agent_assume_target_policy_utility]
+08:58:35  module.all_agent_nodes["data_workbench"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-0022ed13a86483efa]
+08:58:35  module.scanner_agent_nodes["sia"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-sia20260625231134302200000015]
+08:58:35  module.all_agent_nodes["gis"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-093789159d3741424]
+08:58:35  module.all_agent_nodes["ides"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-0dda0e121c6b651e4]
+08:58:35  module.all_agent_nodes["oams"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-024b0c1a72777d996]
+08:58:35  module.all_agent_nodes["ml-engineering"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-0cf888230e9ba1c00]
+08:58:36  module.all_agent_nodes["salt"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-09ce36c18699c40dd]
+08:58:36  module.all_agent_nodes["cgap"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-076af968036cbafc9]
+08:58:36  module.all_agent_nodes["utility"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-08c1337b3c17d58d2]
+08:58:36  module.all_agent_nodes["imac"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-0971f0413a0496578]
+08:58:36  module.all_agent_nodes["sie"].aws_launch_template.jenkins_agent_node: Refreshing state... [id=lt-0b0e13840c02211c5]
+08:58:36  module.jenkins_controller.aws_autoscaling_group.jenkins_controller_node: Refreshing state... [id=prod-jenkins-asg20230106165513568000000002]
+08:58:36  module.all_agent_nodes["utility"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-utility2025010822191328710000000c]
+08:58:36  module.all_agent_nodes["imac"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-imac20240415155307974800000043]
+08:58:36  module.all_agent_nodes["data_workbench"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-data_workbench2024041515525274830000003f]
+08:58:36  module.all_agent_nodes["gis"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-gis20250401142658823500000003]
+08:58:36  module.all_agent_nodes["ides"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-ides2024082214582486780000000c]
+08:58:36  module.all_agent_nodes["cgap"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-cgap2024072917443141820000000b]
+08:58:36  module.all_agent_nodes["salt"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-salt20260518220807599800000003]
+08:58:36  module.all_agent_nodes["sie"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-sie20240415155305892600000042]
+08:58:36  module.all_agent_nodes["ml-engineering"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-ml-engineering2024052417003583290000000c]
+08:58:36  module.all_agent_nodes["oams"].aws_autoscaling_group.jenkins_agent_node: Refreshing state... [id=prod-jenkins-agent-asg-oams20240415155254240800000040]
+08:58:37  
+08:58:37  Terraform used the selected providers to generate the following execution
+08:58:37  plan. Resource actions are indicated with the following symbols:
+08:58:37    ~ update in-place
+08:58:37  
+08:58:37  Terraform will perform the following actions:
+08:58:37  
+08:58:37    # module.all_agent_nodes["cgap"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-cgap2024072917443141820000000b"
+08:58:37          name                             = "prod-jenkins-agent-asg-cgap2024072917443141820000000b"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:51.936453+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.all_agent_nodes["data_workbench"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-data_workbench2024041515525274830000003f"
+08:58:37          name                             = "prod-jenkins-agent-asg-data_workbench2024041515525274830000003f"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:52.487879+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.all_agent_nodes["gis"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-gis20250401142658823500000003"
+08:58:37          name                             = "prod-jenkins-agent-asg-gis20250401142658823500000003"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:53.070412+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.all_agent_nodes["ides"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-ides2024082214582486780000000c"
+08:58:37          name                             = "prod-jenkins-agent-asg-ides2024082214582486780000000c"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:53.846898+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.all_agent_nodes["imac"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-imac20240415155307974800000043"
+08:58:37          name                             = "prod-jenkins-agent-asg-imac20240415155307974800000043"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:54.311666+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.all_agent_nodes["ml-engineering"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-ml-engineering2024052417003583290000000c"
+08:58:37          name                             = "prod-jenkins-agent-asg-ml-engineering2024052417003583290000000c"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:54.817943+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.all_agent_nodes["oams"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-oams20240415155254240800000040"
+08:58:37          name                             = "prod-jenkins-agent-asg-oams20240415155254240800000040"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:55.332908+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.all_agent_nodes["salt"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-salt20260518220807599800000003"
+08:58:37          name                             = "prod-jenkins-agent-asg-salt20260518220807599800000003"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:56.026340+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.all_agent_nodes["sie"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-sie20240415155305892600000042"
+08:58:37          name                             = "prod-jenkins-agent-asg-sie20240415155305892600000042"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:57.159606+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.all_agent_nodes["utility"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-utility2025010822191328710000000c"
+08:58:37          name                             = "prod-jenkins-agent-asg-utility2025010822191328710000000c"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:57.899145+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37    # module.scanner_agent_nodes["sia"].aws_autoscaling_group.jenkins_agent_node will be updated in-place
+08:58:37    ~ resource "aws_autoscaling_group" "jenkins_agent_node" {
+08:58:37          id                               = "prod-jenkins-agent-asg-sia20260625231134302200000015"
+08:58:37          name                             = "prod-jenkins-agent-asg-sia20260625231134302200000015"
+08:58:37          # (32 unchanged attributes hidden)
+08:58:37  
+08:58:37        - tag {
+08:58:37            - key                 = "scheduled" -> null
+08:58:37            - propagate_at_launch = false -> null
+08:58:37            - value               = jsonencode(
+08:58:37                  {
+08:58:37                    - desired_size = 1
+08:58:37                    - max_size     = 1
+08:58:37                    - min_size     = 1
+08:58:37                    - schedule     = "oig-office-hours"
+08:58:37                    - ttl          = "2026-12-18T00:30:56.536417+00:00"
+08:58:37                  }
+08:58:37              ) -> null
+08:58:37          }
+08:58:37  
+08:58:37          # (19 unchanged blocks hidden)
+08:58:37      }
+08:58:37  
+08:58:37  Plan: 0 to add, 11 to change, 0 to destroy.
+08:58:37  
+08:58:37  ─────────────────────────────────────────────────────────────────────────────
+08:58:37  
+08:58:37  Saved the plan to: prod.tfplan
+08:58:37  
+08:58:37  To perform exactly these actions, run the following command to apply:
+08:58:37      terraform apply "prod.tfplan"
+08:58:37  [Pipeline] }
+08:58:37  [Pipeline] // withEnv
+08:58:37  [Pipeline] }
+08:58:38  [Pipeline] // dir
+08:58:38  [Pipeline] }
+08:58:38  [Pipeline] // stage
+08:58:38  [Pipeline] }
+08:58:38  [Pipeline] // ws
+08:58:38  [Pipeline] }
+08:58:38  [Pipeline] // node
+08:58:38  [JTE][@AfterStep - governance/infra_policy_check.call]
+08:58:38  [Pipeline] node
+08:58:38  Running on imac in /home/jenkins/workspace/s_Infrastructure_Scanning_PR-297
+08:58:38  [Pipeline] {
+08:58:39  [Pipeline] ws
+08:58:39  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Infrastructure Scanning/PR-297/2
+08:58:39  [Pipeline] {
+08:58:39  [Pipeline] stage
+08:58:39  [Pipeline] { (Governance: Infra Policy check)
+08:58:39  [Pipeline] dir
+08:58:39  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Infrastructure Scanning/PR-297/2/infrastructure/terraform
+08:58:39  [Pipeline] {
+08:58:39  [Pipeline] sh ([Get Current Timestamp])
+08:58:40  + date +%s
+08:58:40  [Pipeline] sh ([Get Enforcement Timestamp])
+08:58:40  + date -d 2026-05-01 +%s
+08:58:40  [Pipeline] fileExists
+08:58:40  [Pipeline] readFile
+08:58:41  [Pipeline] echo
+08:58:41  WARNING: Terraform Plan policy checks enforcement begins 2026-05-01!
+08:58:41  [Pipeline] withEnv
+08:58:41  [Pipeline] {
+08:58:41  [Pipeline] sh ([Execute Infrastructure Policy Check] - ${aws_profile}.tfplan)
+08:58:41  [GOVERNANCE] Starting OPA policy evaluation...
+08:58:41  [GOVERNANCE] Policies Bundle: opa/policies
+08:58:41  [GOVERNANCE] Input File: prod-tfplan.json
+08:58:41  [GOVERNANCE] Decision Path: cdo/terraform/required_default_tagging/deny
+08:58:41  [GOVERNANCE] Policies Branch: main
+08:58:47  [GOVERNANCE] Loading tagging configuration from dev-ImacConfigTable...
+08:58:47  [GOVERNANCE] OPA tagging data generated successfully.
+08:58:47  [GOVERNANCE] Executing OPA policy...
+08:58:48  {
+08:58:48    "result": [
+08:58:48      {
+08:58:48        "decision_id": "f8e518cc-fd25-4f1d-b353-bf8708606417",
+08:58:48        "path": "prod-tfplan.json",
+08:58:48        "result": []
+08:58:48      }
+08:58:48    ]
+08:58:48  }
+08:58:48  [GOVERNANCE] OPA policy check PASSED: cdo/terraform/required_default_tagging/deny
+08:58:48  [GOVERNANCE] OPA policy evaluation complete.
+08:58:48  [Pipeline] }
+08:58:48  [Pipeline] // withEnv
+08:58:48  [Pipeline] }
+08:58:48  [Pipeline] // dir
+08:58:48  [Pipeline] }
+08:58:48  [Pipeline] // stage
+08:58:48  [Pipeline] }
+08:58:49  [Pipeline] // ws
+08:58:49  [Pipeline] }
+08:58:49  [Pipeline] // node
+08:58:49  [Pipeline] End of Pipeline
+08:58:52  
+08:58:52  GitHub has been notified of this commit’s build result
+08:58:52  
+08:58:52  Finished: SUCCESS
