@@ -1,4 +1,119 @@
-sudo docker ps -a
-sudo tail -n 50 /var/log/user-data.log
-sudo ls -l /jenkins_jobs/.jenkins-cwagent/heartbeat/
-sudo tail -n 10 /jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log
+  Terraform will perform the following actions:
+08:57:58  
+08:57:58    # aws_cloudwatch_log_metric_filter.jenkins_heartbeat[0] will be created
+08:57:58    + resource "aws_cloudwatch_log_metric_filter" "jenkins_heartbeat" {
+08:57:58        + apply_on_transformed_logs = (known after apply)
+08:57:58        + id                        = (known after apply)
+08:57:58        + log_group_name            = "/imac/jenkins/dev/builds"
+08:57:58        + name                      = "dev-jenkins-heartbeat"
+08:57:58        + pattern                   = "JENKINS_CW_HEARTBEAT"
+08:57:58        + region                    = "us-east-1"
+08:57:58  
+08:57:58        + metric_transformation {
+08:57:58            + name      = "JenkinsHeartbeat"
+08:57:58            + namespace = "IMAC/Jenkins"
+08:57:58            + unit      = "None"
+08:57:58            + value     = "1"
+08:57:58          }
+08:57:58      }
+08:57:58  
+08:57:58    # aws_cloudwatch_metric_alarm.jenkins_logs_missing[0] will be created
+08:57:58    + resource "aws_cloudwatch_metric_alarm" "jenkins_logs_missing" {
+08:57:58        + actions_enabled                       = true
+08:57:58        + alarm_actions                         = [
+08:57:58            + "arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts",
+08:57:58          ]
+08:57:58        + alarm_description                     = "No Jenkins heartbeat logs received in CloudWatch for 5 consecutive minutes. Check Jenkins controller, CloudWatch Agent container, IAM permissions and log delivery."
+08:57:58        + alarm_name                            = "dev-jenkins-cloudwatch-logs-missing"
+08:57:58        + arn                                   = (known after apply)
+08:57:58        + comparison_operator                   = "LessThanThreshold"
+08:57:58        + datapoints_to_alarm                   = 5
+08:57:58        + evaluate_low_sample_count_percentiles = (known after apply)
+08:57:58        + evaluation_periods                    = 5
+08:57:58        + id                                    = (known after apply)
+08:57:58        + insufficient_data_actions             = [
+08:57:58            + "arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts",
+08:57:58          ]
+08:57:58        + metric_name                           = "JenkinsHeartbeat"
+08:57:58        + namespace                             = "IMAC/Jenkins"
+08:57:58        + ok_actions                            = [
+08:57:58            + "arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts",
+08:57:58          ]
+08:57:58        + period                                = 60
+08:57:58        + region                                = "us-east-1"
+08:57:58        + statistic                             = "Sum"
+08:57:58        + tags                                  = {
+08:57:58            + "ApplicationName" = "IMAC Jenkins"
+08:57:58            + "BusinessUnit"    = "cdo"
+08:57:58            + "Created"         = "2026-01-19T17:20:15Z"
+08:57:58            + "CreatedBy"       = "terraform"
+08:57:58            + "Environment"     = "dev"
+08:57:58            + "FISMABoundary"   = "dsgss"
+08:57:58            + "Owner"           = "Katie Rose"
+08:57:58            + "OwnerContact"    = "imac@oig.hhs.gov"
+08:57:58            + "Project"         = "imac"
+08:57:58            + "Purpose"         = "Jenkins CloudWatch log delivery monitoring"
+08:57:58            + "Version"         = "1.0"
+08:57:58          }
+08:57:58        + tags_all                              = {
+08:57:58            + "ApplicationName" = "IMAC Jenkins"
+08:57:58            + "BusinessUnit"    = "cdo"
+08:57:58            + "Created"         = "2026-01-19T17:20:15Z"
+08:57:58            + "CreatedBy"       = "terraform"
+08:57:58            + "Environment"     = "dev"
+08:57:58            + "FISMABoundary"   = "dsgss"
+08:57:58            + "Owner"           = "Katie Rose"
+08:57:58            + "OwnerContact"    = "imac@oig.hhs.gov"
+08:57:58            + "Project"         = "imac"
+08:57:58            + "Purpose"         = "Jenkins CloudWatch log delivery monitoring"
+08:57:58            + "Version"         = "1.0"
+08:57:58          }
+08:57:58        + threshold                             = 1
+08:57:58        + treat_missing_data                    = "breaching"
+08:57:58      }
+08:57:58  
+08:57:58    # aws_s3_bucket.jenkins_binaries will be updated in-place
+08:57:58    ~ resource "aws_s3_bucket" "jenkins_binaries" {
+08:57:58          id                          = "jenkins-binaries-213141505949"
+08:57:58        ~ tags                        = {
+08:57:58            - "Created"     = "2026-01-19T17:45:45Z" -> null
+08:57:58            - "Environment" = "prod" -> null
+08:57:58          }
+08:57:58        ~ tags_all                    = {
+08:57:58            ~ "Created"         = "2026-01-19T17:45:45Z" -> "2026-01-19T17:20:15Z"
+08:57:58            ~ "Environment"     = "prod" -> "dev"
+08:57:58              # (8 unchanged elements hidden)
+08:57:58          }
+08:57:58          # (13 unchanged attributes hidden)
+08:57:58  
+08:57:58          # (5 unchanged blocks hidden)
+08:57:58      }
+08:57:58  
+08:57:58    # module.jenkins_controller.aws_autoscaling_group.jenkins_controller_node will be updated in-place
+08:57:58    ~ resource "aws_autoscaling_group" "jenkins_controller_node" {
+08:57:58          id                               = "dev-jenkins-asg20251017232325402400000008"
+08:57:58          name                             = "dev-jenkins-asg20251017232325402400000008"
+08:57:58          # (32 unchanged attributes hidden)
+08:57:58  
+08:57:58        ~ launch_template {
+08:57:58              id      = "lt-083cc52ecc250930d"
+08:57:58              name    = "dev-jenkins-controller20251017232319827700000006"
+08:57:58            ~ version = "95" -> (known after apply)
+08:57:58          }
+08:57:58  
+08:57:58          # (16 unchanged blocks hidden)
+08:57:58      }
+08:57:58  
+08:57:58    # module.jenkins_controller.aws_launch_template.jenkins_controller_node will be updated in-place
+08:57:58    ~ resource "aws_launch_template" "jenkins_controller_node" {
+08:57:58          id                                   = "lt-083cc52ecc250930d"
+08:57:58        ~ latest_version                       = 95 -> (known after apply)
+08:57:58          name                                 = "dev-jenkins-controller20251017232319827700000006"
+08:57:58          tags                                 = {}
+08:57:58        ~ user_data                            = "IyEvYmluL2Jhc2gKc2V0IC1ldW8gcGlwZWZhaWwKIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKIyBqZW5raW5zX2NvbnRyb2xsZXIvc2NyaXB0cy91c2VyX2RhdGEudHBsCiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjCgojIFJlZGlyZWN0IGFsbCBvdXRwdXQgdG8gdXNlci1kYXRhIGxvZyBhbmQgY29uc29sZQpleGVjID4gPih0ZWUgL3Zhci9sb2cvdXNlci1kYXRhLmxvZyB8IGxvZ2dlciAtdCB1c2VyLWRhdGEgLXMgMj4vZGV2L2NvbnNvbGUpIDI+JjEKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgQW1hem9uIExpbnV4IDIgcm9vdCB2b2x1bWUgYXV0by1leHBhbmRzIHdpdGggRUMyLXByb3ZpZGVkIEFNSQojIExWTSByZXNpemUgbm90IG5lZWRlZCBhbmQgd2lsbCBmYWlsIOKAkyByZW1vdmluZyBsZWdhY3kgbG9naWMKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KCiMgVXBkYXRlIGFuZCBpbnN0YWxsIGVzc2VudGlhbCBwYWNrYWdlcwpkbmYgLXkgdXBncmFkZSAtLWV4Y2x1ZGU9a2VybmVsKgpkbmYgaW5zdGFsbCAteSBcCiAgYXdzY2xpIFwKICBqcSBcCiAgdW56aXAgXAogIHdnZXQgXAogIGRvY2tlciBcCiAgYW1hem9uLWVmcy11dGlscwoKIyBEb2NrZXIgaXMgYXZhaWxhYmxlIGluIHRoZSBkZWZhdWx0IEFMMjAyMyBwYWNrYWdlIHJlcG9zaXRvcnksCiMgc28geW91IGNhbiBpbnN0YWxsIGl0IGRpcmVjdGx5IHdpdGggZG5mLgpzeXN0ZW1jdGwgZW5hYmxlIGRvY2tlcgpzeXN0ZW1jdGwgc3RhcnQgZG9ja2VyCgojIENyZWF0ZSBKZW5raW5zIHVzZXIgYW5kIG1vdW50IGRpcmVjdG9yeQpncm91cGFkZCAtZyAyMDAwIGplbmtpbnMgXAogICYmIHVzZXJhZGQgLU4gLXUgMjAwMCAtZyAyMDAwIC1sIC1tIC1zIC9iaW4vYmFzaCBqZW5raW5zCgojIENyZWF0ZSBtb3VudCBwb2ludCBhbmQgbW91bnQgRUZTIFdyaXRlIHRvIGZzdGFiIHNvIGl0IHBlcnNpc3RzIGFjcm9zcyByZWJvb3RzCm1rZGlyIC1wIC9qZW5raW5zX2pvYnMKZWNobyAidXMtZWFzdC0xYy5mcy0wMjg1YWE1YTY0ZDY0NDdhYy5lZnMudXMtZWFzdC0xLmFtYXpvbmF3cy5jb206LyAvamVua2luc19qb2JzIGVmcyBfbmV0ZGV2LHRscyAwIDAiID4+IC9ldGMvZnN0YWIKbW91bnQgLWEKCmNob3duIGplbmtpbnM6amVua2lucyAvamVua2luc19qb2JzCgojIExvZ2luIHRvIEVDUgphd3MgZWNyIGdldC1sb2dpbi1wYXNzd29yZCAtLXJlZ2lvbiB1cy1lYXN0LTEgfCBkb2NrZXIgbG9naW4gLS11c2VybmFtZSBBV1MgLS1wYXNzd29yZC1zdGRpbiAyMTMxNDE1MDU5NDkuZGtyLmVjci51cy1lYXN0LTEuYW1hem9uYXdzLmNvbQoKIyBSdW4gSmVua2lucyBtYWluIGNvbnRhaW5lcgplY2hvICJSdW5uaW5nIHRoZSBqZW5raW5zIGNvbnRyb2xsZXIgY29udGFpbmVyLi4uIgpkb2NrZXIgcnVuIC1kIC1wIDgwODAtODA4ODo4MDgwLTgwODggXAogICAgLXAgODAyMjoyMiBcCiAgICAtZSBKRU5LSU5TX0FETUlOX1BBU1NXT1JEPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIHN2Yy1qZW5raW5zLWFnZW50LXBhc3N3b3JkIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgTERBUF9QQVNTV09SRD0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBsZGFwLXBhc3N3b3JkIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgU09OQVJRVUJFX1RPS0VOPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIHNvbmFycXViZS10b2tlbiAtLXJlZ2lvbiB1cy1lYXN0LTEgLS1xdWVyeSBTZWNyZXRTdHJpbmcgLS1vdXRwdXQgdGV4dCkiIFwKICAgIC1lIE5FWFVTX1VTRVI9IiQoYXdzIHNlY3JldHNtYW5hZ2VyIGdldC1zZWNyZXQtdmFsdWUgLS1zZWNyZXQtaWQgTkVYVVNfU0VSVklDRV9BQ0NPVU5UIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0IHwganEgLXIgJy51c2VybmFtZScpIiBcCiAgICAtZSBORVhVU19QQVNTV09SRD0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBORVhVU19TRVJWSUNFX0FDQ09VTlQgLS1yZWdpb24gdXMtZWFzdC0xIC0tcXVlcnkgU2VjcmV0U3RyaW5nIC0tb3V0cHV0IHRleHQgfCBqcSAtciAnLnBhc3N3b3JkJykiIFwKICAgIC1lIFNTSF9HSVRIVUJfU1ZDX0tFWT0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBzc2gtZ2l0aHViLXN2Yy1rZXkgLS1yZWdpb24gdXMtZWFzdC0xIC0tcXVlcnkgU2VjcmV0U3RyaW5nIC0tb3V0cHV0IHRleHQpIiBcCiAgICAtZSBHSVRIVUJfU1ZDX1RPS0VOPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIGltYWMtZ2l0aHViLXN2Yy1hY2NvdW50LXRva2VuIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgSkVOS0lOU19VUkw9aHR0cHM6Ly9kZXYuamVua2lucy5hd3MuaGhzb2lnLmdvdi8gXAogICAgLWUgSkVOS0lOU19JRFBfRU5USVRZX0lEPUplbmtpbnNTUCBcCiAgICAtZSBKRU5LSU5TX0lEUF9NRVRBREFUQV9VUkw9aHR0cHM6Ly9sb2dpbi5taWNyb3NvZnRvbmxpbmUuY29tL2RhZDVmODk0LTUzMDktNGRmNi05ZTQ4LTIzMmZkZjE1MDJhYi9mZWRlcmF0aW9ubWV0YWRhdGEvMjAwNy0wNi9mZWRlcmF0aW9ubWV0YWRhdGEueG1sP2FwcGlkPWNkMTMxNDFlLTVlM2YtNDk4Yi05ODE1LTc0MmUyMDQwMjg1YSBcCiAgICAtLW5hbWU9amVua2lucyBcCiAgICAtLXJlc3RhcnQgYWx3YXlzIFwKICAgIC12IC9qZW5raW5zX2pvYnM6L2hvbWUvamVua2lucy9qb2JzIFwKICAgIDIxMzE0MTUwNTk0OS5ka3IuZWNyLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL29pZy9pbWFjL2plbmtpbnMvamVua2lucy1jb250cm9sbGVyOmIzYWI1OThlMjEwMTZkNjA1MmIyYTljZjMyYzNiMGUxZGQ0N2MzMTYKCgoKZWNobyAiQ29uZmlndXJpbmcgYW5kIHJ1bm5pbmcgY2xvdWR3YXRjaCBhZ2VudCBjb250YWluZXIuLi4iCgojIFN0YXRlIGlzIHJlY29yZGVkIG9uIHRoZSBFRlMKbWtkaXIgLXAgL2plbmtpbnNfam9icy8uamVua2lucy1jd2FnZW50L3N0YXRlCm1rZGlyIC1wIC9vcHQvamVua2lucy1jd2FnZW50CgpjYXQgPi9vcHQvamVua2lucy1jd2FnZW50L2NvbmZpZy5qc29uIDw8J0VPRicKewogICJhZ2VudCI6IHsKICAgICJydW5fYXNfdXNlciI6ICJyb290IiwKICAgICJsb2dmaWxlIjogIi9vcHQvYXdzL2FtYXpvbi1jbG91ZHdhdGNoLWFnZW50L2xvZ3MvamVua2lucy1jd2FnZW50LmxvZyIKICB9LAogICJsb2dzIjogewogICAgImZvcmNlX2ZsdXNoX2ludGVydmFsIjogNSwKICAgICJsb2dzX2NvbGxlY3RlZCI6IHsKICAgICAgImZpbGVzIjogewogICAgICAgICJjb2xsZWN0X2xpc3QiOiBbCiAgICAgICAgICB7CiAgICAgICAgICAgICJmaWxlX3BhdGgiOiAiL2plbmtpbnNfam9icy8qKi9idWlsZHMvWzAtOV0qL2xvZyIsCiAgICAgICAgICAgICJsb2dfZ3JvdXBfbmFtZSI6ICIvaW1hYy9qZW5raW5zL2Rldi9idWlsZHMiLAogICAgICAgICAgICAibG9nX3N0cmVhbV9uYW1lIjogImplbmtpbnMtY29udHJvbGxlci17aW5zdGFuY2VfaWR9IiwKICAgICAgICAgICAgImVuY29kaW5nIjogInV0Zi04IgogICAgICAgICAgfQogICAgICAgIF0KICAgICAgfQogICAgfQogIH0KfQoKRU9GCgpkb2NrZXIgcm0gLWYgamVua2lucy1jd2FnZW50IDI+L2Rldi9udWxsIHx8IHRydWUKCmRvY2tlciBydW4gLWQgXAogIC0tbmFtZSBqZW5raW5zLWN3YWdlbnQgXAogIC0tcmVzdGFydCB1bmxlc3Mtc3RvcHBlZCBcCiAgLWUgQVdTX1JFR0lPTj11cy1lYXN0LTEgXAogIC12IC9vcHQvamVua2lucy1jd2FnZW50L2NvbmZpZy5qc29uOi9ldGMvY3dhZ2VudGNvbmZpZy9jb25maWcuanNvbjpybyBcCiAgLXYgL2plbmtpbnNfam9icy8uamVua2lucy1jd2FnZW50L3N0YXRlOi9vcHQvYXdzL2FtYXpvbi1jbG91ZHdhdGNoLWFnZW50L2xvZ3Mvc3RhdGUgXAogIC12IC9qZW5raW5zX2pvYnM6L2plbmtpbnNfam9iczpybyBcCiAgMjEzMTQxNTA1OTQ5LmRrci5lY3IudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZWNyLXB1YmxpYy9jbG91ZHdhdGNoLWFnZW50L2Nsb3Vkd2F0Y2gtYWdlbnQ6bGF0ZXN0CgoKCmVjaG8gIlVzZXIgZGF0YSBjb21wbGV0ZWQgc3VjY2Vzc2Z1bGx5LiIK" -> "IyEvYmluL2Jhc2gKc2V0IC1ldW8gcGlwZWZhaWwKIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKIyBqZW5raW5zX2NvbnRyb2xsZXIvc2NyaXB0cy91c2VyX2RhdGEudHBsCiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjCgojIFJlZGlyZWN0IGFsbCBvdXRwdXQgdG8gdXNlci1kYXRhIGxvZyBhbmQgY29uc29sZQpleGVjID4gPih0ZWUgL3Zhci9sb2cvdXNlci1kYXRhLmxvZyB8IGxvZ2dlciAtdCB1c2VyLWRhdGEgLXMgMj4vZGV2L2NvbnNvbGUpIDI+JjEKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgQW1hem9uIExpbnV4IDIgcm9vdCB2b2x1bWUgYXV0by1leHBhbmRzIHdpdGggRUMyLXByb3ZpZGVkIEFNSQojIExWTSByZXNpemUgbm90IG5lZWRlZCBhbmQgd2lsbCBmYWlsIOKAkyByZW1vdmluZyBsZWdhY3kgbG9naWMKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KCiMgVXBkYXRlIGFuZCBpbnN0YWxsIGVzc2VudGlhbCBwYWNrYWdlcwpkbmYgLXkgdXBncmFkZSAtLWV4Y2x1ZGU9a2VybmVsKgpkbmYgaW5zdGFsbCAteSBcCiAgYXdzY2xpIFwKICBqcSBcCiAgdW56aXAgXAogIHdnZXQgXAogIGRvY2tlciBcCiAgYW1hem9uLWVmcy11dGlscwoKIyBEb2NrZXIgaXMgYXZhaWxhYmxlIGluIHRoZSBkZWZhdWx0IEFMMjAyMyBwYWNrYWdlIHJlcG9zaXRvcnksCiMgc28geW91IGNhbiBpbnN0YWxsIGl0IGRpcmVjdGx5IHdpdGggZG5mLgpzeXN0ZW1jdGwgZW5hYmxlIGRvY2tlcgpzeXN0ZW1jdGwgc3RhcnQgZG9ja2VyCgojIENyZWF0ZSBKZW5raW5zIHVzZXIgYW5kIG1vdW50IGRpcmVjdG9yeQpncm91cGFkZCAtZyAyMDAwIGplbmtpbnMgXAogICYmIHVzZXJhZGQgLU4gLXUgMjAwMCAtZyAyMDAwIC1sIC1tIC1zIC9iaW4vYmFzaCBqZW5raW5zCgojIENyZWF0ZSBtb3VudCBwb2ludCBhbmQgbW91bnQgRUZTIFdyaXRlIHRvIGZzdGFiIHNvIGl0IHBlcnNpc3RzIGFjcm9zcyByZWJvb3RzCm1rZGlyIC1wIC9qZW5raW5zX2pvYnMKZWNobyAidXMtZWFzdC0xYy5mcy0wMjg1YWE1YTY0ZDY0NDdhYy5lZnMudXMtZWFzdC0xLmFtYXpvbmF3cy5jb206LyAvamVua2luc19qb2JzIGVmcyBfbmV0ZGV2LHRscyAwIDAiID4+IC9ldGMvZnN0YWIKbW91bnQgLWEKCmNob3duIGplbmtpbnM6amVua2lucyAvamVua2luc19qb2JzCgojIExvZ2luIHRvIEVDUgphd3MgZWNyIGdldC1sb2dpbi1wYXNzd29yZCAtLXJlZ2lvbiB1cy1lYXN0LTEgfCBkb2NrZXIgbG9naW4gLS11c2VybmFtZSBBV1MgLS1wYXNzd29yZC1zdGRpbiAyMTMxNDE1MDU5NDkuZGtyLmVjci51cy1lYXN0LTEuYW1hem9uYXdzLmNvbQoKIyBSdW4gSmVua2lucyBtYWluIGNvbnRhaW5lcgplY2hvICJSdW5uaW5nIHRoZSBqZW5raW5zIGNvbnRyb2xsZXIgY29udGFpbmVyLi4uIgpkb2NrZXIgcnVuIC1kIC1wIDgwODAtODA4ODo4MDgwLTgwODggXAogICAgLXAgODAyMjoyMiBcCiAgICAtZSBKRU5LSU5TX0FETUlOX1BBU1NXT1JEPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIHN2Yy1qZW5raW5zLWFnZW50LXBhc3N3b3JkIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgTERBUF9QQVNTV09SRD0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBsZGFwLXBhc3N3b3JkIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgU09OQVJRVUJFX1RPS0VOPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIHNvbmFycXViZS10b2tlbiAtLXJlZ2lvbiB1cy1lYXN0LTEgLS1xdWVyeSBTZWNyZXRTdHJpbmcgLS1vdXRwdXQgdGV4dCkiIFwKICAgIC1lIE5FWFVTX1VTRVI9IiQoYXdzIHNlY3JldHNtYW5hZ2VyIGdldC1zZWNyZXQtdmFsdWUgLS1zZWNyZXQtaWQgTkVYVVNfU0VSVklDRV9BQ0NPVU5UIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0IHwganEgLXIgJy51c2VybmFtZScpIiBcCiAgICAtZSBORVhVU19QQVNTV09SRD0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBORVhVU19TRVJWSUNFX0FDQ09VTlQgLS1yZWdpb24gdXMtZWFzdC0xIC0tcXVlcnkgU2VjcmV0U3RyaW5nIC0tb3V0cHV0IHRleHQgfCBqcSAtciAnLnBhc3N3b3JkJykiIFwKICAgIC1lIFNTSF9HSVRIVUJfU1ZDX0tFWT0iJChhd3Mgc2VjcmV0c21hbmFnZXIgZ2V0LXNlY3JldC12YWx1ZSAtLXNlY3JldC1pZCBzc2gtZ2l0aHViLXN2Yy1rZXkgLS1yZWdpb24gdXMtZWFzdC0xIC0tcXVlcnkgU2VjcmV0U3RyaW5nIC0tb3V0cHV0IHRleHQpIiBcCiAgICAtZSBHSVRIVUJfU1ZDX1RPS0VOPSIkKGF3cyBzZWNyZXRzbWFuYWdlciBnZXQtc2VjcmV0LXZhbHVlIC0tc2VjcmV0LWlkIGltYWMtZ2l0aHViLXN2Yy1hY2NvdW50LXRva2VuIC0tcmVnaW9uIHVzLWVhc3QtMSAtLXF1ZXJ5IFNlY3JldFN0cmluZyAtLW91dHB1dCB0ZXh0KSIgXAogICAgLWUgSkVOS0lOU19VUkw9aHR0cHM6Ly9kZXYuamVua2lucy5hd3MuaGhzb2lnLmdvdi8gXAogICAgLWUgSkVOS0lOU19JRFBfRU5USVRZX0lEPUplbmtpbnNTUCBcCiAgICAtZSBKRU5LSU5TX0lEUF9NRVRBREFUQV9VUkw9aHR0cHM6Ly9sb2dpbi5taWNyb3NvZnRvbmxpbmUuY29tL2RhZDVmODk0LTUzMDktNGRmNi05ZTQ4LTIzMmZkZjE1MDJhYi9mZWRlcmF0aW9ubWV0YWRhdGEvMjAwNy0wNi9mZWRlcmF0aW9ubWV0YWRhdGEueG1sP2FwcGlkPWNkMTMxNDFlLTVlM2YtNDk4Yi05ODE1LTc0MmUyMDQwMjg1YSBcCiAgICAtLW5hbWU9amVua2lucyBcCiAgICAtLXJlc3RhcnQgYWx3YXlzIFwKICAgIC12IC9qZW5raW5zX2pvYnM6L2hvbWUvamVua2lucy9qb2JzIFwKICAgIDIxMzE0MTUwNTk0OS5ka3IuZWNyLnVzLWVhc3QtMS5hbWF6b25hd3MuY29tL29pZy9pbWFjL2plbmtpbnMvamVua2lucy1jb250cm9sbGVyOmIzYWI1OThlMjEwMTZkNjA1MmIyYTljZjMyYzNiMGUxZGQ0N2MzMTYKCgoKZWNobyAiQ29uZmlndXJpbmcgYW5kIHJ1bm5pbmcgY2xvdWR3YXRjaCBhZ2VudCBjb250YWluZXIuLi4iCgojIFN0YXRlIGlzIHJlY29yZGVkIG9uIHRoZSBFRlMKbWtkaXIgLXAgL2plbmtpbnNfam9icy8uamVua2lucy1jd2FnZW50L3N0YXRlCm1rZGlyIC1wIC9vcHQvamVua2lucy1jd2FnZW50CgpjYXQgPi9vcHQvamVua2lucy1jd2FnZW50L2NvbmZpZy5qc29uIDw8J0VPRicKewogICJhZ2VudCI6IHsKICAgICJydW5fYXNfdXNlciI6ICJyb290IiwKICAgICJsb2dmaWxlIjogIi9vcHQvYXdzL2FtYXpvbi1jbG91ZHdhdGNoLWFnZW50L2xvZ3MvamVua2lucy1jd2FnZW50LmxvZyIKICB9LAogICJsb2dzIjogewogICAgImZvcmNlX2ZsdXNoX2ludGVydmFsIjogNSwKICAgICJsb2dzX2NvbGxlY3RlZCI6IHsKICAgICAgImZpbGVzIjogewogICAgICAgICJjb2xsZWN0X2xpc3QiOiBbCiAgICAgICAgICB7CiAgICAgICAgICAgICJmaWxlX3BhdGgiOiAiL2plbmtpbnNfam9icy8qKi9idWlsZHMvWzAtOV0qL2xvZyIsCiAgICAgICAgICAgICJsb2dfZ3JvdXBfbmFtZSI6ICIvaW1hYy9qZW5raW5zL2Rldi9idWlsZHMiLAogICAgICAgICAgICAibG9nX3N0cmVhbV9uYW1lIjogImplbmtpbnMtY29udHJvbGxlci17aW5zdGFuY2VfaWR9IiwKICAgICAgICAgICAgImVuY29kaW5nIjogInV0Zi04IgogICAgICAgICAgfSwKICAgICAgICAgIHsKICAgICAgICAgICAgImZpbGVfcGF0aCI6ICIvamVua2luc19qb2JzLy5qZW5raW5zLWN3YWdlbnQvaGVhcnRiZWF0LmxvZyIsCiAgICAgICAgICAgICJsb2dfZ3JvdXBfbmFtZSI6ICIvaW1hYy9qZW5raW5zL2Rldi9idWlsZHMiLAogICAgICAgICAgICAibG9nX3N0cmVhbV9uYW1lIjogImplbmtpbnMtaGVhcnRiZWF0LXtpbnN0YW5jZV9pZH0iLAogICAgICAgICAgICAiZW5jb2RpbmciOiAidXRmLTgiCiAgICAgICAgICB9CiAgICAgICAgXQogICAgICB9CiAgICB9CiAgfQp9CgpFT0YKCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCiMgSmVua2lucyBDbG91ZFdhdGNoIGhlYXJ0YmVhdCBtb25pdG9yaW5nCiMgR2VuZXJhdGUgYSBoZWFydGJlYXQgZXZlcnkgbWludXRlIHRvIHZlcmlmeSBsb2cgZGVsaXZlcnkKIyAtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0KCmVjaG8gIkNvbmZpZ3VyaW5nIEplbmtpbnMgQ2xvdWRXYXRjaCBoZWFydGJlYXQuLi4iCgojIEluc3RhbGwgYW5kIGVuYWJsZSBjcm9uCmRuZiBpbnN0YWxsIC15IGNyb25pZQpzeXN0ZW1jdGwgZW5hYmxlIC0tbm93IGNyb25kCgojIENyZWF0ZSBsb2NhbCBoZWFydGJlYXQgZGlyZWN0b3J5Cm1rZGlyIC1wIC9vcHQvamVua2lucy1jd2FnZW50L2hlYXJ0YmVhdAoKdG91Y2ggL29wdC9qZW5raW5zLWN3YWdlbnQvaGVhcnRiZWF0L2hlYXJ0YmVhdC5sb2cKCmNobW9kIDc1NSAvb3B0L2plbmtpbnMtY3dhZ2VudC9oZWFydGJlYXQKY2htb2QgNjQ0IC9vcHQvamVua2lucy1jd2FnZW50L2hlYXJ0YmVhdC9oZWFydGJlYXQubG9nCgojIENyZWF0ZSBoZWFydGJlYXQgc2NyaXB0CmNhdCA+IC91c3IvbG9jYWwvYmluL2plbmtpbnMtY3ctaGVhcnRiZWF0LnNoIDw8J0VPRicKIyEvYmluL2Jhc2gKCmVjaG8gIiQoZGF0ZSAtdSArJVktJW0tJWRUJUg6JU06JVNaKSBKRU5LSU5TX0NXX0hFQVJUQkVBVCIgXAogID4+IC9vcHQvamVua2lucy1jd2FnZW50L2hlYXJ0YmVhdC9oZWFydGJlYXQubG9nCkVPRgoKY2htb2QgNzU1IC91c3IvbG9jYWwvYmluL2plbmtpbnMtY3ctaGVhcnRiZWF0LnNoCgojIFNjaGVkdWxlIGhlYXJ0YmVhdCBldmVyeSBtaW51dGUKY2F0ID4gL2V0Yy9jcm9uLmQvamVua2lucy1jdy1oZWFydGJlYXQgPDwnRU9GJwoqICogKiAqICogcm9vdCAvdXNyL2xvY2FsL2Jpbi9qZW5raW5zLWN3LWhlYXJ0YmVhdC5zaApFT0YKCmNobW9kIDY0NCAvZXRjL2Nyb24uZC9qZW5raW5zLWN3LWhlYXJ0YmVhdAoKIyBHZW5lcmF0ZSBpbml0aWFsIGhlYXJ0YmVhdAovdXNyL2xvY2FsL2Jpbi9qZW5raW5zLWN3LWhlYXJ0YmVhdC5zaAoKZWNobyAiSmVua2lucyBDbG91ZFdhdGNoIGhlYXJ0YmVhdCBjb25maWd1cmVkIHN1Y2Nlc3NmdWxseS4iCgojIC0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLQojIFN0YXJ0IENsb3VkV2F0Y2ggQWdlbnQgY29udGFpbmVyCiMgLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tCgpkb2NrZXIgcm0gLWYgamVua2lucy1jd2FnZW50IDI+L2Rldi9udWxsIHx8IHRydWUKCmRvY2tlciBydW4gLWQgXAogIC0tbmFtZSBqZW5raW5zLWN3YWdlbnQgXAogIC0tcmVzdGFydCB1bmxlc3Mtc3RvcHBlZCBcCiAgLWUgQVdTX1JFR0lPTj11cy1lYXN0LTEgXAogIC12IC9vcHQvamVua2lucy1jd2FnZW50L2NvbmZpZy5qc29uOi9ldGMvY3dhZ2VudGNvbmZpZy9jb25maWcuanNvbjpybyBcCiAgLXYgL2plbmtpbnNfam9icy8uamVua2lucy1jd2FnZW50L3N0YXRlOi9vcHQvYXdzL2FtYXpvbi1jbG91ZHdhdGNoLWFnZW50L2xvZ3Mvc3RhdGUgXAogIC12IC9qZW5raW5zX2pvYnM6L2plbmtpbnNfam9iczpybyBcCiAgLXYgL29wdC9qZW5raW5zLWN3YWdlbnQvaGVhcnRiZWF0Oi9vcHQvamVua2lucy1jd2FnZW50L2hlYXJ0YmVhdDpybyBcCiAgMjEzMTQxNTA1OTQ5LmRrci5lY3IudXMtZWFzdC0xLmFtYXpvbmF3cy5jb20vZWNyLXB1YmxpYy9jbG91ZHdhdGNoLWFnZW50L2Nsb3Vkd2F0Y2gtYWdlbnQ6bGF0ZXN0CgoKCmVjaG8gIlVzZXIgZGF0YSBjb21wbGV0ZWQgc3VjY2Vzc2Z1bGx5LiIK"
+08:57:58          # (17 unchanged attributes hidden)
+08:57:58  
+08:57:58          # (4 unchanged blocks hidden)
+08:57:58      }
+08:57:58  
+08:57:58  Plan: 2 to add, 3 to change, 0 to destroy.
