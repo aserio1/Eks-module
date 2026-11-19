@@ -1,189 +1,3 @@
-  Ending Jenkins Quiet Period. Jobs can now begin to be triggered.
-15:14:44  [Pipeline] dir
-15:14:44  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Release/PR-297/2/src
-15:14:44  [Pipeline] {
-15:14:44  [Pipeline] script
-15:14:44  [Pipeline] {
-15:14:44  [Pipeline] sh
-15:14:44  + /home/jenkins/anaconda3/bin/conda run -n python314 python -u -W ignore jenkins_drain.py dev --unquiet
-15:16:06  Jenkins returned HTTP 502. Retry 1/6 in 10s...
-15:16:06  Jenkins returned HTTP 502. Retry 2/6 in 10s...
-15:16:06  Jenkins returned HTTP 504. Retry 3/6 in 10s...
-15:16:06  Jenkins returned HTTP 502. Retry 4/6 in 10s...
-15:16:06  Jenkins returned HTTP 502. Retry 5/6 in 10s...
-15:16:06  Jenkins returned HTTP 502. Retry 6/6 in 10s...
-15:16:06  Jenkins did not come up after 6 attempts. Skipping auth check.
-15:16:06  Skipping Jenkins auth check since Jenkins is not up.
-15:16:06  Jenkins is not up. Skipping the rest of the script.
-15:16:06  
-15:16:06  [Pipeline] }
-15:16:06  [Pipeline] // script
-15:16:06  [Pipeline] }
-15:16:06  [Pipeline] // dir
-15:16:06  [Pipeline] }
-15:16:06  [Pipeline] // stage
-15:16:07  [Pipeline] stage
-15:16:07  [Pipeline] { (Run Smoke Test)
-15:16:07  [Pipeline] echo
-15:16:07  Wait for Jenkins to be up and run the smoke test
-15:16:07  [Pipeline] dir
-15:16:07  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Release/PR-297/2/tests
-15:16:07  [Pipeline] {
-15:16:07  [Pipeline] script
-15:16:07  [Pipeline] {
-15:16:07  [Pipeline] sh
-15:16:08  + /home/jenkins/anaconda3/bin/conda run -n python314 --no-capture-output python -u -W ignore jenkins_smoke.py dev
-15:16:09  Waiting for Jenkins https://dev.jenkins.aws.hhsoig.gov/ to come up...
-15:16:09  Checking back in 4 mins...
-15:20:15  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:20:19  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:20:29  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:20:39  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:20:49  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:20:59  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:21:09  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:21:19  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:21:32  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:21:40  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:21:50  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:22:02  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:22:10  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:22:22  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:22:30  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:22:40  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:22:53  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:23:01  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:23:11  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:23:23  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:23:31  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:23:41  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:23:53  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:24:03  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:24:13  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:24:23  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:24:33  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:24:43  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:24:53  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:25:03  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:25:13  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:25:23  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:25:33  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:25:43  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:25:53  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:26:03  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:26:13  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:26:23  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:26:35  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:26:44  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:26:54  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:27:06  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:27:14  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:27:24  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:27:36  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:27:44  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:27:56  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:28:05  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:28:15  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:28:27  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:28:35  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:28:45  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:28:55  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:29:17  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 504. Retrying...
-15:29:39  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 504. Retrying...
-15:29:45  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 503. Retrying...
-15:30:07  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 504. Retrying...
-15:30:16  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:30:28  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:30:36  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
-15:30:46  Jenkins https://dev.jenkins.aws.hhsoig.gov/ did not come up after 600 seconds.
-15:30:46  Smoke Test Failed: Smoke Test Failed: Jenkins did not come up in time
-15:30:46  ERROR conda.cli.main_run:execute(125): `conda run python -u -W ignore jenkins_smoke.py dev` failed. (See above for error)
-15:30:46  [Pipeline] }
-15:30:46  [Pipeline] // script
-15:30:47  [Pipeline] }
-15:30:47  [Pipeline] // dir
-15:30:47  [Pipeline] }
-15:30:47  [Pipeline] // stage
-15:30:47  [Pipeline] stage
-15:30:47  [Pipeline] { (Create Git Tag)
-15:30:47  Stage "Create Git Tag" skipped due to earlier failure(s)
-15:30:48  [Pipeline] getContext
-15:30:48  [Pipeline] }
-15:30:48  [Pipeline] // stage
-15:30:48  [Pipeline] stage
-15:30:48  [Pipeline] { (Declarative: Post Actions)
-15:30:48  [Pipeline] script
-15:30:48  [Pipeline] {
-15:30:49  [Pipeline] }
-15:30:49  [Pipeline] // script
-15:30:49  [Pipeline] script
-15:30:49  [Pipeline] {
-15:30:49  [Pipeline] sh
-15:30:49  + aws --profile dev cloudwatch put-metric-data --region us-east-1 --namespace IMAC/Jenkins --metric-name DeploymentCount --value 1 --timestamp 2026-11-19T21:30:49Z --dimensions Environment=dev,Status=Failure,Source=https://jenkins.aws.hhsoig.gov/ --unit Count
-15:30:50  [JTE][Step - utils/email_via_sns.call()]
-15:30:51  [Pipeline] stage
-15:30:51  [Pipeline] { (Publish to SNS)
-15:30:51  [Pipeline] node
-15:30:51  Running on imac in /home/jenkins/workspace/IMAC_IMAC_Jenkins_Release_PR-297@2
-15:30:51  [Pipeline] {
-15:30:51  [Pipeline] ws
-15:30:51  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Release/PR-297/2@2
-15:30:51  [Pipeline] {
-15:30:51  [Pipeline] echo
-15:30:51  Publishing a message to Jenkins SNS topic.
-15:30:52  [Pipeline] script
-15:30:52  [Pipeline] {
-15:30:52  [Pipeline] sh
-15:30:52  + unset AWS_PROFILE
-15:30:52  + aws sns list-topics --region us-east-1 --query 'Topics[?contains(TopicArn, '\''prod-jenkins-notifications'\'')].TopicArn | [0]' --output text
-15:30:53  [Pipeline] sh
-15:30:53  + unset AWS_PROFILE
-15:30:53  + aws sns publish --region us-east-1 --topic-arn arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications --subject 'JENKINS(prod): IMAC Jenkins Release build status is: FAILURE!' --message 'Jenkins pipeline status: FAILURE
-15:30:53  
-15:30:53  Job: IMAC Jenkins Release
-15:30:53  Branch: PR-297
-15:30:53  Build: #2
-15:30:53  Environment: prod
-15:30:53  Project: imac
-15:30:53  
-15:30:53  Review the Jenkins build:
-15:30:53  https://jenkins.aws.hhsoig.gov/job/IMAC/job/IMAC%20Jenkins%20Release/job/PR-297/2/' --message-attributes '{"department":{"DataType":"String","StringValue":"imac"}}'
-15:30:54  {
-15:30:54      "MessageId": "5f24b5b3-6baa-55ad-8cc3-d6ca076418bd"
-15:30:54  }
-15:30:54  [Pipeline] echo
-15:30:55  SNS message published successfully.
-15:30:55  [Pipeline] }
-15:30:55  [Pipeline] // script
-15:30:55  [Pipeline] }
-15:30:55  [Pipeline] // ws
-15:30:55  [Pipeline] }
-15:30:55  [Pipeline] // node
-15:30:55  [Pipeline] }
-15:30:56  [Pipeline] // stage
-15:30:56  [Pipeline] }
-15:30:56  [Pipeline] // script
-15:30:56  [Pipeline] }
-15:30:56  [Pipeline] // stage
-15:30:56  [Pipeline] }
-15:30:56  [Pipeline] // withEnv
-15:30:56  [Pipeline] }
-15:30:57  [Pipeline] // withEnv
-15:30:57  [Pipeline] }
-15:30:57  [Pipeline] // ws
-15:30:57  [Pipeline] }
-15:30:57  [Pipeline] // node
-15:30:58  [Pipeline] End of Pipeline
-15:31:01  ERROR: script returned exit code 1
-15:31:02  
-15:31:02  GitHub has been notified of this commit’s build result
-15:31:02  
-15:31:02  Finished: FAILURE
-
-
-########################
-user_data.sh.tpl
-################
 #!/bin/bash
 set -euo pipefail
 ################################################################################
@@ -268,6 +82,52 @@ docker run -d \
   -v /jenkins_jobs/.jenkins-cwagent/state:/opt/aws/amazon-cloudwatch-agent/logs/state \
   -v /jenkins_jobs:/jenkins_jobs:ro \
   ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/ecr-public/cloudwatch-agent/cloudwatch-agent:latest
+
+# ------------------------------------------------------------------------
+# NEW: Jenkins CloudWatch heartbeat on EFS
+# ------------------------------------------------------------------------
+
+echo "Configuring Jenkins CloudWatch heartbeat on EFS..."
+
+# Heartbeat setup is optional and must not interrupt Jenkins startup
+configure_jenkins_heartbeat() {
+
+  # Install and enable cron
+  dnf install -y cronie || return 1
+  systemctl enable --now crond || return 1
+
+  # Create heartbeat directory on EFS
+  mkdir -p /jenkins_jobs/.jenkins-cwagent/heartbeat || return 1
+
+  # Create heartbeat script
+  cat > /usr/local/bin/jenkins-cw-heartbeat.sh <<'HEARTBEAT_EOF'
+#!/bin/bash
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) JENKINS_CW_HEARTBEAT" \
+  >> /jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log
+HEARTBEAT_EOF
+
+  chmod 755 /usr/local/bin/jenkins-cw-heartbeat.sh || return 1
+
+  # Schedule heartbeat every minute
+  cat > /etc/cron.d/jenkins-cw-heartbeat <<'CRON_EOF'
+* * * * * root /usr/local/bin/jenkins-cw-heartbeat.sh
+CRON_EOF
+
+  chmod 644 /etc/cron.d/jenkins-cw-heartbeat || return 1
+
+  # Generate initial heartbeat
+  /usr/local/bin/jenkins-cw-heartbeat.sh || return 1
+
+  echo "Jenkins CloudWatch heartbeat configured successfully."
+}
+
+if ! configure_jenkins_heartbeat; then
+  echo "WARNING: Jenkins CloudWatch heartbeat setup failed. Continuing startup."
+fi
+
+# ------------------------------------------------------------------------
+# END: Jenkins CloudWatch heartbeat on EFS
+# ------------------------------------------------------------------------
 
 %{ endif }
 
