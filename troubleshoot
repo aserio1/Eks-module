@@ -1,13 +1,31 @@
-# Confirm current branch and commit
-git branch --show-current
 git log -1 --oneline
-
-# Confirm heartbeat Terraform resources are present
-grep -R -n 'resource "aws_cloudwatch_log_metric_filter" "jenkins_heartbeat"' .
+feature-IMAC-1400
+bed739e (HEAD -> feature-IMAC-1400, origin/feature-IMAC-1400) update
+coder@aserio:~/aserio-workspace/imac-jenkins$ grep -R -n 'resource "aws_cloudwatch_log_metric_filter" "jenkins_heartbeat"' .
 grep -R -n 'resource "aws_cloudwatch_metric_alarm" "jenkins_logs_missing"' .
+./infrastructure/terraform/monitoring.tf:71:resource "aws_cloudwatch_log_metric_filter" "jenkins_heartbeat" {
+./infrastructure/terraform/monitoring.tf:91:resource "aws_cloudwatch_metric_alarm" "jenkins_logs_missing" {
+coder@aserio:~/aserio-workspace/imac-jenkins$ terraform state list | grep -E 'jenkins_heartbeat|jenkins_logs_missing'
+No state file was found!
 
-# Check whether the resources are already managed in state
-terraform state list | grep -E 'jenkins_heartbeat|jenkins_logs_missing'
-
-# Check whether the user-data template is referenced
-grep -R -n 'user_data.tpl\|cloudwatch_agent_json' .
+State management commands require a state file. Run this command
+in a directory where Terraform has been run or use the -state flag
+to point the command to a specific state location.
+coder@aserio:~/aserio-workspace/imac-jenkins$ grep -R -n 'user_data.tpl\|cloudwatch_agent_json' .
+./README.md:70:If you make updates to the user_data.tpl, (e.g. change docker target, add new varaibles to docker run,you must re-run the terraform apply using this command:
+./infrastructure/terraform/modules/jenkins_agent/scripts/user_data.tpl:4:# jenkins_agent/scripts/user_data.tpl
+./infrastructure/terraform/modules/jenkins_agent/scripts/scanner_user_data.tpl:4:# scanner_agent/scripts/user_data.tpl
+./infrastructure/terraform/modules/jenkins_agent/ec2.tf:8:  user_data_template = local.is_scanner ? "scripts/scanner_user_data.tpl" : "scripts/user_data.tpl"
+./infrastructure/terraform/modules/jenkins_controller/templates/user_data.sh.tpl:4:# jenkins_controller/scripts/user_data.tpl
+./infrastructure/terraform/modules/jenkins_controller/templates/user_data.sh.tpl:72:${cloudwatch_agent_json}
+./infrastructure/terraform/modules/jenkins_controller/ec2.tf:32:      cloudwatch_agent_json        = local.jenkins_cwagent_config
+./project_details.md:181:                *   `user_data.tpl`: A Bash shell script template used as EC2 user data. It handles partition resizing, package installation (aws-cli, jq, python3, wget, unzip, docker, amazon-efs-utils), Docker setup, EFS mounting, SSH key configuration, secrets retrieval, ECR login, Trivy installation, Python package installation, Tenable agent setup, and cron job scheduling for Trivy scans.
+./project_details.md:189:                *   `user_data.tpl`: A Bash shell script template for the controller's EC2 user data. It handles package installation, Docker setup, EFS mounting, ECR login, Trivy installation, Python package installation, cron job scheduling, and running the main Jenkins Docker container.
+grep: ./.git/index: binary file matches
+./docs/jenkins_agents.md:126:        *   `user_data`: This crucial field is populated by rendering the `user_data.tpl` script. It dynamically injects various Terraform variables into the script, allowing the instance to self-configure during its initial boot.
+./docs/jenkins_agents.md:137:*   **`jenkins_agent/scripts/user_data.tpl` (Dynamic Bootstrap Script)**:
+./docs/jenkins_agents.md:149:    This Python script is a key component of the agent's security posture. It is executed on agent instances (typically on a schedule defined by `user_data.tpl`) to:
+./docs/project_details.md:59:| **User Data Script** | A script that runs on instance launch to install Jenkins, plugins, and other dependencies. | `modules/jenkins_controller/scripts/user_data.tpl` |
+./docs/project_details.md:69:| **User Data Script** | A script that runs on agent launch to install necessary tools (e.g., Docker, Java) and connect to the Jenkins controller. | `modules/jenkins_agent/scripts/user_data.tpl` |
+./docs/jenkins_scanner_agent.md:197:- Which `user_data` template is rendered (`scanner_user_data.tpl` vs `user_data.tpl`)
+coder@aserio:~/aserio-workspace/imac-jenkins$ 
