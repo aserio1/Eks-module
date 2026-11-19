@@ -1,28 +1,43 @@
 
-{
-  "agent": {
-    "run_as_user": "root",
-    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/jenkins-cwagent.log"
-  },
-  "logs": {
-    "force_flush_interval": 5,
-    "logs_collected": {
-      "files": {
-        "collect_list": [
-          {
-            "file_path": "/jenkins_jobs/**/builds/[0-9]*/log",
-            "log_group_name": "${log_group_name}",
-            "log_stream_name": "jenkins-controller-{instance_id}",
-            "encoding": "utf-8"
-          },
-          {
-            "file_path": "/jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log",
-            "log_group_name": "${log_group_name}",
-            "log_stream_name": "jenkins-heartbeat-{instance_id}",
-            "encoding": "utf-8"
-          }
-        ]
-      }
-    }
-  }
-}
+# ------------------------------------------------------------------------
+# Jenkins CloudWatch heartbeat monitoring
+# Generate heartbeat logs on EFS every minute
+# ------------------------------------------------------------------------
+
+echo "Configuring Jenkins CloudWatch heartbeat on EFS..."
+
+# Install and enable cron
+dnf install -y cronie
+systemctl enable --now crond
+
+# Create heartbeat directory on Jenkins EFS
+mkdir -p /jenkins_jobs/.jenkins-cwagent/heartbeat
+
+# Create heartbeat log file
+touch /jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log
+
+# Configure permissions
+chmod 755 /jenkins_jobs/.jenkins-cwagent/heartbeat
+chmod 644 /jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log
+
+# Create heartbeat script
+cat > /usr/local/bin/jenkins-cw-heartbeat.sh <<'EOF'
+#!/bin/bash
+
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) JENKINS_CW_HEARTBEAT" \
+  >> /jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log
+EOF
+
+chmod 755 /usr/local/bin/jenkins-cw-heartbeat.sh
+
+# Schedule heartbeat every minute
+cat > /etc/cron.d/jenkins-cw-heartbeat <<'EOF'
+* * * * * root /usr/local/bin/jenkins-cw-heartbeat.sh
+EOF
+
+chmod 644 /etc/cron.d/jenkins-cw-heartbeat
+
+# Generate initial heartbeat
+/usr/local/bin/jenkins-cw-heartbeat.sh
+
+echo "Jenkins CloudWatch EFS heartbeat configured successfully."
