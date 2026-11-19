@@ -1,21 +1,2 @@
-### Jira Summary
-Add CloudWatch Alarm for Missing Jenkins Controller Logs
-
-### Description
-Implemented CloudWatch heartbeat monitoring to detect interruptions in log delivery from the Jenkins controller to AWS CloudWatch.
-
-### Changes Implemented
-- Configured the Jenkins controller to generate heartbeat logs every minute.
-- Updated the CloudWatch Agent to collect and forward heartbeat logs.
-- Created a CloudWatch metric filter to track incoming heartbeat events.
-- Added a CloudWatch alarm that triggers when no heartbeat is received for five consecutive minutes.
-- Integrated the alarm with the existing Jenkins SNS notification topic to send alerts when log delivery stops and recovery notifications when it resumes.
-- Preserved existing Jenkins monitoring and alerting configurations.
-
-### Validation
-- Terraform plan completed successfully.
-- Confirmed the plan includes the new CloudWatch metric filter and missing-logs alarm.
-- CloudWatch log delivery and SNS notification testing remain to be verified after deployment.
-
-### Expected Outcome
-The monitoring solution provides automated notification when the Jenkins heartbeat log delivery pipeline stops functioning, improving visibility into CloudWatch Agent and log forwarding failures.
+I think you want the heartbeat log to be written on the EFS - because that's where we are getting the build logs from as well.
+Test the alarm in Jenkins dev.
