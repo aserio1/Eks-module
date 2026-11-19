@@ -1,27 +1,274 @@
-{
-  "agent": {
-    "run_as_user": "root",
-    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/jenkins-cwagent.log"
-  },
-  "logs": {
-    "force_flush_interval": 5,
-    "logs_collected": {
-      "files": {
-        "collect_list": [
-          {
-            "file_path": "/jenkins_jobs/**/builds/[0-9]*/log",
-            "log_group_name": "${log_group_name}",
-            "log_stream_name": "jenkins-controller-{instance_id}",
-            "encoding": "utf-8"
-          },
-          {
-            "file_path": "/jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log",
-            "log_group_name": "${log_group_name}",
-            "log_stream_name": "jenkins-heartbeat-{instance_id}",
-            "encoding": "utf-8"
-          }
-        ]
-      }
-    }
-  }
-}
+  Ending Jenkins Quiet Period. Jobs can now begin to be triggered.
+15:14:44  [Pipeline] dir
+15:14:44  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Release/PR-297/2/src
+15:14:44  [Pipeline] {
+15:14:44  [Pipeline] script
+15:14:44  [Pipeline] {
+15:14:44  [Pipeline] sh
+15:14:44  + /home/jenkins/anaconda3/bin/conda run -n python314 python -u -W ignore jenkins_drain.py dev --unquiet
+15:16:06  Jenkins returned HTTP 502. Retry 1/6 in 10s...
+15:16:06  Jenkins returned HTTP 502. Retry 2/6 in 10s...
+15:16:06  Jenkins returned HTTP 504. Retry 3/6 in 10s...
+15:16:06  Jenkins returned HTTP 502. Retry 4/6 in 10s...
+15:16:06  Jenkins returned HTTP 502. Retry 5/6 in 10s...
+15:16:06  Jenkins returned HTTP 502. Retry 6/6 in 10s...
+15:16:06  Jenkins did not come up after 6 attempts. Skipping auth check.
+15:16:06  Skipping Jenkins auth check since Jenkins is not up.
+15:16:06  Jenkins is not up. Skipping the rest of the script.
+15:16:06  
+15:16:06  [Pipeline] }
+15:16:06  [Pipeline] // script
+15:16:06  [Pipeline] }
+15:16:06  [Pipeline] // dir
+15:16:06  [Pipeline] }
+15:16:06  [Pipeline] // stage
+15:16:07  [Pipeline] stage
+15:16:07  [Pipeline] { (Run Smoke Test)
+15:16:07  [Pipeline] echo
+15:16:07  Wait for Jenkins to be up and run the smoke test
+15:16:07  [Pipeline] dir
+15:16:07  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Release/PR-297/2/tests
+15:16:07  [Pipeline] {
+15:16:07  [Pipeline] script
+15:16:07  [Pipeline] {
+15:16:07  [Pipeline] sh
+15:16:08  + /home/jenkins/anaconda3/bin/conda run -n python314 --no-capture-output python -u -W ignore jenkins_smoke.py dev
+15:16:09  Waiting for Jenkins https://dev.jenkins.aws.hhsoig.gov/ to come up...
+15:16:09  Checking back in 4 mins...
+15:20:15  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:20:19  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:20:29  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:20:39  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:20:49  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:20:59  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:21:09  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:21:19  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:21:32  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:21:40  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:21:50  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:22:02  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:22:10  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:22:22  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:22:30  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:22:40  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:22:53  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:23:01  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:23:11  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:23:23  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:23:31  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:23:41  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:23:53  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:24:03  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:24:13  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:24:23  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:24:33  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:24:43  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:24:53  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:25:03  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:25:13  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:25:23  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:25:33  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:25:43  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:25:53  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:26:03  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:26:13  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:26:23  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:26:35  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:26:44  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:26:54  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:27:06  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:27:14  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:27:24  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:27:36  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:27:44  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:27:56  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:28:05  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:28:15  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:28:27  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:28:35  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:28:45  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:28:55  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:29:17  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 504. Retrying...
+15:29:39  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 504. Retrying...
+15:29:45  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 503. Retrying...
+15:30:07  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 504. Retrying...
+15:30:16  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:30:28  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:30:36  Jenkins https://dev.jenkins.aws.hhsoig.gov/ returned HTTP 502. Retrying...
+15:30:46  Jenkins https://dev.jenkins.aws.hhsoig.gov/ did not come up after 600 seconds.
+15:30:46  Smoke Test Failed: Smoke Test Failed: Jenkins did not come up in time
+15:30:46  ERROR conda.cli.main_run:execute(125): `conda run python -u -W ignore jenkins_smoke.py dev` failed. (See above for error)
+15:30:46  [Pipeline] }
+15:30:46  [Pipeline] // script
+15:30:47  [Pipeline] }
+15:30:47  [Pipeline] // dir
+15:30:47  [Pipeline] }
+15:30:47  [Pipeline] // stage
+15:30:47  [Pipeline] stage
+15:30:47  [Pipeline] { (Create Git Tag)
+15:30:47  Stage "Create Git Tag" skipped due to earlier failure(s)
+15:30:48  [Pipeline] getContext
+15:30:48  [Pipeline] }
+15:30:48  [Pipeline] // stage
+15:30:48  [Pipeline] stage
+15:30:48  [Pipeline] { (Declarative: Post Actions)
+15:30:48  [Pipeline] script
+15:30:48  [Pipeline] {
+15:30:49  [Pipeline] }
+15:30:49  [Pipeline] // script
+15:30:49  [Pipeline] script
+15:30:49  [Pipeline] {
+15:30:49  [Pipeline] sh
+15:30:49  + aws --profile dev cloudwatch put-metric-data --region us-east-1 --namespace IMAC/Jenkins --metric-name DeploymentCount --value 1 --timestamp 2026-11-19T21:30:49Z --dimensions Environment=dev,Status=Failure,Source=https://jenkins.aws.hhsoig.gov/ --unit Count
+15:30:50  [JTE][Step - utils/email_via_sns.call()]
+15:30:51  [Pipeline] stage
+15:30:51  [Pipeline] { (Publish to SNS)
+15:30:51  [Pipeline] node
+15:30:51  Running on imac in /home/jenkins/workspace/IMAC_IMAC_Jenkins_Release_PR-297@2
+15:30:51  [Pipeline] {
+15:30:51  [Pipeline] ws
+15:30:51  Running in /home/jenkins/workspace/IMAC/IMAC Jenkins Release/PR-297/2@2
+15:30:51  [Pipeline] {
+15:30:51  [Pipeline] echo
+15:30:51  Publishing a message to Jenkins SNS topic.
+15:30:52  [Pipeline] script
+15:30:52  [Pipeline] {
+15:30:52  [Pipeline] sh
+15:30:52  + unset AWS_PROFILE
+15:30:52  + aws sns list-topics --region us-east-1 --query 'Topics[?contains(TopicArn, '\''prod-jenkins-notifications'\'')].TopicArn | [0]' --output text
+15:30:53  [Pipeline] sh
+15:30:53  + unset AWS_PROFILE
+15:30:53  + aws sns publish --region us-east-1 --topic-arn arn:aws:sns:us-east-1:213141505949:prod-jenkins-notifications --subject 'JENKINS(prod): IMAC Jenkins Release build status is: FAILURE!' --message 'Jenkins pipeline status: FAILURE
+15:30:53  
+15:30:53  Job: IMAC Jenkins Release
+15:30:53  Branch: PR-297
+15:30:53  Build: #2
+15:30:53  Environment: prod
+15:30:53  Project: imac
+15:30:53  
+15:30:53  Review the Jenkins build:
+15:30:53  https://jenkins.aws.hhsoig.gov/job/IMAC/job/IMAC%20Jenkins%20Release/job/PR-297/2/' --message-attributes '{"department":{"DataType":"String","StringValue":"imac"}}'
+15:30:54  {
+15:30:54      "MessageId": "5f24b5b3-6baa-55ad-8cc3-d6ca076418bd"
+15:30:54  }
+15:30:54  [Pipeline] echo
+15:30:55  SNS message published successfully.
+15:30:55  [Pipeline] }
+15:30:55  [Pipeline] // script
+15:30:55  [Pipeline] }
+15:30:55  [Pipeline] // ws
+15:30:55  [Pipeline] }
+15:30:55  [Pipeline] // node
+15:30:55  [Pipeline] }
+15:30:56  [Pipeline] // stage
+15:30:56  [Pipeline] }
+15:30:56  [Pipeline] // script
+15:30:56  [Pipeline] }
+15:30:56  [Pipeline] // stage
+15:30:56  [Pipeline] }
+15:30:56  [Pipeline] // withEnv
+15:30:56  [Pipeline] }
+15:30:57  [Pipeline] // withEnv
+15:30:57  [Pipeline] }
+15:30:57  [Pipeline] // ws
+15:30:57  [Pipeline] }
+15:30:57  [Pipeline] // node
+15:30:58  [Pipeline] End of Pipeline
+15:31:01  ERROR: script returned exit code 1
+15:31:02  
+15:31:02  GitHub has been notified of this commit’s build result
+15:31:02  
+15:31:02  Finished: FAILURE
+
+
+########################
+user_data.sh.tpl
+################
+#!/bin/bash
+set -euo pipefail
+################################################################################
+# jenkins_controller/scripts/user_data.tpl
+################################################################################
+
+# Redirect all output to user-data log and console
+exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+# ------------------------------------------------------------------------
+# Amazon Linux 2 root volume auto-expands with EC2-provided AMI
+# LVM resize not needed and will fail – removing legacy logic
+# ------------------------------------------------------------------------
+
+# Update and install essential packages
+dnf -y upgrade --exclude=kernel*
+dnf install -y \
+  awscli \
+  jq \
+  unzip \
+  wget \
+  docker \
+  amazon-efs-utils
+
+# Docker is available in the default AL2023 package repository,
+# so you can install it directly with dnf.
+systemctl enable docker
+systemctl start docker
+
+# Create Jenkins user and mount directory
+groupadd -g 2000 jenkins \
+  && useradd -N -u 2000 -g 2000 -l -m -s /bin/bash jenkins
+
+# Create mount point and mount EFS Write to fstab so it persists across reboots
+mkdir -p /jenkins_jobs
+echo "${efs_mount_target}:/ /jenkins_jobs efs _netdev,tls 0 0" >> /etc/fstab
+mount -a
+
+chown jenkins:jenkins /jenkins_jobs
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 213141505949.dkr.ecr.us-east-1.amazonaws.com
+
+# Run Jenkins main container
+echo "Running the jenkins controller container..."
+docker run -d -p 8080-8088:8080-8088 \
+    -p 8022:22 \
+    -e JENKINS_ADMIN_PASSWORD="$(aws secretsmanager get-secret-value --secret-id svc-jenkins-agent-password --region us-east-1 --query SecretString --output text)" \
+    -e LDAP_PASSWORD="$(aws secretsmanager get-secret-value --secret-id ldap-password --region us-east-1 --query SecretString --output text)" \
+    -e SONARQUBE_TOKEN="$(aws secretsmanager get-secret-value --secret-id sonarqube-token --region us-east-1 --query SecretString --output text)" \
+    -e NEXUS_USER="$(aws secretsmanager get-secret-value --secret-id NEXUS_SERVICE_ACCOUNT --region us-east-1 --query SecretString --output text | jq -r '.username')" \
+    -e NEXUS_PASSWORD="$(aws secretsmanager get-secret-value --secret-id NEXUS_SERVICE_ACCOUNT --region us-east-1 --query SecretString --output text | jq -r '.password')" \
+    -e SSH_GITHUB_SVC_KEY="$(aws secretsmanager get-secret-value --secret-id ssh-github-svc-key --region us-east-1 --query SecretString --output text)" \
+    -e GITHUB_SVC_TOKEN="$(aws secretsmanager get-secret-value --secret-id imac-github-svc-account-token --region us-east-1 --query SecretString --output text)" \
+    -e JENKINS_URL=${jenkins_url} \
+    -e JENKINS_IDP_ENTITY_ID=${jenkins_idp_entity_id} \
+    -e JENKINS_IDP_METADATA_URL=${jenkins_idp_metadata_url} \
+    --name=jenkins \
+    --restart always \
+    -v /jenkins_jobs:/home/jenkins/jobs \
+    ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/${controller_image}:${controller_tag}
+
+%{ if enable_cloudwatch_build_logs }
+
+echo "Configuring and running cloudwatch agent container..."
+
+# State is recorded on the EFS
+mkdir -p /jenkins_jobs/.jenkins-cwagent/state
+mkdir -p /opt/jenkins-cwagent
+
+cat >/opt/jenkins-cwagent/config.json <<'EOF'
+${cloudwatch_agent_json}
+EOF
+
+docker rm -f jenkins-cwagent 2>/dev/null || true
+
+docker run -d \
+  --name jenkins-cwagent \
+  --restart unless-stopped \
+  -e AWS_REGION=${aws_region} \
+  -v /opt/jenkins-cwagent/config.json:/etc/cwagentconfig/config.json:ro \
+  -v /jenkins_jobs/.jenkins-cwagent/state:/opt/aws/amazon-cloudwatch-agent/logs/state \
+  -v /jenkins_jobs:/jenkins_jobs:ro \
+  ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/ecr-public/cloudwatch-agent/cloudwatch-agent:latest
+
+%{ endif }
+
+echo "User data completed successfully."
