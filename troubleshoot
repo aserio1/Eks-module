@@ -1,4 +1,3 @@
-
 #!/bin/bash
 set -euo pipefail
 ################################################################################
@@ -30,7 +29,7 @@ systemctl start docker
 
 # Create Jenkins user and mount directory
 groupadd -g 2000 jenkins \
-  && useradd -N -u 2000 -g 2000 -l -m -s /bin/bash jenkins
+  && useradd -N -u 2000 -g 2000 -l -m /bin/bash jenkins
 
 # Create mount point and mount EFS Write to fstab so it persists across reboots
 mkdir -p /jenkins_jobs
@@ -74,36 +73,35 @@ ${cloudwatch_agent_json}
 EOF
 
 # ------------------------------------------------------------------------
-# NEW: HEARTBEAT - Generate Jenkins heartbeat logs on EFS
+# NEW: Jenkins CloudWatch heartbeat on EFS
 # ------------------------------------------------------------------------
 
 echo "Configuring Jenkins CloudWatch heartbeat on EFS..."
 
-# NEW: HEARTBEAT - Install and enable cron
-# Do not interrupt Jenkins if heartbeat setup fails
+# Install cron and enable the service
+# Heartbeat setup must not interrupt Jenkins controller startup
 if dnf install -y cronie && systemctl enable --now crond; then
 
-  # NEW: HEARTBEAT - Create heartbeat directory on EFS
+  # Create heartbeat directory on the existing EFS mount
   if mkdir -p /jenkins_jobs/.jenkins-cwagent/heartbeat; then
 
-    # NEW: HEARTBEAT - Create heartbeat script
+    # Create heartbeat script
     cat > /usr/local/bin/jenkins-cw-heartbeat.sh <<'HEARTBEAT_EOF'
 #!/bin/bash
-
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) JENKINS_CW_HEARTBEAT" \
   >> /jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log
 HEARTBEAT_EOF
 
     chmod 755 /usr/local/bin/jenkins-cw-heartbeat.sh
 
-    # NEW: HEARTBEAT - Schedule heartbeat every minute
+    # Schedule heartbeat every minute
     cat > /etc/cron.d/jenkins-cw-heartbeat <<'CRON_EOF'
 * * * * * root /usr/local/bin/jenkins-cw-heartbeat.sh
 CRON_EOF
 
     chmod 644 /etc/cron.d/jenkins-cw-heartbeat
 
-    # NEW: HEARTBEAT - Generate initial heartbeat
+    # Generate initial heartbeat
     if ! /usr/local/bin/jenkins-cw-heartbeat.sh; then
       echo "WARNING: Initial Jenkins heartbeat failed."
     fi
@@ -119,7 +117,7 @@ else
 fi
 
 # ------------------------------------------------------------------------
-# END NEW: HEARTBEAT
+# END: Jenkins CloudWatch heartbeat on EFS
 # ------------------------------------------------------------------------
 
 docker rm -f jenkins-cwagent 2>/dev/null || true
