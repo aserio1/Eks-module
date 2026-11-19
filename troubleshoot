@@ -1,3 +1,4 @@
+
 #!/bin/bash
 set -euo pipefail
 ################################################################################
@@ -72,6 +73,55 @@ cat >/opt/jenkins-cwagent/config.json <<'EOF'
 ${cloudwatch_agent_json}
 EOF
 
+# ------------------------------------------------------------------------
+# NEW: HEARTBEAT - Generate Jenkins heartbeat logs on EFS
+# ------------------------------------------------------------------------
+
+echo "Configuring Jenkins CloudWatch heartbeat on EFS..."
+
+# NEW: HEARTBEAT - Install and enable cron
+# Do not interrupt Jenkins if heartbeat setup fails
+if dnf install -y cronie && systemctl enable --now crond; then
+
+  # NEW: HEARTBEAT - Create heartbeat directory on EFS
+  if mkdir -p /jenkins_jobs/.jenkins-cwagent/heartbeat; then
+
+    # NEW: HEARTBEAT - Create heartbeat script
+    cat > /usr/local/bin/jenkins-cw-heartbeat.sh <<'HEARTBEAT_EOF'
+#!/bin/bash
+
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) JENKINS_CW_HEARTBEAT" \
+  >> /jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log
+HEARTBEAT_EOF
+
+    chmod 755 /usr/local/bin/jenkins-cw-heartbeat.sh
+
+    # NEW: HEARTBEAT - Schedule heartbeat every minute
+    cat > /etc/cron.d/jenkins-cw-heartbeat <<'CRON_EOF'
+* * * * * root /usr/local/bin/jenkins-cw-heartbeat.sh
+CRON_EOF
+
+    chmod 644 /etc/cron.d/jenkins-cw-heartbeat
+
+    # NEW: HEARTBEAT - Generate initial heartbeat
+    if ! /usr/local/bin/jenkins-cw-heartbeat.sh; then
+      echo "WARNING: Initial Jenkins heartbeat failed."
+    fi
+
+    echo "Jenkins CloudWatch heartbeat configured on EFS."
+
+  else
+    echo "WARNING: Unable to create Jenkins heartbeat directory on EFS."
+  fi
+
+else
+  echo "WARNING: Cron installation failed. Heartbeat monitoring unavailable."
+fi
+
+# ------------------------------------------------------------------------
+# END NEW: HEARTBEAT
+# ------------------------------------------------------------------------
+
 docker rm -f jenkins-cwagent 2>/dev/null || true
 
 docker run -d \
@@ -86,12 +136,3 @@ docker run -d \
 %{ endif }
 
 echo "User data completed successfully."
-
-
-
-actually it seems u removed a lot from the user data
- 
-inclusive of the jenkins controller container
- 
-which would explain what u r seeing
- 
