@@ -1,12 +1,2 @@
-got this comment 
-In order to fix the instability of the jenkins plugins download (currently taking a long time and failing intermittently) we want to start with a cache of plugins from the current jenkins controller.
-
-We can add an aws s3 sync in the user data of the jenkins controller,  after the container is up and get a baseline.
-
-Then in the DockerTemplate we can add an aws sync from the s3 location just prior to the jenkins plugin cli command.
-
-we should use an s3 cache for the Jenkins plugins - I did some research this morning about ways to do this -  we already have them via the current docker image of the Jenkins controller - we could add a s3 sync in the user-data of the Jenkins controller at the end which keeps the baseline up-to-date and then in the DockerfileTemplate we download them before we run the Jenkins plugins cli within the same RUN
-
-s3://jenkins-binaries* bucket
-
-we also have this here s3://jenkins-binaries-213141505949/jenkins-plugin-manager-2.12.8.jar
+grep -RnE 'user_data|user_data_base64|templatefile' . \
+  --include="*.tf"
