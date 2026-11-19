@@ -1,2 +1,28 @@
-I think you want the heartbeat log to be written on the EFS - because that's where we are getting the build logs from as well.
-Test the alarm in Jenkins dev.
+
+{
+  "agent": {
+    "run_as_user": "root",
+    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/jenkins-cwagent.log"
+  },
+  "logs": {
+    "force_flush_interval": 5,
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/jenkins_jobs/**/builds/[0-9]*/log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "jenkins-controller-{instance_id}",
+            "encoding": "utf-8"
+          },
+          {
+            "file_path": "/jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "jenkins-heartbeat-{instance_id}",
+            "encoding": "utf-8"
+          }
+        ]
+      }
+    }
+  }
+}
