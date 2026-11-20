@@ -1,2 +1,2 @@
-grep -RnE 'user_data|user_data_base64|templatefile' . \
+grep -RnE 'user_data|user_data_base64|templatefile|cloudinit|aws_instance|aws_launch_template' . \
   --include="*.tf"
