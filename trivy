@@ -1,34 +1,134 @@
-## PR Summary: Implement S3 Plugin Caching for Jenkins Controller
+#!/bin/bash
+set -euo pipefail
+################################################################################
+# jenkins_controller/scripts/user_data.tpl
+################################################################################
 
-### Description
-This PR improves Jenkins Controller Docker build reliability by introducing an S3-based plugin cache to reduce dependency on external Jenkins plugin downloads, which have been experiencing intermittent failures and long download times.
+# Redirect all output to user-data log and console
+exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
 
-### Changes Made
+# ------------------------------------------------------------------------
+# Amazon Linux 2 root volume auto-expands with EC2-provided AMI
+# LVM resize not needed and will fail – removing legacy logic
+# ------------------------------------------------------------------------
 
-**imac-jenkins Repository**
-- Updated `user_data.sh.tpl` to synchronize installed Jenkins plugins from the running controller to S3.
-- Added logic to wait for the Jenkins container and plugin archives to become available before synchronization.
-- Uploads `.jpi` and `.hpi` files to `s3://jenkins-binaries-213141505949/jenkins-plugin-cache/`.
-- Preserved existing Jenkins startup configuration, credentials, and CloudWatch Agent setup.
+# Update and install essential packages
+dnf -y upgrade --exclude=kernel*
+dnf install -y \
+  awscli \
+  jq \
+  unzip \
+  wget \
+  docker \
+  amazon-efs-utils
 
-**imac-docker Repository**
-- Updated `DockerfileTemplate` to restore cached Jenkins plugins from S3 before executing Jenkins Plugin Manager.
-- Retained the existing `jpm.jar`, `plugins.txt`, and Jenkins archive download URL.
-- Removed the previous Sonar-specific download workaround.
-- Kept the existing plugin installation timeout and error handling.
+# Docker is available in the default AL2023 package repository,
+# so you can install it directly with dnf.
+systemctl enable docker
+systemctl start docker
 
-### Expected Benefits
-- Reduces repeated downloads from external Jenkins plugin repositories.
-- Improves Docker build reliability and potentially reduces build times.
-- Reuses plugins from the existing Jenkins Controller.
-- Provides a reusable plugin baseline for future Jenkins Controller image builds.
+# Create Jenkins user and mount directory
+groupadd -g 2000 jenkins \
+  && useradd -N -u 2000 -g 2000 -l -m -s /bin/bash jenkins
 
-### Verification Plan
-1. Deploy the updated Jenkins Controller user-data configuration.
-2. Verify the running controller uploads plugin archives to S3.
-3. Confirm the S3 cache contains the expected `.jpi` and `.hpi` files.
-4. Run the Jenkins Controller Docker build and verify the S3 synchronization succeeds.
-5. Confirm Jenkins Plugin Manager completes successfully and the new controller starts with the required plugins.
+# Create mount point and mount EFS Write to fstab so it persists across reboots
+mkdir -p /jenkins_jobs
+echo "${efs_mount_target}:/ /jenkins_jobs efs _netdev,tls 0 0" >> /etc/fstab
+mount -a
 
-### Backout Plan
-Revert the user-data and DockerfileTemplate changes to restore the previous Jenkins plugin installation process. Existing S3 cache objects can remain without affecting the controller.
+chown jenkins:jenkins /jenkins_jobs
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 213141505949.dkr.ecr.us-east-1.amazonaws.com
+
+# Run Jenkins main container
+echo "Running the jenkins controller container..."
+docker run -d -p 8080-8088:8080-8088 \
+    -p 8022:22 \
+    -e JENKINS_ADMIN_PASSWORD="$(aws secretsmanager get-secret-value --secret-id svc-jenkins-agent-password --region us-east-1 --query SecretString --output text)" \
+    -e LDAP_PASSWORD="$(aws secretsmanager get-secret-value --secret-id ldap-password --region us-east-1 --query SecretString --output text)" \
+    -e SONARQUBE_TOKEN="$(aws secretsmanager get-secret-value --secret-id sonarqube-token --region us-east-1 --query SecretString --output text)" \
+    -e NEXUS_USER="$(aws secretsmanager get-secret-value --secret-id NEXUS_SERVICE_ACCOUNT --region us-east-1 --query SecretString --output text | jq -r '.username')" \
+    -e NEXUS_PASSWORD="$(aws secretsmanager get-secret-value --secret-id NEXUS_SERVICE_ACCOUNT --region us-east-1 --query SecretString --output text | jq -r '.password')" \
+    -e SSH_GITHUB_SVC_KEY="$(aws secretsmanager get-secret-value --secret-id ssh-github-svc-key --region us-east-1 --query SecretString --output text)" \
+    -e GITHUB_SVC_TOKEN="$(aws secretsmanager get-secret-value --secret-id imac-github-svc-account-token --region us-east-1 --query SecretString --output text)" \
+    -e JENKINS_URL=${jenkins_url} \
+    -e JENKINS_IDP_ENTITY_ID=${jenkins_idp_entity_id} \
+    -e JENKINS_IDP_METADATA_URL=${jenkins_idp_metadata_url} \
+    --name=jenkins \
+    --restart always \
+    -v /jenkins_jobs:/home/jenkins/jobs \
+    ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/${controller_image}:${controller_tag}
+
+%{ if enable_cloudwatch_build_logs }
+
+echo "Configuring and running cloudwatch agent container..."
+
+# State is recorded on the EFS
+mkdir -p /jenkins_jobs/.jenkins-cwagent/state
+mkdir -p /opt/jenkins-cwagent
+
+cat >/opt/jenkins-cwagent/config.json <<'EOF'
+${cloudwatch_agent_json}
+EOF
+
+docker rm -f jenkins-cwagent 2>/dev/null || true
+
+docker run -d \
+  --name jenkins-cwagent \
+  --restart unless-stopped \
+  -e AWS_REGION=${aws_region} \
+  -v /opt/jenkins-cwagent/config.json:/etc/cwagentconfig/config.json:ro \
+  -v /jenkins_jobs/.jenkins-cwagent/state:/opt/aws/amazon-cloudwatch-agent/logs/state \
+  -v /jenkins_jobs:/jenkins_jobs:ro \
+  ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/ecr-public/cloudwatch-agent/cloudwatch-agent:latest
+
+# ------------------------------------------------------------------------
+# NEW: Jenkins CloudWatch heartbeat on EFS
+# ------------------------------------------------------------------------
+
+echo "Configuring Jenkins CloudWatch heartbeat on EFS..."
+
+# Heartbeat setup is optional and must not interrupt Jenkins startup
+configure_jenkins_heartbeat() {
+
+  # Install and enable cron
+  dnf install -y cronie || return 1
+  systemctl enable --now crond || return 1
+
+  # Create heartbeat directory on EFS
+  mkdir -p /jenkins_jobs/.jenkins-cwagent/heartbeat || return 1
+
+  # Create heartbeat script
+  cat > /usr/local/bin/jenkins-cw-heartbeat.sh <<'HEARTBEAT_EOF'
+#!/bin/bash
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) JENKINS_CW_HEARTBEAT" \
+  >> /jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log
+HEARTBEAT_EOF
+
+  chmod 755 /usr/local/bin/jenkins-cw-heartbeat.sh || return 1
+
+  # Schedule heartbeat every minute
+  cat > /etc/cron.d/jenkins-cw-heartbeat <<'CRON_EOF'
+* * * * * root /usr/local/bin/jenkins-cw-heartbeat.sh
+CRON_EOF
+
+  chmod 644 /etc/cron.d/jenkins-cw-heartbeat || return 1
+
+  # Generate initial heartbeat
+  /usr/local/bin/jenkins-cw-heartbeat.sh || return 1
+
+  echo "Jenkins CloudWatch heartbeat configured successfully."
+}
+
+if ! configure_jenkins_heartbeat; then
+  echo "WARNING: Jenkins CloudWatch heartbeat setup failed. Continuing startup."
+fi
+
+# ------------------------------------------------------------------------
+# END: Jenkins CloudWatch heartbeat on EFS
+# ------------------------------------------------------------------------
+
+%{ endif }
+
+echo "User data completed successfully."
