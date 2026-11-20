@@ -1,107 +1,177 @@
 
+#!/bin/bash
+set -euo pipefail
 ################################################################################
-# IMAC Jenkins Controller Docker Image
+# jenkins_controller/scripts/user_data.tpl
+################################################################################
+
+# Redirect all output to user-data log and console
+exec > >(tee /var/log/user-data.log | logger -t user-data -s 2>/dev/console) 2>&1
+
+# ------------------------------------------------------------------------
+# Amazon Linux 2 root volume auto-expands with EC2-provided AMI
+# LVM resize not needed and will fail – removing legacy logic
+# ------------------------------------------------------------------------
+
+# Update and install essential packages
+dnf -y upgrade --exclude=kernel*
+dnf install -y \
+  awscli \
+  jq \
+  unzip \
+  wget \
+  docker \
+  amazon-efs-utils
+
+# Docker is available in the default AL2023 package repository,
+# so you can install it directly with dnf.
+systemctl enable docker
+systemctl start docker
+
+# Create Jenkins user and mount directory
+groupadd -g 2000 jenkins \
+  && useradd -N -u 2000 -g 2000 -l -m -s /bin/bash jenkins
+
+# Create mount point and mount EFS Write to fstab so it persists across reboots
+mkdir -p /jenkins_jobs
+echo "${efs_mount_target}:/ /jenkins_jobs efs _netdev,tls 0 0" >> /etc/fstab
+mount -a
+
+chown jenkins:jenkins /jenkins_jobs
+
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 213141505949.dkr.ecr.us-east-1.amazonaws.com
+
+# Run Jenkins main container
+echo "Running the jenkins controller container..."
+docker run -d -p 8080-8088:8080-8088 \
+    -p 8022:22 \
+    -e JENKINS_ADMIN_PASSWORD="$(aws secretsmanager get-secret-value --secret-id svc-jenkins-agent-password --region us-east-1 --query SecretString --output text)" \
+    -e LDAP_PASSWORD="$(aws secretsmanager get-secret-value --secret-id ldap-password --region us-east-1 --query SecretString --output text)" \
+    -e SONARQUBE_TOKEN="$(aws secretsmanager get-secret-value --secret-id sonarqube-token --region us-east-1 --query SecretString --output text)" \
+    -e NEXUS_USER="$(aws secretsmanager get-secret-value --secret-id NEXUS_SERVICE_ACCOUNT --region us-east-1 --query SecretString --output text | jq -r '.username')" \
+    -e NEXUS_PASSWORD="$(aws secretsmanager get-secret-value --secret-id NEXUS_SERVICE_ACCOUNT --region us-east-1 --query SecretString --output text | jq -r '.password')" \
+    -e SSH_GITHUB_SVC_KEY="$(aws secretsmanager get-secret-value --secret-id ssh-github-svc-key --region us-east-1 --query SecretString --output text)" \
+    -e GITHUB_SVC_TOKEN="$(aws secretsmanager get-secret-value --secret-id imac-github-svc-account-token --region us-east-1 --query SecretString --output text)" \
+    -e JENKINS_URL=${jenkins_url} \
+    -e JENKINS_IDP_ENTITY_ID=${jenkins_idp_entity_id} \
+    -e JENKINS_IDP_METADATA_URL=${jenkins_idp_metadata_url} \
+    --name=jenkins \
+    --restart always \
+    -v /jenkins_jobs:/home/jenkins/jobs \
+    ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/${controller_image}:${controller_tag}
+
+%{ if enable_cloudwatch_build_logs }
+
+echo "Configuring and running cloudwatch agent container..."
+
+# State is recorded on the EFS
+mkdir -p /jenkins_jobs/.jenkins-cwagent/state
+mkdir -p /opt/jenkins-cwagent
+
+cat >/opt/jenkins-cwagent/config.json <<'EOF'
+${cloudwatch_agent_json}
+EOF
+
+docker rm -f jenkins-cwagent 2>/dev/null || true
+
+docker run -d \
+  --name jenkins-cwagent \
+  --restart unless-stopped \
+  -e AWS_REGION=${aws_region} \
+  -v /opt/jenkins-cwagent/config.json:/etc/cwagentconfig/config.json:ro \
+  -v /jenkins_jobs/.jenkins-cwagent/state:/opt/aws/amazon-cloudwatch-agent/logs/state \
+  -v /jenkins_jobs:/jenkins_jobs:ro \
+  ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/ecr-public/cloudwatch-agent/cloudwatch-agent:latest
+
+%{ endif }
+
+################################################################################
+# Sync Jenkins Controller Plugins to S3
 #
+# Wait for the Jenkins Controller container to be running and the installed
+# plugins to be available, then upload them to S3 for future Docker builds.
 ################################################################################
 
-FROM AWS_ECR_ACCOUNT_ID.dkr.ecr.AWS_ECR_REGION.amazonaws.com/oig/omp/base/ib-python314:BASE_IMAGE_VERSION
+echo "Starting Jenkins plugin cache synchronization..."
 
-LABEL   oig.imac.base.image.purpose="Jenkins Controller Docker image" \
-        oig.imac.image.owner="Kate Rose" \
-        oig.imac.image.engineer="Kent Rockwell" \
-        oig.imac.base.image.parent="IMAC Jenkins base image" \
-        oig.imac.base.image.parent.registry="213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/base/jenkins:BASE_IMAGE_VERSION" \
-        oig.imac.base.image.ontogeny.registry="registry1.dso.mil/ironbank" \
-        oig.imac.base.image.ontogeny.image="registry1.dso.mil/ironbank/opensource/python:v3.14.5@sha256:be4255a2642bcf619c9594ebb4cbd8ac046ce9ce8c6e69b338048f53164e4b9a"
+JENKINS_CONTAINER="jenkins"
+PLUGIN_CACHE_DIR="/tmp/jenkins-plugin-cache"
+S3_PLUGIN_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
 
-ARG user=jenkins
-ARG group=jenkins
-ARG uid=2000
-ARG gid=2000
-ARG JENKINS_HOME=/home/jenkins
-ARG JENKINS_JAR_FILES="jenkins-jar-files-2026-11-04"
+mkdir -p "$PLUGIN_CACHE_DIR"
 
-USER root
+# Wait for Jenkins container to be running
+echo "Waiting for Jenkins Controller container..."
 
-# Create User
-# disables max password age and clears any account expiration date
-# remove password entirely since we use key-only auth
-RUN mkdir -p $JENKINS_HOME \
-  && groupadd -g ${gid} ${group} \
-  && useradd -N -d "$JENKINS_HOME" -u ${uid} -g ${gid} -l -m -s /bin/bash ${user} \
-  && chage -M -1 -E -1 ${user} \
-  && passwd -d ${user} \
-  && chown -R ${uid}:${gid} $JENKINS_HOME
+for attempt in $(seq 1 30); do
+    if docker inspect -f '{{.State.Running}}' "$JENKINS_CONTAINER" 2>/dev/null | grep -qx true; then
+        echo "Jenkins Controller container is running."
+        break
+    fi
 
-# Install OS Packages
-RUN yum -y update && \
-    yum -y install java-21-openjdk && \
-    yum clean all && \
-    rm -rf /var/cache/yum/*
+    echo "Waiting for Jenkins Controller... attempt $attempt/30"
+    sleep 10
+done
 
-USER jenkins
+if ! docker inspect -f '{{.State.Running}}' "$JENKINS_CONTAINER" 2>/dev/null | grep -qx true; then
+    echo "ERROR: Jenkins Controller container is not running."
+    exit 1
+fi
 
-# Install Jenkins apps
-WORKDIR $JENKINS_HOME
+# Wait for Jenkins plugin archives to become available
+echo "Waiting for Jenkins plugins..."
 
-RUN aws s3 cp s3://jenkins-binaries-213141505949/${JENKINS_JAR_FILES}.zip jenkins-zip-files.zip && \
-    unzip jenkins-zip-files.zip && \
-    mv ${JENKINS_JAR_FILES}/* . && \
-    rm -rf jenkins-zip-files.zip ${JENKINS_JAR_FILES}
+PLUGINS_READY=false
 
-COPY dependencies/casc.yaml $JENKINS_HOME/casc.yaml
-COPY dependencies/jenkins.sh $JENKINS_HOME/jenkins.sh
-COPY dependencies/plugins.txt $JENKINS_HOME/plugins.txt
+for attempt in $(seq 1 30); do
+    if docker exec "$JENKINS_CONTAINER" sh -c \
+      'find /home/jenkins/plugins -maxdepth 1 -type f \( -name "*.jpi" -o -name "*.hpi" \) -print -quit 2>/dev/null | grep -q .' 2>/dev/null; then
+        PLUGINS_READY=true
+        break
+    fi
 
-RUN mkdir $JENKINS_HOME/init.groovy.d && \
-    chmod 755 $JENKINS_HOME/init.groovy.d
+    echo "Waiting for Jenkins plugins... attempt $attempt/30"
+    sleep 10
+done
 
-COPY dependencies/user-token-gen.groovy $JENKINS_HOME/init.groovy.d/user-token-gen.groovy
+if [ "$PLUGINS_READY" != "true" ]; then
+    echo "ERROR: Jenkins plugin archives were not found."
+    exit 1
+fi
 
-USER root
+# Copy plugins from the running Jenkins Controller
+echo "Copying Jenkins plugins from container..."
 
-RUN chmod 755 $JENKINS_HOME/init.groovy.d/user-token-gen.groovy && \
-    chmod 755 $JENKINS_HOME/jenkins.sh && \
-    chown -R ${uid}:${gid} $JENKINS_HOME
+docker cp \
+  "$JENKINS_CONTAINER:/home/jenkins/plugins/." \
+  "$PLUGIN_CACHE_DIR/"
 
-USER jenkins
+# Verify plugin archives exist
+PLUGIN_COUNT=$(find "$PLUGIN_CACHE_DIR" -maxdepth 1 -type f \
+  \( -name "*.jpi" -o -name "*.hpi" \) | wc -l)
 
-ENV CASC_JENKINS_CONFIG=$JENKINS_HOME/casc.yaml
-ENV JENKINS_HOME=$JENKINS_HOME
+echo "Jenkins plugin archives found: $PLUGIN_COUNT"
 
-# Jenkins Plugin Installation Manager
-# jpm.jar is included in the existing Jenkins ZIP downloaded from S3.
-# Preserve the existing Jenkins archive download URL.
-ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
+if [ "$PLUGIN_COUNT" -eq 0 ]; then
+    echo "ERROR: No Jenkins plugin archives available for synchronization."
+    exit 1
+fi
 
-################################################################################
-# Install Jenkins Plugins Using S3 Cache
-################################################################################
+# Upload installed plugins to S3
+echo "Uploading Jenkins plugins to S3..."
 
-RUN set -eu; \
-    echo "Restoring Jenkins plugins from S3..."; \
-    mkdir -p "$JENKINS_HOME/plugins"; \
-    aws s3 sync \
-      s3://jenkins-binaries-213141505949/jenkins-plugin-cache/ \
-      "$JENKINS_HOME/plugins/" \
-      --exclude "*" \
-      --include "*.jpi" \
-      --include "*.hpi"; \
-    echo "Starting Jenkins Plugin Manager..."; \
-    rc=0; \
-    timeout 3600 java -jar jpm.jar --verbose \
-      --war "$JENKINS_HOME/jenkins.war" \
-      -f "$JENKINS_HOME/plugins.txt" \
-      -d "$JENKINS_HOME/plugins" || rc=$?; \
-    if [ "$rc" -ne 0 ]; then \
-      echo "Jenkins plugin installation failed with exit code $rc"; \
-      if [ "$rc" -eq 124 ]; then \
-        echo "Jenkins plugin installation timed out after 3600 seconds"; \
-      fi; \
-      exit "$rc"; \
-    fi; \
-    echo "Jenkins plugins installed successfully"; \
-    rm -f "$JENKINS_HOME/jpm.jar"
+aws s3 sync \
+  "$PLUGIN_CACHE_DIR/" \
+  "$S3_PLUGIN_CACHE" \
+  --exclude "*" \
+  --include "*.jpi" \
+  --include "*.hpi" \
+  --region us-east-1
 
-CMD [ "./jenkins.sh"]
-ENTRYPOINT []
+echo "Jenkins plugin cache synchronized successfully."
+
+# Remove temporary plugin files
+rm -rf "$PLUGIN_CACHE_DIR"
+
+echo "User data completed successfully."
