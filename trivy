@@ -1,3 +1,4 @@
+
 #!/bin/bash
 set -euo pipefail
 ################################################################################
@@ -84,7 +85,7 @@ docker run -d \
   ${ecr_repo_account_id}.dkr.ecr.us-east-1.amazonaws.com/ecr-public/cloudwatch-agent/cloudwatch-agent:latest
 
 # ------------------------------------------------------------------------
-# NEW: Jenkins CloudWatch heartbeat on EFS
+# Jenkins CloudWatch heartbeat on EFS
 # ------------------------------------------------------------------------
 
 echo "Configuring Jenkins CloudWatch heartbeat on EFS..."
@@ -130,5 +131,112 @@ fi
 # ------------------------------------------------------------------------
 
 %{ endif }
+
+################################################################################
+# Jenkins Controller Plugin Cache Synchronization
+#
+# Wait for Jenkins Controller to start and plugin archives to become
+# available, then synchronize installed plugins to S3.
+#
+# This cache is used by future Jenkins Controller Docker image builds.
+#
+# Plugin synchronization is optional and must not interrupt Jenkins startup.
+################################################################################
+
+echo "Starting Jenkins plugin cache synchronization..."
+
+sync_jenkins_plugin_cache() {
+
+  local JENKINS_CONTAINER="jenkins"
+  local PLUGIN_CACHE_DIR="/tmp/jenkins-plugin-cache"
+  local S3_PLUGIN_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
+  local PLUGINS_READY=false
+  local PLUGIN_COUNT=0
+
+  mkdir -p "$PLUGIN_CACHE_DIR" || return 1
+
+  # Wait for Jenkins Controller container
+  echo "Waiting for Jenkins Controller container..."
+
+  for attempt in $(seq 1 30); do
+
+    if docker inspect -f '{{.State.Running}}' "$JENKINS_CONTAINER" 2>/dev/null | grep -qx true; then
+      echo "Jenkins Controller container is running."
+      break
+    fi
+
+    echo "Waiting for Jenkins Controller... attempt $attempt/30"
+    sleep 10
+
+  done
+
+  if ! docker inspect -f '{{.State.Running}}' "$JENKINS_CONTAINER" 2>/dev/null | grep -qx true; then
+    echo "ERROR: Jenkins Controller container is not running."
+    return 1
+  fi
+
+  # Wait for installed Jenkins plugin archives
+  echo "Waiting for Jenkins plugins..."
+
+  for attempt in $(seq 1 30); do
+
+    if docker exec "$JENKINS_CONTAINER" sh -c \
+      'find /home/jenkins/plugins -maxdepth 1 -type f \( -name "*.jpi" -o -name "*.hpi" \) -print -quit 2>/dev/null | grep -q .' 2>/dev/null; then
+
+      PLUGINS_READY=true
+      break
+
+    fi
+
+    echo "Waiting for Jenkins plugins... attempt $attempt/30"
+    sleep 10
+
+  done
+
+  if [ "$PLUGINS_READY" != "true" ]; then
+    echo "ERROR: Jenkins plugin archives were not found."
+    return 1
+  fi
+
+  # Copy plugins from running Jenkins Controller
+  echo "Copying Jenkins plugins from container..."
+
+  docker cp \
+    "$JENKINS_CONTAINER:/home/jenkins/plugins/." \
+    "$PLUGIN_CACHE_DIR/" || return 1
+
+  # Verify plugin archives
+  PLUGIN_COUNT=$(find "$PLUGIN_CACHE_DIR" -maxdepth 1 -type f \
+    \( -name "*.jpi" -o -name "*.hpi" \) | wc -l)
+
+  echo "Jenkins plugin archives found: $PLUGIN_COUNT"
+
+  if [ "$PLUGIN_COUNT" -eq 0 ]; then
+    echo "ERROR: No Jenkins plugin archives available for synchronization."
+    return 1
+  fi
+
+  # Upload installed plugins to S3
+  echo "Uploading Jenkins plugins to S3..."
+
+  aws s3 sync \
+    "$PLUGIN_CACHE_DIR/" \
+    "$S3_PLUGIN_CACHE" \
+    --exclude "*" \
+    --include "*.jpi" \
+    --include "*.hpi" \
+    --region us-east-1 || return 1
+
+  echo "Jenkins plugin cache synchronized successfully."
+
+  # Remove temporary plugin files
+  rm -rf "$PLUGIN_CACHE_DIR"
+
+  return 0
+}
+
+if ! sync_jenkins_plugin_cache; then
+  echo "WARNING: Jenkins plugin cache synchronization failed. Continuing startup."
+fi
 
 echo "User data completed successfully."
