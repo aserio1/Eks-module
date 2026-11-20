@@ -1,5 +1,5 @@
 data.tf
-
+###############
 
 data "aws_region" "current" {}
 
@@ -23,7 +23,147 @@ locals {
   jenkins_cwagent_config = var.enable_cloudwatch_build_logs ? templatefile(
     "${path.module}/templates/cw-agent-config.json.tpl",
     {
-      log_group_name = aws_cloudwatch_log_group.jenkins_build_logs[0].name
+      log_group_name           = aws_cloudwatch_log_group.jenkins_build_logs[0].name
+      heartbeat_log_group_name = aws_cloudwatch_log_group.jenkins_heartbeat_logs[0].name
     }
   ) : ""
+}
+
+
+
+##########################
+config
+#############
+
+{
+  "agent": {
+    "run_as_user": "root",
+    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/jenkins-cwagent.log"
+  },
+  "logs": {
+    "force_flush_interval": 5,
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/jenkins_jobs/**/builds/[0-9]*/log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "jenkins-controller-{instance_id}",
+            "encoding": "utf-8"
+          },
+          {
+            "file_path": "/jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log",
+            "log_group_name": "${heartbeat_log_group_name}",
+            "log_stream_name": "jenkins-heartbeat-{instance_id}",
+            "encoding": "utf-8"
+          }
+        ]
+      }
+    }
+  }
+}
+
+
+
+######################
+cloudwatch.tf
+#####################
+
+################################################################################
+# CloudWatch Log Groups with KMS Encryption and Retention
+################################################################################
+
+resource "aws_kms_key" "observability_logs" {
+  description             = "KMS key for observability CloudWatch log groups"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EnableRootPermissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowCloudWatchLogs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+################################################################################
+# KMS Alias for CloudWatch Logs
+################################################################################
+
+resource "aws_kms_alias" "observability_logs" {
+  name          = "alias/imac-${var.prefix}-observability-logs"
+  target_key_id = aws_kms_key.observability_logs.key_id
+}
+
+################################################################################
+# Jenkins Controller Build Logs
+#
+# Existing log group for Jenkins build logs.
+# These logs continue to be forwarded to OpenSearch.
+################################################################################
+
+resource "aws_cloudwatch_log_group" "jenkins_build_logs" {
+  count = var.enable_cloudwatch_build_logs ? 1 : 0
+
+  name              = "/imac/jenkins/${var.prefix}/builds"
+  region            = data.aws_region.current.region
+  retention_in_days = var.cw_retention
+
+  kms_key_id = aws_kms_key.observability_logs.arn
+}
+
+################################################################################
+# Jenkins Controller Heartbeat Logs
+#
+# Dedicated CloudWatch log group for Jenkins heartbeat events.
+# Keeps heartbeat messages separate from build logs and OpenSearch.
+################################################################################
+
+resource "aws_cloudwatch_log_group" "jenkins_heartbeat_logs" {
+  count = var.enable_cloudwatch_build_logs ? 1 : 0
+
+  name              = "/imac/jenkins/${var.prefix}/heartbeat"
+  region            = data.aws_region.current.region
+  retention_in_days = var.cw_retention
+
+  kms_key_id = aws_kms_key.observability_logs.arn
+}
+
+################################################################################
+# Jenkins Build Logs - OpenSearch Subscription
+#
+# Only Jenkins build logs are forwarded to OpenSearch.
+# The heartbeat log group has no OpenSearch subscription.
+################################################################################
+
+resource "aws_cloudwatch_log_subscription_filter" "jenkins_build_logs" {
+  count = var.enable_cloudwatch_build_logs && var.opensearch_log_destination_arn != "" ? 1 : 0
+
+  name            = "to-imac-opensearch"
+  log_group_name  = aws_cloudwatch_log_group.jenkins_build_logs[0].name
+  filter_pattern  = ""
+  destination_arn = var.opensearch_log_destination_arn
 }
