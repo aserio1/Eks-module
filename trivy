@@ -1,38 +1,42 @@
-## PR Title
-Add Jenkins Plugin S3 Cache Synchronization and CloudWatch Heartbeat Monitoring
+for this file 
 
-## PR Summary
 
-### Description
-Updated the Jenkins Controller `user_data.sh.tpl` to include both CloudWatch heartbeat monitoring and S3 plugin-cache synchronization. These changes improve Jenkins monitoring and provide a reusable plugin baseline for future Jenkins Controller Docker builds.
+{
+  "agent": {
+    "run_as_user": "root",
+    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/jenkins-cwagent.log"
+  },
+  "logs": {
+    "force_flush_interval": 5,
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/jenkins_jobs/**/builds/[0-9]*/log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "jenkins-controller-{instance_id}",
+            "encoding": "utf-8"
+          },
+          {
+            "file_path": "/jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "jenkins-heartbeat-{instance_id}",
+            "encoding": "utf-8"
+          }
+        ]
+      }
+    }
+  }
+}
 
-### Changes Made
 
-**CloudWatch Heartbeat**
-- Added a heartbeat script that writes timestamped entries to EFS every minute.
-- Configured a cron job to generate heartbeat events for CloudWatch monitoring.
-- Preserved the existing CloudWatch Agent configuration and log collection.
-- Added error handling to ensure heartbeat configuration failures do not interrupt Jenkins startup.
 
-**Jenkins Plugin S3 Cache**
-- Added logic to wait for the Jenkins Controller container to start and plugin archives to become available.
-- Copies installed `.jpi` and `.hpi` plugins from the running Jenkins Controller.
-- Synchronizes plugin archives to `s3://jenkins-binaries-213141505949/jenkins-plugin-cache/`.
-- Enables future Jenkins Docker builds to restore cached plugins from S3 instead of repeatedly downloading all plugins externally.
-- Added error handling to prevent S3 synchronization failures from interrupting Jenkins startup.
+got this comment 
+infrastructure/terraform/modules/jenkins_controller/templates/cw-agent-config.json.tpl
+          },
+          {
+            "file_path": "/jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log",
+            "log_group_name": "${log_group_name}",
+Member
+This log group is sent to OpenSearch, so I think we’d get a heartbeat line every minute in the logs there. Could we send it to its own log group instead, like /imac/jenkins/${prefix}/heartbeat?
 
-### Expected Benefits
-- Improves Jenkins Controller monitoring through regular CloudWatch heartbeat events.
-- Reduces external plugin download dependency and potential Docker build failures.
-- Provides a reusable plugin cache for future Jenkins Controller deployments.
-- Preserves existing Jenkins credentials, EFS configuration, and container startup behavior.
-
-### Verification Plan
-1. Deploy the updated Jenkins Controller configuration.
-2. Verify Jenkins Controller and CloudWatch Agent containers start successfully.
-3. Confirm heartbeat entries are generated every minute on EFS.
-4. Verify installed Jenkins plugins are synchronized to the S3 cache.
-5. Confirm the next Jenkins Docker build can restore plugins from S3.
-
-### Backout Plan
-Revert the `user_data.sh.tpl` changes and redeploy using the previous configuration. Existing Jenkins data on EFS and cached plugins in S3 will remain unaffected.
