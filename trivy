@@ -30,3 +30,70 @@ contains this
     }
   }
 }
+
+and 
+infrastructure/terraform/modules/jenkins_controller/cloudwatch.tf
+has this code
+# Log group with retention
+
+resource "aws_kms_key" "observability_logs" {
+  description             = "KMS key for observability CloudWatch log groups"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EnableRootPermissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowCloudWatchLogs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_kms_alias" "observability_logs" {
+  name          = "alias/imac-${var.prefix}-observability-logs"
+  target_key_id = aws_kms_key.observability_logs.key_id
+}
+
+
+resource "aws_cloudwatch_log_group" "jenkins_build_logs" {
+  count = var.enable_cloudwatch_build_logs ? 1 : 0
+
+  name              = "/imac/jenkins/${var.prefix}/builds"
+  region            = data.aws_region.current.region
+  retention_in_days = var.cw_retention
+
+  kms_key_id = aws_kms_key.observability_logs.arn
+}
+
+resource "aws_cloudwatch_log_subscription_filter" "jenkins_build_logs" {
+  count = var.enable_cloudwatch_build_logs && var.opensearch_log_destination_arn != "" ? 1 : 0
+
+  name            = "to-imac-opensearch"
+  log_group_name  = aws_cloudwatch_log_group.jenkins_build_logs[0].name
+  filter_pattern  = ""
+  destination_arn = var.opensearch_log_destination_arn
+}
+
