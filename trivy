@@ -1,20 +1,39 @@
-aws ec2 describe-instances \
+bash-5.2$ aws ec2 describe-instances \
   --region us-east-1 \
   --filters "Name=instance-state-name,Values=running" \
   --query 'Reservations[].Instances[].[InstanceId,PrivateIpAddress,Tags[?Key==`Name`].Value|[0]]' \
   --output table
-
-
-docker ps
-
-docker exec jenkins sh -c '
+--------------------------------------------------------------------------------
+|                               DescribeInstances                              |
++----------------------+---------------+---------------------------------------+
+|  i-0576e13d600657aaa |  172.37.3.212 |  dev-Jenkins-Controller               |
+|  i-0a71ed478d2091f4b |  172.37.1.122 |  prod-Jenkins-Controller              |
+|  i-02be3e6ecd888d61b |  172.37.7.236 |  dev-Jenkins Agent - utility          |
+|  i-0fdd489cc68044643 |  172.37.6.87  |  prod-Jenkins Agent - utility         |
+|  i-03c15115b81ec96b8 |  172.37.6.64  |  prod-Jenkins Agent - imac            |
+|  i-01613d077870e9b2b |  172.37.5.105 |  prod-Jenkins Agent - sia             |
+|  i-00aa7fb26bc49f99b |  172.37.4.41  |  dev-Jenkins Agent - imac             |
+|  i-0878f156ef0ef5f87 |  172.37.4.96  |  dev-Jenkins Agent - sia              |
+|  i-0428d1c6fad42116b |  172.37.5.99  |  prod-Jenkins Agent - cgap            |
+|  i-01d02991c312abe5b |  172.37.2.121 |  prod-Jenkins Agent - data_workbench  |
+|  i-04a4f6baffe0fde27 |  172.37.3.246 |  prod-Jenkins Agent - sie             |
+|  i-054fd96e3e1114c4b |  172.37.6.166 |  prod-Jenkins Agent - ides            |
+|  i-09b83093f738513b7 |  172.37.6.115 |  prod-Jenkins Agent - oams            |
+|  i-0814f55eab66bf4f8 |  172.37.1.208 |  prod-Jenkins Agent - salt            |
+|  i-049716ebb00f38d48 |  172.37.3.100 |  prod-Jenkins Agent - gis             |
+|  i-0d968d374a154d667 |  172.37.3.199 |  prod-Jenkins Agent - ml-engineering  |
++----------------------+---------------+---------------------------------------+
+bash-5.2$ 
+bash-5.2$ 
+bash-5.2$ 
+bash-5.2$ docker exec jenkins sh -c '
 echo "JENKINS_HOME=$JENKINS_HOME"
 find /home/jenkins/plugins -maxdepth 1 -type f \
   \( -name "*.jpi" -o -name "*.hpi" \) 2>/dev/null | wc -l
 '
-
-
-set -euo pipefail
+JENKINS_HOME=/home/jenkins
+0
+bash-5.2$ set -euo pipefail
 
 PLUGIN_CACHE_DIR="/tmp/jenkins-plugin-cache"
 S3_PLUGIN_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
@@ -48,11 +67,7 @@ aws s3 sync \
   --include "*.hpi" \
   --region us-east-1
 
-echo "Verifying uploaded plugins..."
-
-aws s3 ls "$S3_PLUGIN_CACHE" \
-  --recursive \
-  --region us-east-1 \
-  | awk '$4 ~ /\.(jpi|hpi)$/ {n++} END {print "Total plugins in S3:", n+0}'
-
-echo "Plugin upload completed successfully."
+echo "Plugin upload completed successfully."t "Total plugins in S3:", n+0}'
+Copying plugins from Jenkins Controller...
+Error response from daemon: Could not find the file /home/jenkins/plugins/. in container jenkins
+[root@71e307951b6e jenkins]# 
