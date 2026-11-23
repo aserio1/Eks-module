@@ -1,45 +1,35 @@
-bash-5.2$ set -euo pipefail
-
-PLUGIN_CACHE_DIR="/tmp/jenkins-plugin-cache"
-S3_PLUGIN_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
-
 echo "========================================"
-echo "Jenkins Plugin Cache Upload"
+echo "Checking Jenkins container directories"
 echo "========================================"
 
-# Verify AWS identity
-aws sts get-caller-identity
+docker exec jenkins sh -c '
+echo "Current user:"
+whoami
 
-# Verify Jenkins container
-docker inspect -f '{{.State.Running}}' jenkins | grep -qx true || {
-  echo "ERROR: Jenkins container is not running"
-  exit 1
-}
+echo ""
+echo "JENKINS_HOME:"
+echo "$JENKINS_HOME"
 
-# Prepare clean local directory
-rm -rf "$PLUGIN_CACHE_DIR"
-mkdir -p "$PLUGIN_CACHE_DIR"
+echo ""
+echo "Checking common plugin locations:"
 
-# Copy plugins from Jenkins container
-echo "Copying Jenkins plugins..."
-docker cp jenkins:/home/jenkins/plugins/. "$PLUGIN_CACHE_DIR/"
+for dir in \
+  /home/jenkins/plugins \
+  /var/jenkins_home/plugins \
+  /usr/share/jenkins/ref/plugins \
+  /home/jenkins/jobs
+do
+  if [ -d "$dir" ]; then
+    echo "FOUND: $dir"
+    find "$dir" -maxdepth 1 -type f \( -name "*.jpi" -o -name "*.hpi" \) 2>/dev/null | wc -l
+  else
+    echo "NOT FOUND: $dir"
+  fi
+done
 
-# Verify plugin archives
-PLUGIN_COUNT=$(find "$PLUGIN_CACHE_DIR" -maxdepth 1 -type f \
-  \( -name "*.jpi" -o -name "*.hpi" \) | wc -l)
-
-echo "Plugins found: $PLUGIN_COUNT"
-
-if [ "$PLUGIN_COUNT" -eq 0 ]; then
-  echo "ERROR: No plugin archives found."
-echo "========================================"Plugins in S3:", n+0}'
-========================================
-Jenkins Plugin Cache Upload
-========================================
-{
-    "UserId": "AROATDIBZI6O2NDKJB3YD:i-00aa7fb26bc49f99b",
-    "Account": "213141505949",
-    "Arn": "arn:aws:sts::213141505949:assumed-role/dev_jenkins_agent_role_imac/i-00aa7fb26bc49f99b"
-}
-Copying Jenkins plugins...
-Error response from daemon: Could not find the file /home/jenkins/plugins/. in container jenkins
+echo ""
+echo "Searching for plugin archives:"
+find /home /opt /usr/share /var -type f \
+  \( -name "*.jpi" -o -name "*.hpi" \) \
+  2>/dev/null | head -30
+'
