@@ -1,4 +1,5 @@
-oder@aserio:~/aserio-workspace/imac-jenkins$ 
+coder@aserio:~/aserio-workspace/imac-jenkins$ 
+coder@aserio:~/aserio-workspace/imac-jenkins$ 
 coder@aserio:~/aserio-workspace/imac-jenkins$ 
 coder@aserio:~/aserio-workspace/imac-jenkins$ 
 coder@aserio:~/aserio-workspace/imac-jenkins$ 
@@ -36,45 +37,3 @@ infrastructure/terraform/modules/jenkins_controller/ec2.tf-34-    }
 infrastructure/terraform/modules/jenkins_controller/ec2.tf-35-  ))
 infrastructure/terraform/modules/jenkins_controller/ec2.tf-36-
 infrastructure/terraform/modules/jenkins_controller/ec2.tf-37-  lifecycle {
-coder@aserio:~/aserio-workspace/imac-jenkins$ grep -Rn -C 10 'templatefile(' infrastructure/terraform/modules/jenkins_controller/
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-11-  name_prefix   = "${var.prefix}-jenkins-controller"
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-12-  image_id      = var.ami_id
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-13-  instance_type = var.jenkins_controller_size
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-14-
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-15-  iam_instance_profile {
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-16-    name = aws_iam_instance_profile.jenkins_controller_ssm_role.name
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-17-  }
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-18-
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-19-  vpc_security_group_ids = var.security_group_ids
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-20-
-infrastructure/terraform/modules/jenkins_controller/ec2.tf:21:  user_data = base64encode(templatefile(
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-22-    "${path.module}/templates/user_data.sh.tpl", {
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-23-      efs_mount_target             = var.efs_mount_target
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-24-      prefix                       = var.prefix
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-25-      jenkins_url                  = var.prefix == "prod" ? "https://jenkins.aws.hhsoig.gov/" : "https://${var.prefix}.jenkins.aws.hhsoig.gov/"
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-26-      ecr_repo_account_id          = var.ecr_repo_account_id
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-27-      controller_image             = var.controller_image
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-28-      controller_tag               = var.controller_tag
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-29-      jenkins_idp_entity_id        = var.jenkins_idp_entity_id
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-30-      jenkins_idp_metadata_url     = var.jenkins_idp_metadata_url
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-31-      enable_cloudwatch_build_logs = var.enable_cloudwatch_build_logs
---
-infrastructure/terraform/modules/jenkins_controller/data.tf-10-# This data source will error out on plan/apply if the AMI no longer exists,
-infrastructure/terraform/modules/jenkins_controller/data.tf-11-# rather than silently succeeding and failing later at instance launch time.
-infrastructure/terraform/modules/jenkins_controller/data.tf-12-data "aws_ami" "validate_pinned" {
-infrastructure/terraform/modules/jenkins_controller/data.tf-13-  filter {
-infrastructure/terraform/modules/jenkins_controller/data.tf-14-    name   = "image-id"
-infrastructure/terraform/modules/jenkins_controller/data.tf-15-    values = [var.ami_id]
-infrastructure/terraform/modules/jenkins_controller/data.tf-16-  }
-infrastructure/terraform/modules/jenkins_controller/data.tf-17-}
-infrastructure/terraform/modules/jenkins_controller/data.tf-18-
-infrastructure/terraform/modules/jenkins_controller/data.tf-19-locals {
-infrastructure/terraform/modules/jenkins_controller/data.tf:20:  jenkins_cwagent_config = var.enable_cloudwatch_build_logs ? templatefile(
-infrastructure/terraform/modules/jenkins_controller/data.tf-21-    "${path.module}/templates/cw-agent-config.json.tpl",
-infrastructure/terraform/modules/jenkins_controller/data.tf-22-    {
-infrastructure/terraform/modules/jenkins_controller/data.tf-23-      log_group_name           = aws_cloudwatch_log_group.jenkins_build_logs[0].name
-infrastructure/terraform/modules/jenkins_controller/data.tf-24-      heartbeat_log_group_name = aws_cloudwatch_log_group.jenkins_heartbeat_logs[0].name
-infrastructure/terraform/modules/jenkins_controller/data.tf-25-    }
-infrastructure/terraform/modules/jenkins_controller/data.tf-26-  ) : ""
-infrastructure/terraform/modules/jenkins_controller/data.tf-27-}
-coder@aserio:~/aserio-workspace/imac-jenkins$ 
