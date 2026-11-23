@@ -1,15 +1,60 @@
-bash-5.2$ docker ps --filter "name=^/jenkins$"
-CONTAINER ID   IMAGE                                                                                                                  COMMAND           CREATED       STATUS       PORTS                                                                                  NAMES
-77dd750fef83   213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/jenkins/jenkins-agent:59f04798f1e6e889fafedb6dec7cf5f3aa6e7384   "./register.sh"   5 hours ago   Up 5 hours   0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp, 0.0.0.0:8022->22/tcp, [::]:8022->22/tcp   jenkins
-bash-5.2$ docker inspect -f '{{.State.Running}}' jenkins
-true
-bash-5.2$ sudo bash -c 'command -v aws || true'
-bash-5.2$ sudo aws sts get-caller-identity
-sudo: aws: command not found
-bash-5.2$  aws sts get-caller-identity
-{
-    "UserId": "AROATDIBZI6O2NDKJB3YD:i-00aa7fb26bc49f99b",
-    "Account": "213141505949",
-    "Arn": "arn:aws:sts::213141505949:assumed-role/dev_jenkins_agent_role_imac/i-00aa7fb26bc49f99b"
+set -euo pipefail
+
+PLUGIN_CACHE_DIR="/tmp/jenkins-plugin-cache"
+S3_PLUGIN_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
+
+echo "========================================"
+echo "Jenkins Plugin Cache Upload"
+echo "========================================"
+
+# Verify AWS identity
+aws sts get-caller-identity
+
+# Verify Jenkins container
+docker inspect -f '{{.State.Running}}' jenkins | grep -qx true || {
+  echo "ERROR: Jenkins container is not running"
+  exit 1
 }
-bash-5.2$ 
+
+# Prepare clean local directory
+rm -rf "$PLUGIN_CACHE_DIR"
+mkdir -p "$PLUGIN_CACHE_DIR"
+
+# Copy plugins from Jenkins container
+echo "Copying Jenkins plugins..."
+docker cp jenkins:/home/jenkins/plugins/. "$PLUGIN_CACHE_DIR/"
+
+# Verify plugin archives
+PLUGIN_COUNT=$(find "$PLUGIN_CACHE_DIR" -maxdepth 1 -type f \
+  \( -name "*.jpi" -o -name "*.hpi" \) | wc -l)
+
+echo "Plugins found: $PLUGIN_COUNT"
+
+if [ "$PLUGIN_COUNT" -eq 0 ]; then
+  echo "ERROR: No plugin archives found."
+  exit 1
+fi
+
+# Upload plugins to S3
+echo "Uploading Jenkins plugins to S3..."
+
+aws s3 sync \
+  "$PLUGIN_CACHE_DIR/" \
+  "$S3_PLUGIN_CACHE" \
+  --exclude "*" \
+  --include "*.jpi" \
+  --include "*.hpi" \
+  --region us-east-1
+
+# Verify uploaded files
+echo "Verifying S3 plugin cache..."
+
+aws s3 ls \
+  "$S3_PLUGIN_CACHE" \
+  --recursive \
+  --region us-east-1 \
+  | awk '$4 ~ /\.(jpi|hpi)$/ {n++} END {print "Plugins in S3:", n+0}'
+
+echo "========================================"
+echo "Jenkins Plugin Cache Upload Completed"
+echo "========================================"
