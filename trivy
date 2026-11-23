@@ -1,39 +1,15 @@
-bash-5.2$ set -euo pipefail
+echo "=== AWS Identity ==="
+aws sts get-caller-identity
 
-PLUGIN_CACHE_DIR="/tmp/jenkins-plugin-cache"
-S3_PLUGIN_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
+echo "=== Jenkins Container ==="
+docker ps --filter "name=^/jenkins$"
 
-echo "========================================"
-echo "Jenkins Plugin Cache Upload"
-echo "========================================"
+echo "=== Jenkins Home ==="
+docker exec jenkins sh -c 'echo "$JENKINS_HOME"'
 
-# Verify Jenkins container is running
-docker inspect -f '{{.State.Running}}' jenkins | grep -qx true
-
-# Create a clean local cache directory
-rm -rf "$PLUGIN_CACHE_DIR"
-mkdir -p "$PLUGIN_CACHE_DIR"
-
-# Copy installed plugins from Jenkins Controller
-echo "Copying Jenkins plugins from container..."
-
-docker cp \
-  jenkins:/home/jenkins/plugins/. \
-  "$PLUGIN_CACHE_DIR/"
-
-# Count plugin archives
-PLUGIN_COUNT=$(find "$PLUGIN_CACHE_DIR" -maxdepth 1 -type f \
-  \( -name "*.jpi" -o -name "*.hpi" \) | wc -l)
-
-echo "Plugins found: $PLUGIN_COUNT"
-
-# Stop if no plugins exist
-if [ "$PLUGIN_COUNT" -eq 0 ]; then
-  echo "ERROR: No plugin archives found. Upload cancelled."
-  exit 1
-echo "========================================"
-========================================
-Jenkins Plugin Cache Upload
-========================================
-Copying Jenkins plugins from container...
-Error response from daemon: Could not find the file /home/jenkins/plugins/. in container jenkins
+echo "=== Plugin Directory ==="
+docker exec jenkins sh -c '
+ls -ld /home/jenkins/plugins 2>&1
+find /home/jenkins/plugins -maxdepth 1 -type f \
+  \( -name "*.jpi" -o -name "*.hpi" \) 2>/dev/null | wc -l
+'
