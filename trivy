@@ -1,55 +1,9 @@
-bash-5.2$ cat > /tmp/run-jenkins-plugin-sync.sh <<'EOF'
-#!/bin/bash
-set -euo pipefail
-
-source /tmp/jenkins-plugin-sync-function.sh
-
-echo "========================================"
-echo "Jenkins Plugin Cache Synchronization"
-echo "========================================"
-
-# Verify Jenkins container
-docker inspect -f '{{.State.Running}}' jenkins | grep -qx true || {
-  echo "ERROR: Jenkins container is not running"
-  exit 1
-}
-
-# Verify AWS credentials
-aws sts get-caller-identity || {
-  echo "ERROR: AWS credentials are not available"
-  exit 1
-}
-
-# Run synchronization
-sync_jenkins_plugin_cache
-
-echo "========================================"
-echo "Plugin synchronization completed"
-echo "========================================"
-EOF
-
-chmod +x /tmp/run-jenkins-plugin-sync.sh
-bash-5.2$ bash -n /tmp/jenkins-plugin-sync-function.sh
-bash -n /tmp/run-jenkins-plugin-sync.sh
 bash-5.2$ 
-bash-5.2$ 
-bash-5.2$ echo "Starting S3 synchronization dry run..."
-
-cp /tmp/jenkins-plugin-sync-function.sh \
-   /tmp/jenkins-plugin-sync-dryrun.sh
-
-sed -i \
-  '/^[[:space:]]*--region us-east-1 || return 1/i\    --dryrun \\' \
-  /tmp/jenkins-plugin-sync-dryrun.sh
-
-sed -i \
-  's|source /tmp/jenkins-plugin-sync-function.sh|source /tmp/jenkins-plugin-sync-dryrun.sh|' \
-  /tmp/run-jenkins-plugin-sync.sh
-
-sudo /tmp/run-jenkins-plugin-sync.sh
-Starting S3 synchronization dry run...
-========================================
-Jenkins Plugin Cache Synchronization
-========================================
-/tmp/run-jenkins-plugin-sync.sh: line 17: aws: command not found
-ERROR: AWS credentials are not available
+bash-5.2$ aws --version
+aws-cli/2.36.31 Python/3.14.6 Linux/6.18.44-99.149.amzn2023.x86_64 exe/x86_64.rhel.10
+bash-5.2$ aws sts get-caller-identity
+{
+    "UserId": "AROATDIBZI6O2NDKJB3YD:i-00aa7fb26bc49f99b",
+    "Account": "213141505949",
+    "Arn": "arn:aws:sts::213141505949:assumed-role/dev_jenkins_agent_role_imac/i-00aa7fb26bc49f99b"
+}
