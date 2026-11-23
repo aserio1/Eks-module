@@ -106,3 +106,8 @@ RUN set -eu; \
 
 CMD [ "./jenkins.sh"]
 ENTRYPOINT []
+
+
+here is the repo https://git.aws.hhsoig.gov/CDO/imac-docker/pull/144/files
+
+fix-new-jenkins-controller my branch 
