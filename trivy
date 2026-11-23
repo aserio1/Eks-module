@@ -1,24 +1,4 @@
-infrastructure/docker/jenkins-controller/DockerfileTemplate
-    echo "Starting Jenkins plugin installation..."; \
-    echo "Restoring Jenkins plugins from S3..."; \
-    mkdir -p "$JENKINS_HOME/plugins"; \
-    aws s3 sync \
-Member
-@Claudio-SidiKemvo Claudio-SidiKemvo 8 minutes ago
-This syncs every cached plugin, including ones removed from plugins.txt, and jpm won't delete them. Can we limit the restore to plugins in plugins.txt?
 
-infrastructure/docker/jenkins-controller/DockerfileTemplate
-      "$JENKINS_HOME/plugins/" \
-      --exclude "*" \
-      --include "*.jpi" \
-      --include "*.hpi"; \
-Member
-@Claudio-SidiKemvo Claudio-SidiKemvo 6 minutes ago
-it looks like If the S3 sync fails, the whole build fails. Can we add || echo "cache unavailable" so the build keeps going? jpm will download the plugins anyway.
-
-
-DOCKERTEMPLATE
-################
 ################################################################################
 # IMAC Jenkins Controller Docker Image
 #
@@ -99,14 +79,27 @@ ENV JENKINS_UC_DOWNLOAD_URL="https://archives.jenkins.io/plugins/"
 ################################################################################
 
 RUN set -eu; \
-    echo "Restoring Jenkins plugins from S3..."; \
+    echo "Restoring Jenkins plugins listed in plugins.txt from S3..."; \
     mkdir -p "$JENKINS_HOME/plugins"; \
-    aws s3 sync \
-      s3://jenkins-binaries-213141505949/jenkins-plugin-cache/ \
-      "$JENKINS_HOME/plugins/" \
-      --exclude "*" \
-      --include "*.jpi" \
-      --include "*.hpi"; \
+    while IFS= read -r plugin || [ -n "$plugin" ]; do \
+      plugin=$(printf '%s' "$plugin" | tr -d '\r'); \
+      plugin=$(printf '%s' "$plugin" | sed 's/#.*//;s/^[[:space:]]*//;s/[[:space:]]*$//'); \
+      [ -n "$plugin" ] || continue; \
+      plugin_name=${plugin%%:*}; \
+      plugin_name=$(printf '%s' "$plugin_name" | sed 's/[[:space:]].*$//'); \
+      case "$plugin_name" in \
+        ""|*[!a-zA-Z0-9_.-]*) \
+          echo "Skipping invalid plugin name: $plugin_name"; \
+          continue ;; \
+      esac; \
+      for extension in jpi hpi; do \
+        aws s3 cp \
+          "s3://jenkins-binaries-213141505949/jenkins-plugin-cache/$plugin_name.$extension" \
+          "$JENKINS_HOME/plugins/$plugin_name.$extension" \
+          --region us-east-1 --only-show-errors \
+          2>/dev/null && break || true; \
+      done; \
+    done < "$JENKINS_HOME/plugins.txt"; \
     echo "Starting Jenkins Plugin Manager..."; \
     rc=0; \
     timeout 3600 java -jar jpm.jar --verbose \
@@ -125,4 +118,3 @@ RUN set -eu; \
 
 CMD [ "./jenkins.sh"]
 ENTRYPOINT []
-
