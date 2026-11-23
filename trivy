@@ -1,63 +1,40 @@
-bash-5.2$ 
-bash-5.2$ aws sts get-caller-identity
-{
-    "UserId": "AROATDIBZI6OZ5CMG4PRP:i-0a71ed478d2091f4b",
-    "Account": "213141505949",
-    "Arn": "arn:aws:sts::213141505949:assumed-role/prod-jenkins_main_ssm_role/i-0a71ed478d2091f4b"
-}
-bash-5.2$ pwd
-/home/jenkins/plugins
-bash-5.2$ ls 
-active-directory                              eddsa-api                          jsoup                             saml
-active-directory.jpi                          eddsa-api.jpi                      jsoup.jpi                         saml.jpi
-antisamy-markup-formatter                     email-ext                          junit                             scm-api
-antisamy-markup-formatter.jpi                 email-ext.jpi                      junit.jpi                         scm-api.jpi
-apache-httpcomponents-client-4-api            font-awesome-api                   mailer                            script-security
-apache-httpcomponents-client-4-api.jpi        font-awesome-api.jpi               mailer.jpi                        script-security.jpi
-apache-httpcomponents-client-5-api            git                                matrix-auth                       snakeyaml-api
-apache-httpcomponents-client-5-api.jpi        git-client                         matrix-auth.jpi                   snakeyaml-api.jpi
-asm-api                                       git-client.jpi                     matrix-project                    snakeyaml-engine-api
-asm-api.jpi                                   git.jpi                            matrix-project.jpi                snakeyaml-engine-api.jpi
-authorize-project                             github                             mina-sshd-api-common              sonar
-authorize-project.jpi                         github-api                         mina-sshd-api-common.jpi          sonar.jpi
-aws-java-sdk2-core                            github-api.jpi                     mina-sshd-api-core                ssh-agent
-aws-java-sdk2-core.jpi                        github-branch-source               mina-sshd-api-core.jpi            ssh-agent.jpi
-aws-java-sdk2-secretsmanager                  github-branch-source.jpi           okhttp-api                        ssh-credentials
-aws-java-sdk2-secretsmanager.jpi              github.jpi                         okhttp-api.jpi                    ssh-credentials.jpi
-aws-secrets-manager-credentials-provider      groovy-events-listener-plugin      pipeline-build-step               ssh-slaves
-aws-secrets-manager-credentials-provider.jpi  groovy-events-listener-plugin.jpi  pipeline-build-step.jpi           ssh-slaves.jpi
-bootstrap5-api                                gson-api                           pipeline-graph-analysis           sshd
-bootstrap5-api.jpi                            gson-api.jpi                       pipeline-graph-analysis.jpi       sshd.jpi
-bouncycastle-api                              instance-identity                  pipeline-graph-view               structs
-bouncycastle-api.jpi                          instance-identity.jpi              pipeline-graph-view.jpi           structs.jpi
-branch-api                                    ionicons-api                       pipeline-groovy-lib               templating-engine
-branch-api.jpi                                ionicons-api.jpi                   pipeline-groovy-lib.jpi           templating-engine.jpi
-build-name-setter                             jackson-annotations2-api           pipeline-input-step               timestamper
-build-name-setter.jpi                         jackson-annotations2-api.jpi       pipeline-input-step.jpi           timestamper.jpi
-caffeine-api                                  jackson2-api                       pipeline-model-api                token-macro
-caffeine-api.jpi                              jackson2-api.jpi                   pipeline-model-api.jpi            token-macro.jpi
-checks-api                                    jackson3-api                       pipeline-model-definition         trilead-api
-checks-api.jpi                                jackson3-api.jpi                   pipeline-model-definition.jpi     trilead-api.jpi
-cloudbees-folder                              jakarta-activation-api             pipeline-model-extensions         variant
-cloudbees-folder.jpi                          jakarta-activation-api.jpi         pipeline-model-extensions.jpi     variant.jpi
-commons-compress-api                          jakarta-mail-api                   pipeline-rest-api                 woodstox-core-api
-commons-compress-api.jpi                      jakarta-mail-api.jpi               pipeline-rest-api.jpi             woodstox-core-api.jpi
-commons-httpclient3-api                       jakarta-xml-bind-api               pipeline-stage-step               workflow-api
-commons-httpclient3-api.jpi                   jakarta-xml-bind-api.jpi           pipeline-stage-step.jpi           workflow-api.jpi
-commons-lang3-api                             javax-activation-api               pipeline-stage-tags-metadata      workflow-basic-steps
-commons-lang3-api.jpi                         javax-activation-api.jpi           pipeline-stage-tags-metadata.jpi  workflow-basic-steps.jpi
-commons-text-api                              javax-mail-api                     pipeline-stage-view               workflow-cps
-commons-text-api.jpi                          javax-mail-api.jpi                 pipeline-stage-view.jpi           workflow-cps.jpi
-configuration-as-code                         jaxb                               pipeline-utility-steps            workflow-durable-task-step
-configuration-as-code.jpi                     jaxb.jpi                           pipeline-utility-steps.jpi        workflow-durable-task-step.jpi
-credentials                                   jjwt-api                           plain-credentials                 workflow-job
-credentials-binding                           jjwt-api.jpi                       plain-credentials.jpi             workflow-job.jpi
-credentials-binding.jpi                       joda-time-api                      plugin-util-api                   workflow-multibranch
-credentials.jpi                               joda-time-api.jpi                  plugin-util-api.jpi               workflow-multibranch.jpi
-display-url-api                               jquery3-api                        prism-api                         workflow-scm-step
-display-url-api.jpi                           jquery3-api.jpi                    prism-api.jpi                     workflow-scm-step.jpi
-durable-task                                  json-api                           purge-build-queue-plugin          workflow-step-api
-durable-task.jpi                              json-api.jpi                       purge-build-queue-plugin.jpi      workflow-step-api.jpi
-echarts-api                                   json-path-api                      role-strategy                     workflow-support
-echarts-api.jpi                               json-path-api.jpi                  role-strategy.jpi                 workflow-support.jpi
-bash-5.2$ 
+set -euo pipefail
+
+PLUGIN_DIR="/home/jenkins/plugins"
+S3_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
+
+echo "========================================"
+echo "Jenkins Plugin Cache Upload"
+echo "========================================"
+
+# Verify plugin directory
+if [ ! -d "$PLUGIN_DIR" ]; then
+  echo "ERROR: Plugin directory not found."
+  exit 1
+fi
+
+# Count installed plugin archives
+PLUGIN_COUNT=$(find "$PLUGIN_DIR" -maxdepth 1 -type f \
+  \( -name "*.jpi" -o -name "*.hpi" \) | wc -l)
+
+echo "Local Jenkins plugins: $PLUGIN_COUNT"
+
+if [ "$PLUGIN_COUNT" -eq 0 ]; then
+  echo "ERROR: No Jenkins plugin archives found."
+  exit 1
+fi
+
+# Upload plugin archives to S3
+echo "Uploading Jenkins plugins to S3..."
+
+aws s3 sync \
+  "$PLUGIN_DIR/" \
+  "$S3_CACHE" \
+  --exclude "*" \
+  --include "*.jpi" \
+  --include "*.hpi" \
+  --region us-east-1
+
+echo "========================================"
+echo "Plugin upload completed successfully"
+echo "========================================"
