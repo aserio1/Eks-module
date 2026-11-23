@@ -1,3 +1,4 @@
+
 ################################################################################
 # modules/jenkins_controller/ec2.tf
 ################################################################################
@@ -20,17 +21,18 @@ resource "aws_launch_template" "jenkins_controller_node" {
 
   user_data = base64encode(templatefile(
     "${path.module}/templates/user_data.sh.tpl", {
-      efs_mount_target             = var.efs_mount_target
-      prefix                       = var.prefix
-      jenkins_url                  = var.prefix == "prod" ? "https://jenkins.aws.hhsoig.gov/" : "https://${var.prefix}.jenkins.aws.hhsoig.gov/"
-      ecr_repo_account_id          = var.ecr_repo_account_id
-      controller_image             = var.controller_image
-      controller_tag               = var.controller_tag
-      jenkins_idp_entity_id        = var.jenkins_idp_entity_id
-      jenkins_idp_metadata_url     = var.jenkins_idp_metadata_url
-      enable_cloudwatch_build_logs = var.enable_cloudwatch_build_logs
-      cloudwatch_agent_json        = local.jenkins_cwagent_config
-      aws_region                   = data.aws_region.current.region
+      efs_mount_target               = var.efs_mount_target
+      prefix                         = var.prefix
+      jenkins_url                    = var.prefix == "prod" ? "https://jenkins.aws.hhsoig.gov/" : "https://${var.prefix}.jenkins.aws.hhsoig.gov/"
+      ecr_repo_account_id            = var.ecr_repo_account_id
+      controller_image               = var.controller_image
+      controller_tag                 = var.controller_tag
+      jenkins_idp_entity_id          = var.jenkins_idp_entity_id
+      jenkins_idp_metadata_url       = var.jenkins_idp_metadata_url
+      enable_cloudwatch_build_logs   = var.enable_cloudwatch_build_logs
+      enable_jenkins_plugin_cache_sync = var.enable_jenkins_plugin_cache_sync
+      cloudwatch_agent_json          = local.jenkins_cwagent_config
+      aws_region                     = data.aws_region.current.region
     }
   ))
 
@@ -89,7 +91,6 @@ resource "aws_autoscaling_group" "jenkins_controller_node" {
     }
     triggers = ["tag"]
   }
-
 
   lifecycle {
     create_before_destroy = true
