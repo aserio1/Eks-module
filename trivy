@@ -1,39 +1,109 @@
-coder@aserio:~/aserio-workspace/imac-jenkins$ 
-coder@aserio:~/aserio-workspace/imac-jenkins$ 
-coder@aserio:~/aserio-workspace/imac-jenkins$ 
-coder@aserio:~/aserio-workspace/imac-jenkins$ 
-coder@aserio:~/aserio-workspace/imac-jenkins$ 
-coder@aserio:~/aserio-workspace/imac-jenkins$ 
-coder@aserio:~/aserio-workspace/imac-jenkins$ 
-coder@aserio:~/aserio-workspace/imac-jenkins$ grep -Rn -C 15 'user_data.sh.tpl' infrastructure/terraform/
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-7-  role = aws_iam_role.jenkins_controller_ssm_role.name
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-8-}
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-9-
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-10-resource "aws_launch_template" "jenkins_controller_node" {
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-11-  name_prefix   = "${var.prefix}-jenkins-controller"
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-12-  image_id      = var.ami_id
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-13-  instance_type = var.jenkins_controller_size
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-14-
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-15-  iam_instance_profile {
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-16-    name = aws_iam_instance_profile.jenkins_controller_ssm_role.name
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-17-  }
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-18-
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-19-  vpc_security_group_ids = var.security_group_ids
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-20-
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-21-  user_data = base64encode(templatefile(
-infrastructure/terraform/modules/jenkins_controller/ec2.tf:22:    "${path.module}/templates/user_data.sh.tpl", {
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-23-      efs_mount_target             = var.efs_mount_target
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-24-      prefix                       = var.prefix
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-25-      jenkins_url                  = var.prefix == "prod" ? "https://jenkins.aws.hhsoig.gov/" : "https://${var.prefix}.jenkins.aws.hhsoig.gov/"
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-26-      ecr_repo_account_id          = var.ecr_repo_account_id
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-27-      controller_image             = var.controller_image
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-28-      controller_tag               = var.controller_tag
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-29-      jenkins_idp_entity_id        = var.jenkins_idp_entity_id
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-30-      jenkins_idp_metadata_url     = var.jenkins_idp_metadata_url
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-31-      enable_cloudwatch_build_logs = var.enable_cloudwatch_build_logs
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-32-      cloudwatch_agent_json        = local.jenkins_cwagent_config
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-33-      aws_region                   = data.aws_region.current.region
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-34-    }
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-35-  ))
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-36-
-infrastructure/terraform/modules/jenkins_controller/ec2.tf-37-  lifecycle {
+################################################################################
+# modules/jenkins_controller/ec2.tf
+################################################################################
+
+resource "aws_iam_instance_profile" "jenkins_controller_ssm_role" {
+  name = "${var.prefix}-jenkins_ssm_role"
+  role = aws_iam_role.jenkins_controller_ssm_role.name
+}
+
+resource "aws_launch_template" "jenkins_controller_node" {
+  name_prefix   = "${var.prefix}-jenkins-controller"
+  image_id      = var.ami_id
+  instance_type = var.jenkins_controller_size
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.jenkins_controller_ssm_role.name
+  }
+
+  vpc_security_group_ids = var.security_group_ids
+
+  user_data = base64encode(templatefile(
+    "${path.module}/templates/user_data.sh.tpl", {
+      efs_mount_target             = var.efs_mount_target
+      prefix                       = var.prefix
+      jenkins_url                  = var.prefix == "prod" ? "https://jenkins.aws.hhsoig.gov/" : "https://${var.prefix}.jenkins.aws.hhsoig.gov/"
+      ecr_repo_account_id          = var.ecr_repo_account_id
+      controller_image             = var.controller_image
+      controller_tag               = var.controller_tag
+      jenkins_idp_entity_id        = var.jenkins_idp_entity_id
+      jenkins_idp_metadata_url     = var.jenkins_idp_metadata_url
+      enable_cloudwatch_build_logs = var.enable_cloudwatch_build_logs
+      cloudwatch_agent_json        = local.jenkins_cwagent_config
+      aws_region                   = data.aws_region.current.region
+    }
+  ))
+
+  lifecycle {
+    create_before_destroy = true
+    precondition {
+      condition     = data.aws_ami.validate_pinned.id == var.ami_id
+      error_message = "Pinned AMI ${var.ami_id} no longer exists or is inaccessible."
+    }
+  }
+
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2 // this is needed because the default is 1 hop, but there are 2 hops when in a docker container (docker > host, host > Metadata)
+  }
+
+  monitoring {
+    enabled = false
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvda" # Root volume default device name on AL2
+    ebs {
+      delete_on_termination = true
+      volume_size           = 256
+      volume_type           = "gp3"
+      encrypted             = true
+      kms_key_id            = var.kms_key_arn
+    }
+  }
+
+  depends_on = [
+    aws_iam_instance_profile.jenkins_controller_ssm_role
+  ]
+}
+
+resource "aws_autoscaling_group" "jenkins_controller_node" {
+  name_prefix               = "${var.prefix}-jenkins-asg"
+  min_size                  = 1
+  max_size                  = 1
+  vpc_zone_identifier       = var.subnet_ids
+  target_group_arns         = var.target_group_arns
+  health_check_grace_period = 600
+
+  launch_template {
+    id      = aws_launch_template.jenkins_controller_node.id
+    version = aws_launch_template.jenkins_controller_node.latest_version
+  }
+
+  instance_refresh {
+    strategy = "Rolling"
+    preferences {
+      min_healthy_percentage = 50
+      instance_warmup        = 120
+    }
+    triggers = ["tag"]
+  }
+
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  dynamic "tag" {
+    for_each = merge(var.tags, {
+      Name          = "${var.prefix}-Jenkins-Controller"
+      ImagePushedAt = data.aws_ecr_image.controller_image.image_pushed_at
+    })
+    content {
+      key                 = tag.key
+      value               = tag.value
+      propagate_at_launch = true
+    }
+  }
+}
