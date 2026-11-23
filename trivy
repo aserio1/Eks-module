@@ -1,54 +1,58 @@
-bash-5.2$ 
-bash-5.2$ 
-bash-5.2$ echo "========================================"
-echo "Chececho "========================================"
-echo "Checking Jenkins container directories"="
-echo "========================================"
+aws ec2 describe-instances \
+  --region us-east-1 \
+  --filters "Name=instance-state-name,Values=running" \
+  --query 'Reservations[].Instances[].[InstanceId,PrivateIpAddress,Tags[?Key==`Name`].Value|[0]]' \
+  --output table
+
+
+docker ps
+
 docker exec jenkins sh -c '
-docker exec jenkins sh -c '
-echo "Current user:"
-whoami
-echo ""
-echo ""ENKINS_HOME:"
-echo "JENKINS_HOME:"
-echo "$JENKINS_HOME"
-echo ""
-echo ""hecking common plugin locations:"
-echo "Checking common plugin locations:"
-for dir in \
-for dir in \ins/plugins \
-  /home/jenkins/plugins \ns \
-  /var/jenkins_home/plugins \ins \
-  /usr/share/jenkins/ref/plugins \
-  /home/jenkins/jobs
-doif [ -d "$dir" ]; then
-  if [ -d "$dir" ]; then
-    echo "FOUND: $dir"pth 1 -type f \( -name "*.jpi" -o -name "*.hpi" \) 2>/dev/null | wc -l
-    find "$dir" -maxdepth 1 -type f \( -name "*.jpi" -o -name "*.hpi" \) 2>/dev/null | wc -l
-  elseho "NOT FOUND: $dir"
-    echo "NOT FOUND: $dir"
-  fi
-done
-echo ""
-echo ""earching for plugin archives:"
-echo "Searching for plugin archives:" f \
-find /home /opt /usr/share /var -type f \
-  \( -name "*.jpi" -o -name "*.hpi" \) \
-  2>/dev/null | head -30
+echo "JENKINS_HOME=$JENKINS_HOME"
+find /home/jenkins/plugins -maxdepth 1 -type f \
+  \( -name "*.jpi" -o -name "*.hpi" \) 2>/dev/null | wc -l
 '
-========================================
-Checking Jenkins container directories
-========================================
-Current user:
-root
 
-JENKINS_HOME:
-/home/jenkins
 
-Checking common plugin locations:
-NOT FOUND: /home/jenkins/plugins
-NOT FOUND: /var/jenkins_home/plugins
-NOT FOUND: /usr/share/jenkins/ref/plugins
-NOT FOUND: /home/jenkins/jobs
+set -euo pipefail
 
-Searching for plugin archives:
+PLUGIN_CACHE_DIR="/tmp/jenkins-plugin-cache"
+S3_PLUGIN_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
+
+rm -rf "$PLUGIN_CACHE_DIR"
+mkdir -p "$PLUGIN_CACHE_DIR"
+
+echo "Copying plugins from Jenkins Controller..."
+
+docker cp \
+  jenkins:/home/jenkins/plugins/. \
+  "$PLUGIN_CACHE_DIR/"
+
+PLUGIN_COUNT=$(find "$PLUGIN_CACHE_DIR" -maxdepth 1 -type f \
+  \( -name "*.jpi" -o -name "*.hpi" \) | wc -l)
+
+echo "Plugins found: $PLUGIN_COUNT"
+
+if [ "$PLUGIN_COUNT" -eq 0 ]; then
+  echo "ERROR: No plugins found. Upload cancelled."
+  exit 1
+fi
+
+echo "Uploading plugins to S3..."
+
+aws s3 sync \
+  "$PLUGIN_CACHE_DIR/" \
+  "$S3_PLUGIN_CACHE" \
+  --exclude "*" \
+  --include "*.jpi" \
+  --include "*.hpi" \
+  --region us-east-1
+
+echo "Verifying uploaded plugins..."
+
+aws s3 ls "$S3_PLUGIN_CACHE" \
+  --recursive \
+  --region us-east-1 \
+  | awk '$4 ~ /\.(jpi|hpi)$/ {n++} END {print "Total plugins in S3:", n+0}'
+
+echo "Plugin upload completed successfully."
