@@ -1,59 +1,4 @@
-
-################################################################################
-# STEP 1: Clone Jenkins PR #297
-################################################################################
-
-cd /tmp
-
-git clone https://git.aws.hhsoig.gov/CDO/imac-jenkins.git
-
-cd imac-jenkins
-
-git fetch origin pull/297/head:pr-297
-git checkout pr-297
-
-################################################################################
-# STEP 2: Locate the Jenkins user-data template
-################################################################################
-
-USER_DATA="infrastructure/terraform/modules/jenkins_controller/templates/user_data.sh.tpl"
-
-test -f "$USER_DATA" || {
-  echo "ERROR: user_data.sh.tpl not found"
-  exit 1
-}
-
-################################################################################
-# STEP 3: Extract the plugin synchronization function
-################################################################################
-
-sed -n '/^sync_jenkins_plugin_cache() {/,/^}$/p' \
-  "$USER_DATA" \
-  > /tmp/jenkins-plugin-sync-function.sh
-
-test -s /tmp/jenkins-plugin-sync-function.sh || {
-  echo "ERROR: Plugin synchronization function not found"
-  exit 1
-}
-
-################################################################################
-# STEP 4: Prepare a safe test copy
-# - Clear stale local cache before copying
-# - Remove --delete to protect existing S3 objects
-################################################################################
-
-sed -i \
-  '/mkdir -p "\$PLUGIN_CACHE_DIR" || return 1/i\  rm -rf "$PLUGIN_CACHE_DIR" || return 1' \
-  /tmp/jenkins-plugin-sync-function.sh
-
-sed -i '/^[[:space:]]*--delete[[:space:]]*\\/d' \
-  /tmp/jenkins-plugin-sync-function.sh
-
-################################################################################
-# STEP 5: Create execution wrapper
-################################################################################
-
-cat > /tmp/run-jenkins-plugin-sync.sh <<'EOF'
+bash-5.2$ cat > /tmp/run-jenkins-plugin-sync.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
@@ -84,19 +29,11 @@ echo "========================================"
 EOF
 
 chmod +x /tmp/run-jenkins-plugin-sync.sh
-
-################################################################################
-# STEP 6: Validate extracted script
-################################################################################
-
-bash -n /tmp/jenkins-plugin-sync-function.sh
+bash-5.2$ bash -n /tmp/jenkins-plugin-sync-function.sh
 bash -n /tmp/run-jenkins-plugin-sync.sh
-
-################################################################################
-# STEP 7: Perform dry run
-################################################################################
-
-echo "Starting S3 synchronization dry run..."
+bash-5.2$ 
+bash-5.2$ 
+bash-5.2$ echo "Starting S3 synchronization dry run..."
 
 cp /tmp/jenkins-plugin-sync-function.sh \
    /tmp/jenkins-plugin-sync-dryrun.sh
@@ -110,58 +47,9 @@ sed -i \
   /tmp/run-jenkins-plugin-sync.sh
 
 sudo /tmp/run-jenkins-plugin-sync.sh
-
-################################################################################
-# STEP 8: Confirm actual upload
-################################################################################
-
-echo ""
-read -r -p "Upload Jenkins plugins to S3 now? (yes/no): " CONFIRM
-
-if [ "$CONFIRM" != "yes" ]; then
-  echo "Upload cancelled."
-  exit 0
-fi
-
-################################################################################
-# STEP 9: Upload plugins to S3
-################################################################################
-
-sed -i \
-  's|source /tmp/jenkins-plugin-sync-dryrun.sh|source /tmp/jenkins-plugin-sync-function.sh|' \
-  /tmp/run-jenkins-plugin-sync.sh
-
-sudo /tmp/run-jenkins-plugin-sync.sh
-
-################################################################################
-# STEP 10: Verify uploaded plugins
-################################################################################
-
-echo "Checking S3 plugin cache..."
-
-sudo aws s3 ls \
-  s3://jenkins-binaries-213141505949/jenkins-plugin-cache/ \
-  --recursive \
-  --region us-east-1
-
-echo ""
-echo "Total plugin archives in S3:"
-
-sudo aws s3 ls \
-  s3://jenkins-binaries-213141505949/jenkins-plugin-cache/ \
-  --recursive \
-  --region us-east-1 \
-  | awk '$4 ~ /\.(jpi|hpi)$/ {n++} END {print n+0}'
-
-echo ""
-echo "Total plugin archives in Jenkins container:"
-
-sudo docker exec jenkins sh -c \
-  'find /home/jenkins/plugins -maxdepth 1 -type f \( -name "*.jpi" -o -name "*.hpi" \) | wc -l'
-
-echo ""
-echo "========================================"
-echo "Jenkins plugin cache upload completed."
-echo "Review archive counts and filenames."
-echo "You can now run the Jenkins Docker build."
-echo "========================================"
+Starting S3 synchronization dry run...
+========================================
+Jenkins Plugin Cache Synchronization
+========================================
+/tmp/run-jenkins-plugin-sync.sh: line 17: aws: command not found
+ERROR: AWS credentials are not available
