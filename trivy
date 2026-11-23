@@ -1,40 +1,12 @@
-set -euo pipefail
+aws s3 ls \
+  s3://jenkins-binaries-213141505949/jenkins-plugin-cache/ \
+  --recursive \
+  --region us-east-1 \
+  | awk '$4 ~ /\.(jpi|hpi)$/ {count++} END {print "Total plugins in S3:", count+0}'
 
-PLUGIN_DIR="/home/jenkins/plugins"
-S3_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
 
-echo "========================================"
-echo "Jenkins Plugin Cache Upload"
-echo "========================================"
 
-# Verify plugin directory
-if [ ! -d "$PLUGIN_DIR" ]; then
-  echo "ERROR: Plugin directory not found."
-  exit 1
-fi
 
-# Count installed plugin archives
-PLUGIN_COUNT=$(find "$PLUGIN_DIR" -maxdepth 1 -type f \
-  \( -name "*.jpi" -o -name "*.hpi" \) | wc -l)
-
-echo "Local Jenkins plugins: $PLUGIN_COUNT"
-
-if [ "$PLUGIN_COUNT" -eq 0 ]; then
-  echo "ERROR: No Jenkins plugin archives found."
-  exit 1
-fi
-
-# Upload plugin archives to S3
-echo "Uploading Jenkins plugins to S3..."
-
-aws s3 sync \
-  "$PLUGIN_DIR/" \
-  "$S3_CACHE" \
-  --exclude "*" \
-  --include "*.jpi" \
-  --include "*.hpi" \
+aws s3 ls \
+  s3://jenkins-binaries-213141505949/jenkins-plugin-cache/ \
   --region us-east-1
-
-echo "========================================"
-echo "Plugin upload completed successfully"
-echo "========================================"
