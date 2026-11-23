@@ -1,35 +1,54 @@
+bash-5.2$ 
+bash-5.2$ 
+bash-5.2$ echo "========================================"
+echo "Chececho "========================================"
+echo "Checking Jenkins container directories"="
 echo "========================================"
-echo "Checking Jenkins container directories"
-echo "========================================"
-
+docker exec jenkins sh -c '
 docker exec jenkins sh -c '
 echo "Current user:"
 whoami
-
 echo ""
+echo ""ENKINS_HOME:"
 echo "JENKINS_HOME:"
 echo "$JENKINS_HOME"
-
 echo ""
+echo ""hecking common plugin locations:"
 echo "Checking common plugin locations:"
-
 for dir in \
-  /home/jenkins/plugins \
-  /var/jenkins_home/plugins \
+for dir in \ins/plugins \
+  /home/jenkins/plugins \ns \
+  /var/jenkins_home/plugins \ins \
   /usr/share/jenkins/ref/plugins \
   /home/jenkins/jobs
-do
+doif [ -d "$dir" ]; then
   if [ -d "$dir" ]; then
-    echo "FOUND: $dir"
+    echo "FOUND: $dir"pth 1 -type f \( -name "*.jpi" -o -name "*.hpi" \) 2>/dev/null | wc -l
     find "$dir" -maxdepth 1 -type f \( -name "*.jpi" -o -name "*.hpi" \) 2>/dev/null | wc -l
-  else
+  elseho "NOT FOUND: $dir"
     echo "NOT FOUND: $dir"
   fi
 done
-
 echo ""
-echo "Searching for plugin archives:"
+echo ""earching for plugin archives:"
+echo "Searching for plugin archives:" f \
 find /home /opt /usr/share /var -type f \
   \( -name "*.jpi" -o -name "*.hpi" \) \
   2>/dev/null | head -30
 '
+========================================
+Checking Jenkins container directories
+========================================
+Current user:
+root
+
+JENKINS_HOME:
+/home/jenkins
+
+Checking common plugin locations:
+NOT FOUND: /home/jenkins/plugins
+NOT FOUND: /var/jenkins_home/plugins
+NOT FOUND: /usr/share/jenkins/ref/plugins
+NOT FOUND: /home/jenkins/jobs
+
+Searching for plugin archives:
