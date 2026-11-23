@@ -1,4 +1,4 @@
-set -euo pipefail
+bash-5.2$ set -euo pipefail
 
 PLUGIN_CACHE_DIR="/tmp/jenkins-plugin-cache"
 S3_PLUGIN_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
@@ -32,29 +32,14 @@ echo "Plugins found: $PLUGIN_COUNT"
 
 if [ "$PLUGIN_COUNT" -eq 0 ]; then
   echo "ERROR: No plugin archives found."
-  exit 1
-fi
-
-# Upload plugins to S3
-echo "Uploading Jenkins plugins to S3..."
-
-aws s3 sync \
-  "$PLUGIN_CACHE_DIR/" \
-  "$S3_PLUGIN_CACHE" \
-  --exclude "*" \
-  --include "*.jpi" \
-  --include "*.hpi" \
-  --region us-east-1
-
-# Verify uploaded files
-echo "Verifying S3 plugin cache..."
-
-aws s3 ls \
-  "$S3_PLUGIN_CACHE" \
-  --recursive \
-  --region us-east-1 \
-  | awk '$4 ~ /\.(jpi|hpi)$/ {n++} END {print "Plugins in S3:", n+0}'
-
-echo "========================================"
-echo "Jenkins Plugin Cache Upload Completed"
-echo "========================================"
+echo "========================================"Plugins in S3:", n+0}'
+========================================
+Jenkins Plugin Cache Upload
+========================================
+{
+    "UserId": "AROATDIBZI6O2NDKJB3YD:i-00aa7fb26bc49f99b",
+    "Account": "213141505949",
+    "Arn": "arn:aws:sts::213141505949:assumed-role/dev_jenkins_agent_role_imac/i-00aa7fb26bc49f99b"
+}
+Copying Jenkins plugins...
+Error response from daemon: Could not find the file /home/jenkins/plugins/. in container jenkins
