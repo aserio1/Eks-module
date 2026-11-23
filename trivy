@@ -1,4 +1,4 @@
-set -euo pipefail
+bash-5.2$ set -euo pipefail
 
 PLUGIN_CACHE_DIR="/tmp/jenkins-plugin-cache"
 S3_PLUGIN_CACHE="s3://jenkins-binaries-213141505949/jenkins-plugin-cache/"
@@ -31,19 +31,9 @@ echo "Plugins found: $PLUGIN_COUNT"
 if [ "$PLUGIN_COUNT" -eq 0 ]; then
   echo "ERROR: No plugin archives found. Upload cancelled."
   exit 1
-fi
-
-# Upload plugins to S3
-echo "Uploading plugins to S3..."
-
-aws s3 sync \
-  "$PLUGIN_CACHE_DIR/" \
-  "$S3_PLUGIN_CACHE" \
-  --exclude "*" \
-  --include "*.jpi" \
-  --include "*.hpi" \
-  --region us-east-1
-
 echo "========================================"
-echo "Upload completed successfully"
-echo "========================================"
+========================================
+Jenkins Plugin Cache Upload
+========================================
+Copying Jenkins plugins from container...
+Error response from daemon: Could not find the file /home/jenkins/plugins/. in container jenkins
