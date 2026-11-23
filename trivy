@@ -1,169 +1,61 @@
-data.tf
-###############
+in imac-docker
+###########
+got this comment 
 
-data "aws_region" "current" {}
+infrastructure/docker/jenkins-controller/DockerfileTemplate
+    echo "Restoring Jenkins plugins from S3..."; \
+    mkdir -p "$JENKINS_HOME/plugins"; \
+    aws s3 sync \
+      s3://jenkins-binaries-213141505949/jenkins-plugin-cache/ \
+Member
+Author
+@Cosmina-Chindris Cosmina-Chindris 3 days ago
+Since the Jenkins controller user-data will handle the s3 sync - we probably need to ensure we have a plugins cache per Jenkins env - and when we build the docker container
+we always pull from the prod only cache or we make the sync happen in prod only with a conditional in user-data - what do u think?
 
-data "aws_caller_identity" "current" {}
+in imac-jenkins
+##############
+infrastructure/terraform/modules/jenkins_controller/templates/user_data.sh.tpl
+  chmod 644 /etc/cron.d/jenkins-cw-heartbeat || return 1
 
-data "aws_ecr_image" "controller_image" {
-  repository_name = var.controller_image
-  image_tag       = var.controller_tag
-}
+  # Generate initial heartbeat
+  /usr/local/bin/jenkins-cw-heartbeat.sh || return 1
+Member
+@Cosmina-Chindris Cosmina-Chindris 3 days ago
+this is not needed - as soon as the cron starts it will create the initial hearbeat
 
-# This data source will error out on plan/apply if the AMI no longer exists,
-# rather than silently succeeding and failing later at instance launch time.
-data "aws_ami" "validate_pinned" {
-  filter {
-    name   = "image-id"
-    values = [var.ami_id]
-  }
-}
+infrastructure/terraform/modules/jenkins_controller/templates/user_data.sh.tpl
+    return 1
+  fi
 
-locals {
-  jenkins_cwagent_config = var.enable_cloudwatch_build_logs ? templatefile(
-    "${path.module}/templates/cw-agent-config.json.tpl",
-    {
-      log_group_name           = aws_cloudwatch_log_group.jenkins_build_logs[0].name
-      heartbeat_log_group_name = aws_cloudwatch_log_group.jenkins_heartbeat_logs[0].name
-    }
-  ) : ""
-}
+  # Wait for installed Jenkins plugin archives
+Member
+@Cosmina-Chindris Cosmina-Chindris 3 days ago
+since the plugins are baked into the docker container - they should be available as soon as the container is up and running - is this line 177 - 198 block needed?
 
+infrastructure/terraform/modules/jenkins_controller/templates/user_data.sh.tpl
+    return 1
+  fi
 
+  # Copy plugins from running Jenkins Controller
+Member
+@Cosmina-Chindris Cosmina-Chindris 3 days ago
+I think we should have only one source for the cache - add a flag which can be set true|false based on env - it should be true only for prod - meaning only prod controller syncs the plugins in the cache
 
-##########################
-config
-#############
+infrastructure/terraform/modules/jenkins_controller/templates/user_data.sh.tpl
+    "$JENKINS_CONTAINER:/home/jenkins/plugins/." \
+    "$PLUGIN_CACHE_DIR/" || return 1
 
-{
-  "agent": {
-    "run_as_user": "root",
-    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/jenkins-cwagent.log"
-  },
-  "logs": {
-    "force_flush_interval": 5,
-    "logs_collected": {
-      "files": {
-        "collect_list": [
-          {
-            "file_path": "/jenkins_jobs/**/builds/[0-9]*/log",
-            "log_group_name": "${log_group_name}",
-            "log_stream_name": "jenkins-controller-{instance_id}",
-            "encoding": "utf-8"
-          },
-          {
-            "file_path": "/jenkins_jobs/.jenkins-cwagent/heartbeat/heartbeat.log",
-            "log_group_name": "${heartbeat_log_group_name}",
-            "log_stream_name": "jenkins-heartbeat-{instance_id}",
-            "encoding": "utf-8"
-          }
-        ]
-      }
-    }
-  }
-}
+  # Verify plugin archives
+Member
+@Cosmina-Chindris Cosmina-Chindris 3 days ago
+this block is not needed line 207-216 - aws s3 sync has built in capability to see what's changed
 
+infrastructure/terraform/modules/jenkins_controller/templates/user_data.sh.tpl
+  # Upload installed plugins to S3
+  echo "Uploading Jenkins plugins to S3..."
 
-
-######################
-cloudwatch.tf
-#####################
-
-################################################################################
-# CloudWatch Log Groups with KMS Encryption and Retention
-################################################################################
-
-resource "aws_kms_key" "observability_logs" {
-  description             = "KMS key for observability CloudWatch log groups"
-  deletion_window_in_days = 30
-  enable_key_rotation     = true
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "EnableRootPermissions"
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-        }
-        Action   = "kms:*"
-        Resource = "*"
-      },
-      {
-        Sid    = "AllowCloudWatchLogs"
-        Effect = "Allow"
-        Principal = {
-          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
-        }
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-################################################################################
-# KMS Alias for CloudWatch Logs
-################################################################################
-
-resource "aws_kms_alias" "observability_logs" {
-  name          = "alias/imac-${var.prefix}-observability-logs"
-  target_key_id = aws_kms_key.observability_logs.key_id
-}
-
-################################################################################
-# Jenkins Controller Build Logs
-#
-# Existing log group for Jenkins build logs.
-# These logs continue to be forwarded to OpenSearch.
-################################################################################
-
-resource "aws_cloudwatch_log_group" "jenkins_build_logs" {
-  count = var.enable_cloudwatch_build_logs ? 1 : 0
-
-  name              = "/imac/jenkins/${var.prefix}/builds"
-  region            = data.aws_region.current.region
-  retention_in_days = var.cw_retention
-
-  kms_key_id = aws_kms_key.observability_logs.arn
-}
-
-################################################################################
-# Jenkins Controller Heartbeat Logs
-#
-# Dedicated CloudWatch log group for Jenkins heartbeat events.
-# Keeps heartbeat messages separate from build logs and OpenSearch.
-################################################################################
-
-resource "aws_cloudwatch_log_group" "jenkins_heartbeat_logs" {
-  count = var.enable_cloudwatch_build_logs ? 1 : 0
-
-  name              = "/imac/jenkins/${var.prefix}/heartbeat"
-  region            = data.aws_region.current.region
-  retention_in_days = var.cw_retention
-
-  kms_key_id = aws_kms_key.observability_logs.arn
-}
-
-################################################################################
-# Jenkins Build Logs - OpenSearch Subscription
-#
-# Only Jenkins build logs are forwarded to OpenSearch.
-# The heartbeat log group has no OpenSearch subscription.
-################################################################################
-
-resource "aws_cloudwatch_log_subscription_filter" "jenkins_build_logs" {
-  count = var.enable_cloudwatch_build_logs && var.opensearch_log_destination_arn != "" ? 1 : 0
-
-  name            = "to-imac-opensearch"
-  log_group_name  = aws_cloudwatch_log_group.jenkins_build_logs[0].name
-  filter_pattern  = ""
-  destination_arn = var.opensearch_log_destination_arn
-}
+  aws s3 sync \
+Member
+@Cosmina-Chindris Cosmina-Chindris 3 days ago
+I think u need to add --delete as well to ensure the cache matches latest plugins from prod
