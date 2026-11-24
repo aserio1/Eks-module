@@ -1,33 +1,7 @@
-infrastructure/terraform/prod.tfvars
-@@ -1,6 +1,6 @@
-prefix                           = "prod"
-jenkins_controller_size          = "t3.large"
-jenkins_docker_tag               = "59f04798f1e6e889fafedb6dec7cf5f3aa6e7384"
-jenkins_docker_tag               = "fadc03026193073501b97eef92bf48747aee1833"
-agent_asg_instance_size          = 1
-Member
-@Cosmina-Chindris Cosmina-Chindris 17 minutes ago
-u need to add the jenkins_controller_docker_tag here - we have not yet build a new tag for jenkins agents - so u need to keep both prev for agents new for controller
-
-
-infrastructure/terraform/dev.tfvars
-@@ -1,7 +1,7 @@
 prefix                           = "dev"
 jenkins_controller_size          = "t3.large"
 jenkins_docker_tag               = "59f04798f1e6e889fafedb6dec7cf5f3aa6e7384"
-jenkins_controller_docker_tag    = "b3ab598e21016d6052b2a9cf32c3b0e1dd47c316"
-jenkins_docker_tag               = "fadc03026193073501b97eef92bf48747aee1833"
-Member
-@Cosmina-Chindris Cosmina-Chindris 18 minutes ago
-u need to keep the prev - we do not have a new tag for jenkins agents
-
-
-dev.tfvars
-#############
-prefix                           = "dev"
-jenkins_controller_size          = "t3.large"
-jenkins_docker_tag               = "fadc03026193073501b97eef92bf48747aee1833"
-jenkins_controller_docker_tag    = "b3ab598e21016d6052b2a9cf32c3b0e1dd47c316"
+jenkins_controller_docker_tag    = "fadc03026193073501b97eef92bf48747aee1833"
 agent_asg_instance_size          = 0
 always_on_agent_nodes            = ["imac", "utility"]
 jenkins_idp_entity_id            = "JenkinsSP"
@@ -50,12 +24,12 @@ jenkins_email_subscriptions = [
   }
 ]
 
-prod.tfvars
-###############
+
 
 prefix                           = "prod"
 jenkins_controller_size          = "t3.large"
-jenkins_docker_tag               = "fadc03026193073501b97eef92bf48747aee1833"
+jenkins_docker_tag               = "59f04798f1e6e889fafedb6dec7cf5f3aa6e7384"
+jenkins_controller_docker_tag    = "fadc03026193073501b97eef92bf48747aee1833"
 agent_asg_instance_size          = 1
 always_on_agent_nodes            = ["utility"]
 jenkins_idp_entity_id            = "JenkinsPRODSP"
