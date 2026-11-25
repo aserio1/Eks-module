@@ -1,14 +1,22 @@
-[root@1f719c03f0f0 jenkins]# aws sns get-subscription-attributes \
-  --subscription-arn arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts:5011de44-6ce1-4334-ac70-bf226cbb300d \
-  --region us-east-1 \
-  --output json
+Date (UTC)
+	
+Type
+	
+Description
 
-aws: [ERROR]: An error occurred (AuthorizationError) when calling the GetSubscriptionAttributes operation: User: arn:aws:sts::213141505949:assumed-role/dev_jenkins_agent_role_imac/i-048b233a8ce40b4d9 is not authorized to perform: SNS:GetSubscriptionAttributes on resource: arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts because no identity-based policy allows the SNS:GetSubscriptionAttributes action
-[root@1f719c03f0f0 jenkins]# aws sns publish \
-  --topic-arn arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts \
-  --subject "DEV Jenkins SNS Email Alert Test" \
-  --message "Testing direct SNS email delivery to the IMAC team without Amazon SES." \
-  --region us-east-1
+2026-11-23 22:29:36
+Action
+Failed to execute action arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts. Received error:
+"CloudWatch Alarms does not have authorization to access the SNS topic encryption key."
 
-aws: [ERROR]: An error occurred (AuthorizationError) when calling the Publish operation: User: arn:aws:sts::213141505949:assumed-role/dev_jenkins_agent_role_imac/i-048b233a8ce40b4d9 is not authorized to perform: SNS:Publish on resource: arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts because no identity-based policy allows the SNS:Publish action
-[root@1f719c03f0f0 jenkins]# 
+## dev-jenkins-cloudwatch-logs-missing
+
+Namespace
+IMAC/Jenkins
+Metric name
+JenkinsHeartbeat
+
+State
+In alarm
+Threshold
+JenkinsHeartbeat < 1 for 5 datapoints within 5 minutes
