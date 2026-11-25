@@ -1,4 +1,14 @@
-aws sns list-subscriptions-by-topic \
+[root@1f719c03f0f0 jenkins]# aws sns list-subscriptions-by-topic \
   --topic-arn arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts \
   --region us-east-1 \
   --output table
+-----------------------------------------------------------------------------------------------------------------------------
+|                                                 ListSubscriptionsByTopic                                                  |
++---------------------------------------------------------------------------------------------------------------------------+
+||                                                      Subscriptions                                                      ||
+|+-----------------+-------------------------------------------------------------------------------------------------------+|
+||  Endpoint       |  imac@oig.hhs.gov                                                                                     ||
+||  Owner          |  213141505949                                                                                         ||
+||  Protocol       |  email                                                                                                ||
+||  SubscriptionArn|  arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts:5011de44-6ce1-4334-ac70-bf226cbb300d   ||
+||  TopicArn       |  arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts                                        ||
