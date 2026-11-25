@@ -1,22 +1,198 @@
-Date (UTC)
-	
-Type
-	
-Description
+# KMS key to encrypt the SNS messages
+resource "aws_kms_key" "jenkins_alerts_kms_key" {
+  description             = "KMS key for SNS topic encryption"
+  enable_key_rotation     = true
+  deletion_window_in_days = 7
 
-2026-11-23 22:29:36
-Action
-Failed to execute action arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts. Received error:
-"CloudWatch Alarms does not have authorization to access the SNS topic encryption key."
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Id      = "key-policy-sns-cloudwatch"
+    Statement = [
+      {
+        Sid    = "AllowSNSServiceUseOfKMS",
+        Effect = "Allow"
+        Principal = {
+          Service = "sns.amazonaws.com"
+        },
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey*",
+          "kms:CreateGrant",
+          "kms:ListGrants",
+          "kms:DescribeKey"
+        ],
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowEventsUseOfKMS"
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey*",
+          "kms:CreateGrant",
+          "kms:ListGrants",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowCloudWatchUseOfKMS"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.amazonaws.com"
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey*",
+          "kms:CreateGrant",
+          "kms:ListGrants",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowCloudWatchAlarmsUseOfKMS"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudwatch.amazonaws.com"
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey*"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow administration of the key"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        },
+        Action = [
+          "kms:ReplicateKey",
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowJenkinsAgentRoleUseOfKMS"
+        Effect = "Allow"
+        Principal = {
+          AWS = local.jenkins_sns_role_arns
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:GenerateDataKey*",
+          "kms:CreateGrant",
+          "kms:ListGrants",
+          "kms:DescribeKey",
+          "kms:TagResource",
+          "kms:UntagResource"
+        ],
+        Resource = "*"
+      },
+    ]
+  })
+}
 
-## dev-jenkins-cloudwatch-logs-missing
+#Create an alias for the KMS key
+resource "aws_kms_alias" "alarm_sns_key_alias" {
+  name          = "alias/${var.prefix}-imac-jenkins-alerts-kms-key"
+  target_key_id = aws_kms_key.jenkins_alerts_kms_key.key_id
+}
 
-Namespace
-IMAC/Jenkins
-Metric name
-JenkinsHeartbeat
+output "sns_kms_key_arn" {
+  value = aws_kms_key.jenkins_alerts_kms_key.arn
+}
 
-State
-In alarm
-Threshold
-JenkinsHeartbeat < 1 for 5 datapoints within 5 minutes
+######################
+# SNS Topic for alerts
+######################
+resource "aws_sns_topic" "jenkins_alerts" {
+  name              = "${var.prefix}-${var.monitored_agent}-jenkins-alerts"
+  kms_master_key_id = aws_kms_key.jenkins_alerts_kms_key.arn
+  tags = merge(local.tags, {
+    Purpose = "Jenkins agent monitoring alerts"
+  })
+}
+
+# SNS Topic Policy
+resource "aws_sns_topic_policy" "jenkins_alerts" {
+  arn = aws_sns_topic.jenkins_alerts.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudwatch.amazonaws.com"
+        }
+        Action   = "SNS:Publish"
+        Resource = aws_sns_topic.jenkins_alerts.arn
+      }
+    ]
+  })
+}
+
+# SNS Topic Email Subscription
+resource "aws_sns_topic_subscription" "jenkins_alerts_email" {
+  topic_arn = aws_sns_topic.jenkins_alerts.arn
+  protocol  = "email"
+  endpoint  = var.team_email
+}
+
+#####################################
+# SNS Topic for jenkins notifications
+#####################################
+resource "aws_sns_topic" "jenkins_notifications" {
+  name              = "${var.prefix}-jenkins-notifications"
+  kms_master_key_id = aws_kms_key.jenkins_alerts_kms_key.arn
+  tags = merge(local.tags, {
+    Purpose = "Jenkins jobs notifications via email"
+  })
+}
+
+# SNS Topic Policy
+resource "aws_sns_topic_policy" "jenkins_notifications" {
+  arn = aws_sns_topic.jenkins_notifications.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowRoleAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = local.jenkins_sns_role_arns
+        }
+        Action   = "SNS:Publish"
+        Resource = aws_sns_topic.jenkins_notifications.arn
+      }
+    ]
+  })
+}
+
+# SNS Topic Subscription
+resource "aws_sns_topic_subscription" "jenkins_notifications_email" {
+  for_each = {
+    for sub in var.jenkins_email_subscriptions : sub.email => sub
+  }
+
+  topic_arn     = aws_sns_topic.jenkins_notifications.arn
+  protocol      = "email"
+  endpoint      = each.value.email
+  filter_policy = jsonencode(each.value.filter_policy)
+}
