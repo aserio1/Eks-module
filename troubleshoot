@@ -1,7 +1,6 @@
-aws: [ERROR]: An error occurred (ParamValidation): Parameter validation failed:
-Invalid length for parameter KeyId, value: 0, valid min length: 1
-sh-5.2$ sudo docker exec -it jenkins bash
-[root@8ae93b57f6e2 jenkins]# aws kms get-key-policy \
+bash-5.2$ 
+bash-5.2$ 
+bash-5.2$ aws kms get-key-policy \
   --key-id alias/dev-imac-jenkins-alerts-kms-key \
   --policy-name default \
   --region us-east-1 \
@@ -9,4 +8,9 @@ sh-5.2$ sudo docker exec -it jenkins bash
   --output text | jq .
 
 aws: [ERROR]: An error occurred (InvalidArnException) when calling the GetKeyPolicy operation: Key Aliases are not supported for this operation.
-[root@8ae93b57f6e2 jenkins]# 
+bash-5.2$ docker ps
+CONTAINER ID   IMAGE                                                                                                                  COMMAND                  CREATED        STATUS        PORTS                                                                                  NAMES
+8ae93b57f6e2   213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/jenkins/jenkins-agent:59f04798f1e6e889fafedb6dec7cf5f3aa6e7384   "./register.sh"          10 hours ago   Up 10 hours   0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp, 0.0.0.0:8022->22/tcp, [::]:8022->22/tcp   jenkins
+8cb956d8d929   213141505949.dkr.ecr.us-east-1.amazonaws.com/ecr-public/aquasecurity/trivy-security:0.72.0                             "trivy server --list…"   10 hours ago   Up 10 hours   0.0.0.0:4954->4954/tcp                                                                 trivy-server
+4d4dae894a02   213141505949.dkr.ecr.us-east-1.amazonaws.com/oig/imac/redis:latest                                                     "docker-entrypoint.s…"   10 hours ago   Up 10 hours   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp                                            redis-container
+bash-5.2$ 
