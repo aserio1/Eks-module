@@ -1,11 +1,8 @@
-df -hT /jenkins_jobs
+dev-jenkins-cloudwatch-logs-missing
+####################
+2026-11-19 19:17:00
+Action
+Failed to execute action arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts. Received error: "CloudWatch Alarms does not have authorization to access the SNS topic encryption key."
 
-findmnt /jenkins_jobs
-
-nfsstat -m
-
-nfsiostat 2 10
-
-ps -eo pid,ppid,%cpu,%mem,etime,args --sort=-%cpu | head -20
-
-tail -100 /opt/aws/amazon-cloudwatch-agent/logs/jenkins-cwagent.log
+Missing data treatment
+Treat missing data as bad (breaching threshold)
