@@ -1,22 +1,8 @@
-sh-5.2$ TOPIC_ARN="arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts"
-
-KMS_KEY=$(aws sns get-topic-attributes \
-  --topic-arn "$TOPIC_ARN" \
-  --region us-east-1 \
-  --query 'Attributes.KmsMasterKeyId' \
-  --output text)
-
-echo "$KMS_KEY"
-
-aws: [ERROR]: An error occurred (AuthorizationError) when calling the GetTopicAttributes operation: User: arn:aws:sts::213141505949:assumed-role/dev_jenkins_agent_role_imac/i-0e57c6b88d2351bb4 is not authorized to perform: SNS:GetTopicAttributes on resource: arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts because no identity-based policy allows the SNS:GetTopicAttributes action
-
-sh-5.2$ aws kms get-key-policy \
-  --key-id "$KMS_KEY" \
+aws kms get-key-policy \
+  --key-id alias/dev-imac-jenkins-alerts-kms-key \
   --policy-name default \
   --region us-east-1 \
   --query Policy \
   --output text | jq .
 
-aws: [ERROR]: An error occurred (ParamValidation): Parameter validation failed:
-Invalid length for parameter KeyId, value: 0, valid min length: 1
-sh-5.2$ 
+
