@@ -1,8 +1,19 @@
-dev-jenkins-cloudwatch-logs-missing
-####################
-2026-11-19 19:17:00
-Action
-Failed to execute action arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts. Received error: "CloudWatch Alarms does not have authorization to access the SNS topic encryption key."
+TOPIC_ARN="arn:aws:sns:us-east-1:213141505949:dev-utility-jenkins-alerts"
 
-Missing data treatment
-Treat missing data as bad (breaching threshold)
+KMS_KEY=$(aws sns get-topic-attributes \
+  --topic-arn "$TOPIC_ARN" \
+  --region us-east-1 \
+  --query 'Attributes.KmsMasterKeyId' \
+  --output text)
+
+echo "$KMS_KEY"
+
+
+aws kms get-key-policy \
+  --key-id "$KMS_KEY" \
+  --policy-name default \
+  --region us-east-1 \
+  --query Policy \
+  --output text | jq .
+
+
